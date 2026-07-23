@@ -5,7 +5,6 @@ import { HealthService } from './health.service';
 @ApiTags('Health')
 @Controller('ping')
 export class HealthController {
-
   private readonly healthService: HealthService;
 
   constructor(healthService: HealthService) {
@@ -16,5 +15,4 @@ export class HealthController {
   public ping(): string {
     return this.healthService.ping();
   }
-
 }

@@ -4,7 +4,6 @@ import { IConfigService } from '../interfaces/configs/config.models';
 
 @Injectable()
 export class ConfigService implements IConfigService {
-
   private readonly configService: NestConfigService;
   private readonly logger: Logger = new Logger(ConfigService.name);
 
@@ -70,5 +69,4 @@ export class ConfigService implements IConfigService {
 
     return date;
   }
-
 }
