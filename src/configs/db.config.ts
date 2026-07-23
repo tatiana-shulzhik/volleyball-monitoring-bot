@@ -4,7 +4,6 @@ import { ConfigService } from './config.service';
 
 @Injectable()
 export class DbConfig implements TypeOrmOptionsFactory {
-
   public readonly dbHost: string;
   public readonly dbPort: number;
   public readonly dbUsername: string;
@@ -12,11 +11,11 @@ export class DbConfig implements TypeOrmOptionsFactory {
   public readonly dbDatabase: string;
 
   constructor(configService: ConfigService) {
-    this.dbHost = configService.getString('DB_HOST');
-    this.dbPort = configService.getNumber('DB_PORT');
-    this.dbUsername = configService.getString('DB_USERNAME');
-    this.dbPassword = configService.getString('DB_PASSWORD');
-    this.dbDatabase = configService.getString('DB_DATABASE');
+    this.dbHost = configService.getString('POSTGRES_HOST');
+    this.dbPort = configService.getNumber('POSTGRES_PORT');
+    this.dbUsername = configService.getString('POSTGRES_USER');
+    this.dbPassword = configService.getString('POSTGRES_PASSWORD');
+    this.dbDatabase = configService.getString('POSTGRES_DB');
   }
 
   createTypeOrmOptions(): TypeOrmModuleOptions | Promise<TypeOrmModuleOptions> {
@@ -27,12 +26,11 @@ export class DbConfig implements TypeOrmOptionsFactory {
       username: this.dbUsername,
       password: this.dbPassword,
       database: this.dbDatabase,
-      migrationsTableName: 'defaults.migrations',
+      migrationsTableName: 'migrations',
       migrationsRun: true,
       synchronize: false,
       entities: [],
       migrations: [],
     };
   }
-
 }

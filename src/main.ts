@@ -16,9 +16,8 @@ async function bootstrap() {
   const config = app.get(AppConfig);
   const logger = new Logger('Bootstrap');
 
-  await app.listen(process.env.APP_PORT ?? 3000);
-  await app.listen(config.port ?? 3000, '0.0.0.0', () => {
-    logger.debug(`Service available on ${config.port}`);
-  });
+  const port = config.port ?? 3000;
+  await app.listen(port, '0.0.0.0');
+  logger.debug(`Service available on ${port}`);
 }
 bootstrap();
