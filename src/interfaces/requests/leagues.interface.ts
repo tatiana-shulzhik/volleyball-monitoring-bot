@@ -1,6 +1,7 @@
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { EntityChanges } from '../responses/entity-changes.interface';
+import { ICevTeam } from './teams.interface';
 
 export interface ICevLeague {
   externalId: number;
@@ -8,8 +9,9 @@ export interface ICevLeague {
   championshipExternalId: number;
 }
 
-export interface FetchedLeagues {
+export interface FetchedLeagueCatalog {
   leagues: ICevLeague[];
+  teams: ICevTeam[];
   isComplete: boolean;
 }
 

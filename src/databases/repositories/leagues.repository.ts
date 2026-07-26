@@ -22,7 +22,7 @@ export class LeaguesRepository {
   findByChampionshipIds(championshipIds: number[]): Promise<LeaguesEntity[]> {
     return this.repository.find({
       where: { championship: { id: In(championshipIds) } },
-      relations: { championship: true },
+      relations: { championship: { season: true } },
     });
   }
 

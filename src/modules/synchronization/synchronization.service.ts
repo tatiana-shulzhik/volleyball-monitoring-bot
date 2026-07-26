@@ -5,6 +5,7 @@ import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
 import { SeasonsService } from '../seasons/seasons.service';
+import { TeamsService } from '../teams/teams.service';
 
 const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 
@@ -17,6 +18,7 @@ export class SynchronizationService {
     private readonly seasonsService: SeasonsService,
     private readonly championshipsService: ChampionshipsService,
     private readonly leaguesService: LeaguesService,
+    private readonly teamsService: TeamsService,
     private readonly seasonsRepository: SeasonsRepository,
   ) {}
 
@@ -58,15 +60,17 @@ export class SynchronizationService {
   private async synchronizeCurrentCatalog(): Promise<void> {
     const seasons = await this.seasonsService.discoverCurrentAndFutureSeasons();
     const championships = await this.championshipsService.synchronize(seasons);
+    const leagueCatalog = await this.leaguesService.synchronize(championships);
 
-    await this.leaguesService.synchronize(championships);
+    await this.teamsService.synchronize(leagueCatalog);
   }
 
   private async performStoredCatalogSynchronization(): Promise<void> {
     const seasons = await this.seasonsService.synchronizeStoredRange();
     const championships = await this.championshipsService.synchronize(seasons);
+    const leagueCatalog = await this.leaguesService.synchronize(championships);
 
-    await this.leaguesService.synchronize(championships);
+    await this.teamsService.synchronize(leagueCatalog);
   }
 
   private async runExclusive<T>(

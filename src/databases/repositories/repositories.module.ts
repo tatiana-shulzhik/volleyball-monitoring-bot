@@ -5,6 +5,8 @@ import { DbConfig } from '../../configs/db.config';
 import { ChampionshipsEntity } from '../entities/championships.entity';
 import { LeaguesEntity } from '../entities/leagues.entity';
 import { SeasonsEntity } from '../entities/seasons.entity';
+import { TeamLeagueEntity } from '../entities/team-league.entity';
+import { TeamEntity } from '../entities/team.entity';
 
 @Global()
 @Module({
@@ -18,6 +20,8 @@ import { SeasonsEntity } from '../entities/seasons.entity';
       SeasonsEntity,
       ChampionshipsEntity,
       LeaguesEntity,
+      TeamEntity,
+      TeamLeagueEntity,
     ]),
   ],
   exports: [TypeOrmModule],

@@ -2,13 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { FetchedChampionships } from '../interfaces/requests/championships.interface';
-import { FetchedLeagues } from '../interfaces/requests/leagues.interface';
+import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
 import {
   FetchedSeasons,
   ICevSeason,
 } from '../interfaces/requests/seasons.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
+import { extractTeams } from '../shared/cev-teams.utils';
 import {
   createCalendarForm,
   extractCalendarSeasons,
@@ -85,27 +86,34 @@ export class CevGateway {
     };
   }
 
-  async fetchLeagues(
+  async fetchLeagueCatalog(
     championships: ChampionshipsEntity[],
-  ): Promise<FetchedLeagues> {
+  ): Promise<FetchedLeagueCatalog> {
     const results = await this.mapSettled({
       items: championships,
-      mapper: async (championship) =>
-        extractLeagues(
-          await this.http.get(
-            createCompetitionUrl(
-              championship.season.externalId,
-              championship.externalId,
-            ),
+      mapper: async (championship) => {
+        const html = await this.http.get(
+          createCompetitionUrl(
+            championship.season.externalId,
+            championship.externalId,
           ),
-          championship.externalId,
-        ),
+        );
+        const leagues = extractLeagues(html, championship.externalId);
+
+        return {
+          leagues,
+          teams: extractTeams(html, leagues),
+        };
+      },
       concurrency: 5,
     });
 
     return {
       leagues: results.flatMap((result) =>
-        result.status === 'fulfilled' ? result.value : [],
+        result.status === 'fulfilled' ? result.value.leagues : [],
+      ),
+      teams: results.flatMap((result) =>
+        result.status === 'fulfilled' ? result.value.teams : [],
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
+import { SynchronizedLeagues } from '../../interfaces/responses/synchronized-leagues.interface';
 import { calculateLeagueChanges } from '../../shared/leagues.utils';
 import {
   applyEntityChanges,
@@ -17,17 +18,19 @@ export class LeaguesService {
     private readonly repository: LeaguesRepository,
   ) {}
 
-  async synchronize(championships: ChampionshipsEntity[]): Promise<void> {
+  async synchronize(
+    championships: ChampionshipsEntity[],
+  ): Promise<SynchronizedLeagues> {
     if (!championships.length) {
       this.logger.warn('No championships found; leagues sync skipped');
-      return;
+      return { leagues: [], teams: [], isComplete: true };
     }
 
     this.logger.log(
       `Starting leagues synchronization for ${championships.length} championships`,
     );
 
-    const fetched = await this.gateway.fetchLeagues(championships);
+    const fetched = await this.gateway.fetchLeagueCatalog(championships);
     const existing = await this.repository.findByChampionshipIds(
       championships.map(({ id }) => id),
     );
@@ -54,5 +57,13 @@ export class LeaguesService {
       isComplete: fetched.isComplete,
       allowDeletion: true,
     });
+
+    return {
+      leagues: await this.repository.findByChampionshipIds(
+        championships.map(({ id }) => id),
+      ),
+      teams: fetched.teams,
+      isComplete: fetched.isComplete,
+    };
   }
 }
