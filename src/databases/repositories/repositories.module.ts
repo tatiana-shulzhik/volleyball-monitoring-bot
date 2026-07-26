@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '../../configs/config.module';
 import { DbConfig } from '../../configs/db.config';
 import { ChampionshipsEntity } from '../entities/championships.entity';
+import { LeaguesEntity } from '../entities/leagues.entity';
 import { SeasonsEntity } from '../entities/seasons.entity';
 
 @Global()
@@ -13,7 +14,11 @@ import { SeasonsEntity } from '../entities/seasons.entity';
       imports: [ConfigModule],
       useClass: DbConfig,
     }),
-    TypeOrmModule.forFeature([SeasonsEntity, ChampionshipsEntity]),
+    TypeOrmModule.forFeature([
+      SeasonsEntity,
+      ChampionshipsEntity,
+      LeaguesEntity,
+    ]),
   ],
   exports: [TypeOrmModule],
 })

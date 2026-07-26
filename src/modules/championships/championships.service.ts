@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
-import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { SeasonsEntity } from '../../databases/entities/seasons.entity';
+import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { calculateChampionshipChanges } from '../../shared/championships.utils';
-import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -16,42 +15,22 @@ export class ChampionshipsService {
 
   constructor(
     private readonly gateway: CevGateway,
-    private readonly seasonsRepository: SeasonsRepository,
-    private readonly championshipsRepository: ChampionshipsRepository,
+    private readonly repository: ChampionshipsRepository,
   ) {}
 
-  async synchronizeCurrentAndFuture(): Promise<void> {
-    await this.synchronizeFrom(new Date().getFullYear());
-  }
-
-  async synchronizeStoredRange(): Promise<void> {
-    const earliestYear = new Date().getFullYear() - PREVIOUS_YEARS_COUNT;
-
-    await this.synchronizeFrom(earliestYear);
-  }
-
-  private async synchronizeFrom(earliestYear: number): Promise<void> {
-    const seasons = (await this.seasonsRepository.findAll()).filter(
-      ({ yearEnd }) => yearEnd >= earliestYear,
-    );
-
+  async synchronize(seasons: SeasonsEntity[]): Promise<ChampionshipsEntity[]> {
     if (!seasons.length) {
       this.logger.warn('No seasons found; championships sync skipped');
-      return;
+      return [];
     }
 
     this.logger.log(
       `Starting championships synchronization for ${seasons.length} seasons`,
     );
 
-    await this.synchronizeSeasons(seasons);
-  }
-
-  private async synchronizeSeasons(seasons: SeasonsEntity[]): Promise<void> {
+    const seasonIds = seasons.map(({ id }) => id);
     const fetched = await this.gateway.fetchChampionships(seasons);
-    const existing = await this.championshipsRepository.findBySeasonIds(
-      seasons.map(({ id }) => id),
-    );
+    const existing = await this.repository.findBySeasonIds(seasonIds);
     const changes = calculateChampionshipChanges({
       incoming: fetched.championships,
       existing,
@@ -61,7 +40,7 @@ export class ChampionshipsService {
     });
 
     await applyEntityChanges({
-      repository: this.championshipsRepository,
+      repository: this.repository,
       changes,
       allowDeletion: fetched.isComplete,
     });
@@ -72,5 +51,7 @@ export class ChampionshipsService {
       isComplete: fetched.isComplete,
       allowDeletion: true,
     });
+
+    return this.repository.findBySeasonIds(seasonIds);
   }
 }

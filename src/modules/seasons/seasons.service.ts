@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { SeasonsEntity } from '../../databases/entities/seasons.entity';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { FetchedSeasons } from '../../interfaces/requests/seasons.interface';
@@ -21,20 +22,22 @@ export class SeasonsService {
     private readonly repository: SeasonsRepository,
   ) {}
 
-  async discoverCurrentAndFutureSeasons(): Promise<void> {
+  async discoverCurrentAndFutureSeasons(): Promise<SeasonsEntity[]> {
     const currentYear = new Date().getFullYear();
 
-    await this.synchronizeFrom(currentYear);
+    return this.synchronizeFrom(currentYear);
   }
 
-  async synchronizeStoredRange(): Promise<void> {
+  async synchronizeStoredRange(): Promise<SeasonsEntity[]> {
     const currentYear = new Date().getFullYear();
     const earliestStoredYear = currentYear - PREVIOUS_YEARS_COUNT;
 
-    await this.synchronizeFrom(earliestStoredYear);
+    return this.synchronizeFrom(earliestStoredYear);
   }
 
-  private async synchronizeFrom(earliestYear: number): Promise<void> {
+  private async synchronizeFrom(
+    earliestYear: number,
+  ): Promise<SeasonsEntity[]> {
     this.logger.log(`Starting seasons synchronization from ${earliestYear}`);
 
     const fetched = await this.fetchSeasons(earliestYear);
@@ -58,6 +61,10 @@ export class SeasonsService {
       isComplete: fetched.isComplete,
       allowDeletion: false,
     });
+
+    return (await this.repository.findAll()).filter(
+      ({ yearEnd }) => yearEnd >= earliestYear,
+    );
   }
 
   private async fetchSeasons(earliestYear: number): Promise<FetchedSeasons> {

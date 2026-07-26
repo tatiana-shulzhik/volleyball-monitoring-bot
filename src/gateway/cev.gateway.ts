@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { FetchedChampionships } from '../interfaces/requests/championships.interface';
+import { FetchedLeagues } from '../interfaces/requests/leagues.interface';
 import {
   FetchedSeasons,
   ICevSeason,
 } from '../interfaces/requests/seasons.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
+import { extractLeagues } from '../shared/cev-leagues.utils';
 import {
   createCalendarForm,
   extractCalendarSeasons,
@@ -76,6 +79,32 @@ export class CevGateway {
 
     return {
       championships: results.flatMap((result) =>
+        result.status === 'fulfilled' ? result.value : [],
+      ),
+      isComplete: results.every((result) => result.status === 'fulfilled'),
+    };
+  }
+
+  async fetchLeagues(
+    championships: ChampionshipsEntity[],
+  ): Promise<FetchedLeagues> {
+    const results = await this.mapSettled({
+      items: championships,
+      mapper: async (championship) =>
+        extractLeagues(
+          await this.http.get(
+            createCompetitionUrl(
+              championship.season.externalId,
+              championship.externalId,
+            ),
+          ),
+          championship.externalId,
+        ),
+      concurrency: 5,
+    });
+
+    return {
+      leagues: results.flatMap((result) =>
         result.status === 'fulfilled' ? result.value : [],
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),

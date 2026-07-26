@@ -20,10 +20,6 @@ export class ChampionshipsRepository {
   }
 
   findBySeasonIds(seasonIds: number[]): Promise<ChampionshipsEntity[]> {
-    if (!seasonIds.length) {
-      return Promise.resolve([]);
-    }
-
     return this.repository.find({
       where: { season: { id: In(seasonIds) } },
       relations: { season: true },

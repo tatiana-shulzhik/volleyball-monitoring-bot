@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ChampionshipsService } from '../championships/championships.service';
+import { LeaguesService } from '../leagues/leagues.service';
 import { SeasonsService } from '../seasons/seasons.service';
 
 const MOSCOW_TIME_ZONE = 'Europe/Moscow';
@@ -15,6 +16,7 @@ export class SynchronizationService {
   constructor(
     private readonly seasonsService: SeasonsService,
     private readonly championshipsService: ChampionshipsService,
+    private readonly leaguesService: LeaguesService,
     private readonly seasonsRepository: SeasonsRepository,
   ) {}
 
@@ -54,13 +56,17 @@ export class SynchronizationService {
   }
 
   private async synchronizeCurrentCatalog(): Promise<void> {
-    await this.seasonsService.discoverCurrentAndFutureSeasons();
-    await this.championshipsService.synchronizeCurrentAndFuture();
+    const seasons = await this.seasonsService.discoverCurrentAndFutureSeasons();
+    const championships = await this.championshipsService.synchronize(seasons);
+
+    await this.leaguesService.synchronize(championships);
   }
 
   private async performStoredCatalogSynchronization(): Promise<void> {
-    await this.seasonsService.synchronizeStoredRange();
-    await this.championshipsService.synchronizeStoredRange();
+    const seasons = await this.seasonsService.synchronizeStoredRange();
+    const championships = await this.championshipsService.synchronize(seasons);
+
+    await this.leaguesService.synchronize(championships);
   }
 
   private async runExclusive<T>(
