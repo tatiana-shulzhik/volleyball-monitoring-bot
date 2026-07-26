@@ -1,0 +1,78 @@
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
+import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import { SeasonsService } from '../seasons/seasons.service';
+
+const MOSCOW_TIME_ZONE = 'Europe/Moscow';
+
+@Injectable()
+export class SynchronizationService {
+  private readonly logger = new Logger(SynchronizationService.name);
+  private isRunning = false;
+
+  constructor(
+    private readonly seasonsService: SeasonsService,
+    private readonly seasonsRepository: SeasonsRepository,
+  ) {}
+
+  @Cron('0 0 * * *', {
+    name: 'daily-new-seasons-discovery',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async discoverSeasonsByCron(): Promise<void> {
+    await this.runExclusive(
+      () => this.seasonsService.discoverCurrentAndFutureSeasons(),
+      false,
+    );
+  }
+
+  @Cron('0 1 * * *', {
+    name: 'daily-outdated-seasons-cleanup',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async deleteOutdatedSeasonsByCron(): Promise<void> {
+    await this.runExclusive(() => this.removeOutdatedSeasons(), false);
+  }
+
+  async synchronizeStoredSeasonsRange(): Promise<void> {
+    await this.runExclusive(() => this.seasonsService.synchronizeStoredRange());
+  }
+
+  async deleteOutdatedSeasons(): Promise<number> {
+    return (await this.runExclusive(() => this.removeOutdatedSeasons())) ?? 0;
+  }
+
+  private async removeOutdatedSeasons(): Promise<number> {
+    const beforeYear = new Date().getFullYear() - PREVIOUS_YEARS_COUNT;
+    const deleted = await this.seasonsRepository.deleteOutdated(beforeYear);
+
+    this.logger.log(`Outdated seasons deleted: ${deleted}`);
+
+    return deleted;
+  }
+
+  private async runExclusive<T>(
+    action: () => Promise<T>,
+    throwWhenLocked = true,
+  ): Promise<T | undefined> {
+    if (this.isRunning) {
+      if (throwWhenLocked) {
+        throw new ConflictException('Synchronization is already running');
+      }
+
+      this.logger.warn('Cron task skipped: synchronization is already running');
+      return undefined;
+    }
+
+    this.isRunning = true;
+
+    try {
+      return await action();
+    } finally {
+      this.isRunning = false;
+    }
+  }
+}

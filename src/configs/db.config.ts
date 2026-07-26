@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
+import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -28,8 +29,8 @@ export class DbConfig implements TypeOrmOptionsFactory {
       database: this.dbDatabase,
       migrationsTableName: 'migrations',
       migrationsRun: true,
-      synchronize: false,
-      entities: [],
+      synchronize: true,
+      entities: [SeasonsEntity],
       migrations: [],
     };
   }
