@@ -3,12 +3,15 @@ import { ChampionshipsEntity } from '../databases/entities/championships.entity'
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { FetchedChampionships } from '../interfaces/requests/championships.interface';
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
+import { FetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   FetchedSeasons,
   ICevSeason,
 } from '../interfaces/requests/seasons.interface';
+import { PlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
+import { extractPlayers } from '../shared/cev-players.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
 import {
   createCalendarForm,
@@ -18,6 +21,7 @@ import {
 import {
   CEV_CALENDAR_URL,
   createCompetitionUrl,
+  createTeamUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
 
@@ -114,6 +118,28 @@ export class CevGateway {
       ),
       teams: results.flatMap((result) =>
         result.status === 'fulfilled' ? result.value.teams : [],
+      ),
+      isComplete: results.every((result) => result.status === 'fulfilled'),
+    };
+  }
+
+  async fetchPlayers(sources: PlayerRosterSource[]): Promise<FetchedPlayers> {
+    const results = await this.mapSettled({
+      items: sources,
+      mapper: async ({ team, season }) =>
+        extractPlayers({
+          html: await this.http.get(
+            createTeamUrl(team.externalId, season.externalId),
+          ),
+          teamExternalId: team.externalId,
+          seasonExternalId: season.externalId,
+        }),
+      concurrency: 5,
+    });
+
+    return {
+      players: results.flatMap((result) =>
+        result.status === 'fulfilled' ? result.value : [],
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };

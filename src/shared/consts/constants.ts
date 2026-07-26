@@ -15,3 +15,13 @@ export function createCompetitionUrl(
     `?ID=${seasonExternalId}&PID=${championshipExternalId}`
   );
 }
+
+export function createTeamUrl(
+  teamExternalId: string,
+  seasonExternalId: number,
+): string {
+  return (
+    `${CEV_BASE_URL}/Competition-Area/CompetitionTeamDetails.aspx` +
+    `?TeamID=${teamExternalId}&ID=${seasonExternalId}`
+  );
+}

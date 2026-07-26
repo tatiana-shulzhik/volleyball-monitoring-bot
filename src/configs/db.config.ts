@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { LeaguesEntity } from '../databases/entities/leagues.entity';
+import { PlayerTeamSeasonEntity } from '../databases/entities/player-team-season.entity';
+import { PlayersEntity } from '../databases/entities/players.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
 import { TeamEntity } from '../databases/entities/team.entity';
@@ -40,6 +42,8 @@ export class DbConfig implements TypeOrmOptionsFactory {
         LeaguesEntity,
         TeamEntity,
         TeamLeagueEntity,
+        PlayersEntity,
+        PlayerTeamSeasonEntity,
       ],
       migrations: [],
     };

@@ -10,7 +10,7 @@ export const ApiSynchronizeCatalog = (): MethodDecorator =>
     ApiOperation({
       summary: 'Synchronize the full stored catalog range',
       description:
-        'Synchronizes seasons, championships, leagues, and teams for the full stored range.',
+        'Synchronizes seasons, championships, leagues, teams, and players for the full stored range.',
     }),
     ApiCreatedResponse({
       description: 'Catalog synchronization completed successfully',

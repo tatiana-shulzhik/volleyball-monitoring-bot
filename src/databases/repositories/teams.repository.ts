@@ -19,10 +19,6 @@ export class TeamsRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findAll(): Promise<TeamEntity[]> {
-    return this.repository.find();
-  }
-
   findByExternalIds(externalIds: string[]): Promise<TeamEntity[]> {
     return this.repository.find({
       where: { externalId: In(externalIds) },
@@ -49,5 +45,17 @@ export class TeamsRepository {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
 
     return repository.delete(ids);
+  }
+
+  async deleteOrphans(manager: EntityManager): Promise<number> {
+    const deleted: Array<{ id: number }> = await manager.query(
+      'DELETE FROM teams t WHERE NOT EXISTS ' +
+        '(SELECT 1 FROM team_leagues tl WHERE tl.team_id = t.id) ' +
+        'AND NOT EXISTS ' +
+        '(SELECT 1 FROM player_team_seasons pts WHERE pts.team_id = t.id) ' +
+        'RETURNING t.id',
+    );
+
+    return deleted.length;
   }
 }

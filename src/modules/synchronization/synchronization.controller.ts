@@ -1,5 +1,5 @@
 import { Controller, Delete, Post } from '@nestjs/common';
-import { ApiDeleteOutdatedSeasons } from '../../swagger/delete-outdated-seasons.swagger';
+import { ApiDeleteOutdatedCatalog } from '../../swagger/delete-outdated-catalog.swagger';
 import { ApiSynchronizeCatalog } from '../../swagger/synchronize-catalog.swagger';
 import { ApiSynchronizationController } from '../../swagger/synchronization.swagger';
 import { SynchronizationService } from './synchronization.service';
@@ -17,11 +17,9 @@ export class SynchronizationController {
     return { status: 'completed' };
   }
 
-  @ApiDeleteOutdatedSeasons()
-  @Delete('seasons/outdated')
-  async deleteOutdatedSeasons() {
-    const deleted = await this.synchronization.deleteOutdatedSeasons();
-
-    return { deleted };
+  @ApiDeleteOutdatedCatalog()
+  @Delete('catalog/outdated')
+  deleteOutdatedCatalog() {
+    return this.synchronization.deleteOutdatedCatalog();
   }
 }

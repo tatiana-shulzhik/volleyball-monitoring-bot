@@ -53,8 +53,12 @@ export class SeasonsRepository {
     return repository.delete(ids);
   }
 
-  async deleteOutdated(beforeYear: number): Promise<number> {
-    const result = await this.repository
+  async deleteOutdated(
+    beforeYear: number,
+    manager?: EntityManager,
+  ): Promise<number> {
+    const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
+    const result = await repository
       .createQueryBuilder()
       .delete()
       .where('year_end < :beforeYear', { beforeYear })

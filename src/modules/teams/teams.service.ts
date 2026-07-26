@@ -3,6 +3,10 @@ import { TeamEntity } from '../../databases/entities/team.entity';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { SynchronizeTeamsParams } from '../../interfaces/requests/teams.interface';
+import {
+  PlayerRosterSource,
+  SynchronizedTeams,
+} from '../../interfaces/responses/synchronized-teams.interface';
 import { applyRelationChanges } from '../../shared/relation-changes.utils';
 import {
   applyEntityChanges,
@@ -22,19 +26,24 @@ export class TeamsService {
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
   ) {}
 
-  async synchronize(data: SynchronizeTeamsParams): Promise<TeamEntity[]> {
+  async synchronize(data: SynchronizeTeamsParams): Promise<SynchronizedTeams> {
     const { leagues, teams: incomingTeams, isComplete } = data;
 
     if (!leagues.length) {
       this.logger.warn('No leagues found; teams sync skipped');
-      return [];
+      return { teams: [], rosterSources: [] };
     }
 
     this.logger.log(
       `Starting teams synchronization for ${leagues.length} leagues`,
     );
 
-    const existingTeams = await this.teamsRepository.findAll();
+    const externalIds = [
+      ...new Set(incomingTeams.map(({ externalId }) => externalId)),
+    ];
+    const existingTeams = externalIds.length
+      ? await this.teamsRepository.findByExternalIds(externalIds)
+      : [];
     const calculatedChanges = calculateTeamChanges({
       incoming: incomingTeams,
       existing: existingTeams,
@@ -47,9 +56,6 @@ export class TeamsService {
       allowDeletion: false,
     });
 
-    const externalIds = [
-      ...new Set(incomingTeams.map(({ externalId }) => externalId)),
-    ];
     const teams = externalIds.length
       ? await this.teamsRepository.findByExternalIds(externalIds)
       : [];
@@ -84,6 +90,43 @@ export class TeamsService {
         `${isComplete ? relationChanges.obsoleteIds.length : 0} deleted`,
     );
 
-    return teams;
+    return {
+      teams,
+      rosterSources: this.createRosterSources({
+        incomingTeams,
+        teams,
+        leagues,
+      }),
+    };
+  }
+
+  private createRosterSources(data: {
+    incomingTeams: SynchronizeTeamsParams['teams'];
+    teams: TeamEntity[];
+    leagues: SynchronizeTeamsParams['leagues'];
+  }): PlayerRosterSource[] {
+    const { incomingTeams, teams, leagues } = data;
+    const teamsByExternalId = new Map(
+      teams.map((team) => [team.externalId, team]),
+    );
+    const leaguesByExternalId = new Map(
+      leagues.map((league) => [league.externalId, league]),
+    );
+    const sources = new Map<string, PlayerRosterSource>();
+
+    for (const incomingTeam of incomingTeams) {
+      const team = teamsByExternalId.get(incomingTeam.externalId);
+      const league = leaguesByExternalId.get(incomingTeam.leagueExternalId);
+      const season = league?.championship.season;
+
+      if (team && season) {
+        sources.set(`${team.externalId}:${season.externalId}`, {
+          team,
+          season,
+        });
+      }
+    }
+
+    return [...sources.values()];
   }
 }
