@@ -1,0 +1,87 @@
+import { ICevSeason } from '../interfaces/requests/seasons.interface';
+
+const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
+const PERIOD_CLIENT_STATE = 'ctl00_Content_Left_RCB_Period_ClientState';
+
+export function getCalendarMetadata(html: string) {
+  const availableYears = [
+    ...html.matchAll(/<li class="rcbItem">(\d{4})<\/li>/g),
+  ].map((match) => Number(match[1]));
+  const selectedYear = html.match(
+    /"_text":"(\d{4})","_uniqueId":"ctl00\$Content_Left\$RCB_Period"/,
+  )?.[1];
+
+  if (!selectedYear) {
+    throw new Error('Unable to determine selected CEV calendar year');
+  }
+
+  return {
+    availableYears,
+    selectedYear: Number(selectedYear),
+  };
+}
+
+export function createCalendarForm(
+  html: string,
+  year: number,
+): URLSearchParams {
+  const form = new URLSearchParams();
+  const inputRegex =
+    /<input\b(?=[^>]*type="hidden")(?=[^>]*name="([^"]+)")(?=[^>]*value="([^"]*)")[^>]*>/gi;
+
+  for (const match of html.matchAll(inputRegex)) {
+    form.set(match[1], decodeHtml(match[2]));
+  }
+
+  form.set('__EVENTTARGET', PERIOD_CONTROL);
+  form.set('__EVENTARGUMENT', '');
+  form.set(
+    PERIOD_CLIENT_STATE,
+    JSON.stringify({
+      logEntries: [],
+      value: String(year),
+      text: String(year),
+      enabled: true,
+      checkedIndices: [],
+      checkedItemsTextOverflows: false,
+    }),
+  );
+
+  return form;
+}
+
+export function extractCalendarSeasons(html: string): ICevSeason[] {
+  const seasons = new Map<number, ICevSeason>();
+  const linkRegex =
+    /<a\b(?=[^>]*href=['"][^'"]*Competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=\d+[^'"]*['"])[^>]*>([\s\S]*?)<\/a>/gi;
+
+  for (const match of html.matchAll(linkRegex)) {
+    const externalId = Number(match[1]);
+    const text = decodeHtml(match[2].replace(/<[^>]+>/g, '').trim());
+    const competition = text.match(
+      /^(.*?\b(20\d{2})\s*\|\s*(?:Men|Women))(?:\s*-\s*.*)?$/i,
+    );
+
+    if (!competition) {
+      continue;
+    }
+
+    const year = Number(competition[2]);
+    seasons.set(externalId, {
+      externalId,
+      name: competition[1].trim(),
+      yearStart: year,
+      yearEnd: year,
+    });
+  }
+
+  return [...seasons.values()];
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ');
+}
