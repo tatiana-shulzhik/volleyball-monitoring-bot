@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import { ChampionshipsService } from '../championships/championships.service';
 import { SeasonsService } from '../seasons/seasons.service';
 
 const MOSCOW_TIME_ZONE = 'Europe/Moscow';
@@ -13,6 +14,7 @@ export class SynchronizationService {
 
   constructor(
     private readonly seasonsService: SeasonsService,
+    private readonly championshipsService: ChampionshipsService,
     private readonly seasonsRepository: SeasonsRepository,
   ) {}
 
@@ -21,11 +23,8 @@ export class SynchronizationService {
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
   })
-  async discoverSeasonsByCron(): Promise<void> {
-    await this.runExclusive(
-      () => this.seasonsService.discoverCurrentAndFutureSeasons(),
-      false,
-    );
+  async synchronizeCurrentCatalogByCron(): Promise<void> {
+    await this.runExclusive(() => this.synchronizeCurrentCatalog(), false);
   }
 
   @Cron('0 1 * * *', {
@@ -37,8 +36,8 @@ export class SynchronizationService {
     await this.runExclusive(() => this.removeOutdatedSeasons(), false);
   }
 
-  async synchronizeStoredSeasonsRange(): Promise<void> {
-    await this.runExclusive(() => this.seasonsService.synchronizeStoredRange());
+  async synchronizeStoredCatalogRange(): Promise<void> {
+    await this.runExclusive(() => this.performStoredCatalogSynchronization());
   }
 
   async deleteOutdatedSeasons(): Promise<number> {
@@ -52,6 +51,16 @@ export class SynchronizationService {
     this.logger.log(`Outdated seasons deleted: ${deleted}`);
 
     return deleted;
+  }
+
+  private async synchronizeCurrentCatalog(): Promise<void> {
+    await this.seasonsService.discoverCurrentAndFutureSeasons();
+    await this.championshipsService.synchronizeCurrentAndFuture();
+  }
+
+  private async performStoredCatalogSynchronization(): Promise<void> {
+    await this.seasonsService.synchronizeStoredRange();
+    await this.championshipsService.synchronizeStoredRange();
   }
 
   private async runExclusive<T>(

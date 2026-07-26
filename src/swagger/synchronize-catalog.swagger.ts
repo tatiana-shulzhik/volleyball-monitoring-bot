@@ -5,15 +5,15 @@ import {
   ApiOperation,
 } from '@nestjs/swagger';
 
-export const ApiSynchronizeSeasons = (): MethodDecorator =>
+export const ApiSynchronizeCatalog = (): MethodDecorator =>
   applyDecorators(
     ApiOperation({
-      summary: 'Synchronize the full stored seasons range',
+      summary: 'Synchronize the full stored catalog range',
       description:
-        'Loads seasons from the earliest stored year through future years.',
+        'Synchronizes seasons first and then their championships for the full stored range.',
     }),
     ApiCreatedResponse({
-      description: 'Seasons synchronization completed successfully',
+      description: 'Catalog synchronization completed successfully',
       schema: {
         example: { status: 'completed' },
       },

@@ -31,8 +31,20 @@ export class SeasonsRepository {
 
   async updateMany(seasons: SeasonsEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
+    const values = seasons.map(
+      ({ externalId, name, isCurrent, yearStart, yearEnd }) => ({
+        externalId,
+        name,
+        isCurrent,
+        yearStart,
+        yearEnd,
+      }),
+    );
 
-    return repository.save(seasons);
+    return repository.upsert(values, {
+      conflictPaths: ['externalId'],
+      skipUpdateIfNoValuesChanged: true,
+    });
   }
 
   async deleteMany(ids: number[], manager?: EntityManager) {
