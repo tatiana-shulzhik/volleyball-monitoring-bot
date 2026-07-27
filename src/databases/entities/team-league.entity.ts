@@ -18,6 +18,7 @@ export class TeamLeagueEntity {
   @JoinColumn({ name: 'team_id' })
   team: TeamEntity;
 
+  @Index()
   @ManyToOne(() => LeaguesEntity, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'league_id' })
   league: LeaguesEntity;

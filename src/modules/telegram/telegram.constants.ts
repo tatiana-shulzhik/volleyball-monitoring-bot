@@ -6,15 +6,24 @@ export const MENU_BUTTONS = [
   '🔴 Лайв',
 ] as const;
 
-export const MENU_MESSAGE = 'Выберите раздел:';
-export const SEASONS_MESSAGE = 'Выберите сезон:';
-export const EMPTY_SEASONS_MESSAGE = 'Актуальный сезон не найден.';
-export const CHAMPIONSHIPS_MESSAGE = 'Выберите чемпионат:';
-export const EMPTY_CHAMPIONSHIPS_MESSAGE =
-  'Для выбранного сезона чемпионаты не найдены.';
-export const LEAGUES_MESSAGE = 'Выберите лигу:';
-export const EMPTY_LEAGUES_MESSAGE =
-  'Для выбранного чемпионата лиги не найдены.';
-export const TEAMS_MESSAGE = 'Выберите команду:';
-export const EMPTY_TEAMS_MESSAGE = 'Для выбранной лиги команды не найдены.';
-export const IN_DEVELOPMENT_MESSAGE = 'Раздел находится в разработке 🛠';
+export const TELEGRAM_MESSAGES = {
+  menu: 'Выберите раздел:',
+  seasons: {
+    select: 'Выберите сезон:',
+    empty: 'Актуальный сезон не найден.',
+  },
+  championships: {
+    select: 'Выберите чемпионат:',
+    empty: 'Для выбранного сезона чемпионаты не найдены.',
+  },
+  leagues: {
+    select: 'Выберите лигу:',
+    empty: 'Для выбранного чемпионата лиги не найдены.',
+  },
+  teams: {
+    select: 'Выберите команду:',
+    empty: 'Для выбранной лиги команды не найдены.',
+  },
+  inDevelopment: 'Раздел находится в разработке 🛠',
+  error: 'Не удалось загрузить данные. Попробуйте позже.',
+} as const;

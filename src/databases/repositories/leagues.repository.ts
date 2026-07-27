@@ -28,6 +28,7 @@ export class LeaguesRepository {
 
   findByChampionshipId(championshipId: number): Promise<LeaguesEntity[]> {
     return this.repository.find({
+      select: { id: true, name: true },
       where: { championship: { id: championshipId } },
       order: { name: 'ASC' },
     });

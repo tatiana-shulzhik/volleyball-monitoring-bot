@@ -25,6 +25,7 @@ export class SeasonsRepository {
 
   findCurrent(): Promise<SeasonsEntity[]> {
     return this.repository.find({
+      select: { id: true, name: true },
       where: { isCurrent: true },
       order: { yearStart: 'DESC' },
     });
