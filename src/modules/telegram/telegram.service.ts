@@ -6,8 +6,11 @@ import {
 } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
+import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import {
+  CHAMPIONSHIPS_MESSAGE,
+  EMPTY_CHAMPIONSHIPS_MESSAGE,
   EMPTY_SEASONS_MESSAGE,
   IN_DEVELOPMENT_MESSAGE,
   MENU_BUTTONS,
@@ -25,6 +28,7 @@ export class TelegramService
   constructor(
     private readonly config: TelegramConfig,
     private readonly seasonsRepository: SeasonsRepository,
+    private readonly championshipsRepository: ChampionshipsRepository,
   ) {
     this.bot = new Telegraf(config.token);
     this.registerHandlers();
@@ -64,7 +68,29 @@ export class TelegramService
       );
     });
 
-    this.bot.action(/^season:/, async (context) => {
+    this.bot.action(/^season:(\d+)$/, async (context) => {
+      if (context.chat?.id !== this.config.groupId) return;
+
+      const seasonId = Number(context.match[1]);
+      const championships =
+        await this.championshipsRepository.findBySeasonId(seasonId);
+      const buttons = championships.map(({ id, name }) => [
+        Markup.button.callback(name, `championship:${id}`),
+      ]);
+
+      await context.answerCbQuery();
+      await context.editMessageText(
+        championships.length
+          ? CHAMPIONSHIPS_MESSAGE
+          : EMPTY_CHAMPIONSHIPS_MESSAGE,
+        Markup.inlineKeyboard([
+          ...buttons,
+          [Markup.button.callback('⬅️ К сезонам', 'menu:statistics')],
+        ]),
+      );
+    });
+
+    this.bot.action(/^championship:/, async (context) => {
       if (context.chat?.id !== this.config.groupId) return;
 
       await context.answerCbQuery(IN_DEVELOPMENT_MESSAGE, {

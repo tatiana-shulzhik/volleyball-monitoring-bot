@@ -26,6 +26,13 @@ export class ChampionshipsRepository {
     });
   }
 
+  findBySeasonId(seasonId: number): Promise<ChampionshipsEntity[]> {
+    return this.repository.find({
+      where: { season: { id: seasonId } },
+      order: { name: 'ASC' },
+    });
+  }
+
   insertMany(
     championships: Partial<ChampionshipsEntity>[],
     manager?: EntityManager,

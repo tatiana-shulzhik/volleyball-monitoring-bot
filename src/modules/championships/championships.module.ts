@@ -4,6 +4,6 @@ import { ChampionshipsService } from './championships.service';
 
 @Module({
   providers: [ChampionshipsService, ChampionshipsRepository],
-  exports: [ChampionshipsService],
+  exports: [ChampionshipsService, ChampionshipsRepository],
 })
 export class ChampionshipsModule {}
