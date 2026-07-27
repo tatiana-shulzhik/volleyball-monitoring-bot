@@ -4,6 +4,7 @@ import { AppConfig } from './app.config';
 import { ConfigService } from './config.service';
 import { DbConfig } from './db.config';
 import { SwaggerConfig } from './swagger.config';
+import { TelegramConfig } from './telegram.config';
 
 @Global()
 @Module({
@@ -12,7 +13,13 @@ import { SwaggerConfig } from './swagger.config';
       envFilePath: ['.env'],
     }),
   ],
-  providers: [ConfigService, AppConfig, DbConfig, SwaggerConfig],
-  exports: [ConfigService, AppConfig, DbConfig, SwaggerConfig],
+  providers: [
+    ConfigService,
+    AppConfig,
+    DbConfig,
+    SwaggerConfig,
+    TelegramConfig,
+  ],
+  exports: [ConfigService, AppConfig, DbConfig, SwaggerConfig, TelegramConfig],
 })
 export class ConfigModule {}
