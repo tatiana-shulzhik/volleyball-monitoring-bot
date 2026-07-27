@@ -6,10 +6,13 @@ import {
 } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
+import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import {
+  EMPTY_SEASONS_MESSAGE,
   IN_DEVELOPMENT_MESSAGE,
   MENU_BUTTONS,
   MENU_MESSAGE,
+  SEASONS_MESSAGE,
 } from './telegram.constants';
 
 @Injectable()
@@ -19,7 +22,10 @@ export class TelegramService
   private readonly logger = new Logger(TelegramService.name);
   private readonly bot: Telegraf;
 
-  constructor(private readonly config: TelegramConfig) {
+  constructor(
+    private readonly config: TelegramConfig,
+    private readonly seasonsRepository: SeasonsRepository,
+  ) {
     this.bot = new Telegraf(config.token);
     this.registerHandlers();
   }
@@ -37,13 +43,43 @@ export class TelegramService
   private registerHandlers(): void {
     this.bot.command(['start', 'menu'], async (context) => {
       if (context.chat.id !== this.config.groupId) return;
-
       await context.reply(MENU_MESSAGE, this.menu);
+    });
+
+    this.bot.action('menu:statistics', async (context) => {
+      if (context.chat?.id !== this.config.groupId) return;
+
+      const seasons = await this.seasonsRepository.findCurrent();
+      const buttons = seasons.map(({ id, name }) => [
+        Markup.button.callback(name, `season:${id}`),
+      ]);
+
+      await context.answerCbQuery();
+      await context.editMessageText(
+        seasons.length ? SEASONS_MESSAGE : EMPTY_SEASONS_MESSAGE,
+        Markup.inlineKeyboard([
+          ...buttons,
+          [Markup.button.callback('⬅️ Назад', 'menu:back')],
+        ]),
+      );
+    });
+
+    this.bot.action(/^season:/, async (context) => {
+      if (context.chat?.id !== this.config.groupId) return;
+
+      await context.answerCbQuery(IN_DEVELOPMENT_MESSAGE, {
+        show_alert: true,
+      });
+    });
+
+    this.bot.action('menu:back', async (context) => {
+      if (context.chat?.id !== this.config.groupId) return;
+      await context.answerCbQuery();
+      await context.editMessageText(MENU_MESSAGE, this.menu);
     });
 
     this.bot.action(/^menu:/, async (context) => {
       if (context.chat?.id !== this.config.groupId) return;
-
       await context.answerCbQuery(IN_DEVELOPMENT_MESSAGE, {
         show_alert: true,
       });
