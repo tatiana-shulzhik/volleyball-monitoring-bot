@@ -5,6 +5,6 @@ import { TeamsService } from './teams.service';
 
 @Module({
   providers: [TeamsService, TeamsRepository, TeamLeaguesRepository],
-  exports: [TeamsService, TeamsRepository],
+  exports: [TeamsService, TeamsRepository, TeamLeaguesRepository],
 })
 export class TeamsModule {}
