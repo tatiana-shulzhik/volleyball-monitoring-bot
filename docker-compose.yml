@@ -52,12 +52,15 @@ services:
   app:
     build: .
     depends_on:
-      - postgres
+      - pg
       - clickhouse
     ports:
       - "${APP_PORT}:3000"
     env_file:
       - .env
+    environment:
+      POSTGRES_HOST: pg
+      CLICKHOUSE_HOST: clickhouse
 
 
 volumes:

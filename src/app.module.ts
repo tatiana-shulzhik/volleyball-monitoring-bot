@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from './configs/config.module';
+import { ClickHouseModule } from './databases/clickhouse/clickhouse.module';
 import { RepositoriesModule } from './databases/repositories/repositories.module';
 import { CevModule } from './gateway/cev.module';
 import { HealthModule } from './modules/health/health.module';
@@ -12,6 +13,7 @@ import { TelegramModule } from './modules/telegram/telegram.module';
 @Module({
   imports: [
     ConfigModule,
+    ClickHouseModule,
     ScheduleModule.forRoot(),
     RepositoriesModule,
     CevModule,
