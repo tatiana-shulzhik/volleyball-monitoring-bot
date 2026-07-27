@@ -23,6 +23,14 @@ export class SeasonsRepository {
     return this.repository.find();
   }
 
+  findCurrent(): Promise<SeasonsEntity[]> {
+    return this.repository.find({
+      select: { id: true, name: true },
+      where: { isCurrent: true },
+      order: { yearStart: 'DESC' },
+    });
+  }
+
   async insertMany(seasons: Partial<SeasonsEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
 

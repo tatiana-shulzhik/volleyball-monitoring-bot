@@ -7,6 +7,7 @@ import { RepositoriesModule } from './databases/repositories/repositories.module
 import { CevModule } from './gateway/cev.module';
 import { HealthModule } from './modules/health/health.module';
 import { SynchronizationModule } from './modules/synchronization/synchronization.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SynchronizationModule } from './modules/synchronization/synchronization
     CevModule,
     SynchronizationModule,
     HealthModule,
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [AppService],
