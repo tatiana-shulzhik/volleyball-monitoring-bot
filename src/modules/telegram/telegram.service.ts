@@ -7,12 +7,15 @@ import {
 import { Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import {
   CHAMPIONSHIPS_MESSAGE,
   EMPTY_CHAMPIONSHIPS_MESSAGE,
+  EMPTY_LEAGUES_MESSAGE,
   EMPTY_SEASONS_MESSAGE,
   IN_DEVELOPMENT_MESSAGE,
+  LEAGUES_MESSAGE,
   MENU_BUTTONS,
   MENU_MESSAGE,
   SEASONS_MESSAGE,
@@ -29,6 +32,7 @@ export class TelegramService
     private readonly config: TelegramConfig,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
+    private readonly leaguesRepository: LeaguesRepository,
   ) {
     this.bot = new Telegraf(config.token);
     this.registerHandlers();
@@ -75,7 +79,7 @@ export class TelegramService
       const championships =
         await this.championshipsRepository.findBySeasonId(seasonId);
       const buttons = championships.map(({ id, name }) => [
-        Markup.button.callback(name, `championship:${id}`),
+        Markup.button.callback(name, `championship:${id}:${seasonId}`),
       ]);
 
       await context.answerCbQuery();
@@ -90,7 +94,31 @@ export class TelegramService
       );
     });
 
-    this.bot.action(/^championship:/, async (context) => {
+    this.bot.action(/^championship:(\d+):(\d+)$/, async (context) => {
+      if (context.chat?.id !== this.config.groupId) return;
+
+      const championshipId = Number(context.match[1]);
+      const seasonId = Number(context.match[2]);
+      const leagues =
+        await this.leaguesRepository.findByChampionshipId(championshipId);
+      const buttons = leagues.map(({ id, name }) => [
+        Markup.button.callback(
+          name,
+          `league:${id}:${championshipId}:${seasonId}`,
+        ),
+      ]);
+
+      await context.answerCbQuery();
+      await context.editMessageText(
+        leagues.length ? LEAGUES_MESSAGE : EMPTY_LEAGUES_MESSAGE,
+        Markup.inlineKeyboard([
+          ...buttons,
+          [Markup.button.callback('⬅️ К чемпионатам', `season:${seasonId}`)],
+        ]),
+      );
+    });
+
+    this.bot.action(/^league:/, async (context) => {
       if (context.chat?.id !== this.config.groupId) return;
 
       await context.answerCbQuery(IN_DEVELOPMENT_MESSAGE, {

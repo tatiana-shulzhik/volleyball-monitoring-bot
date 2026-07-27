@@ -12,4 +12,7 @@ export const EMPTY_SEASONS_MESSAGE = 'Актуальный сезон не на�
 export const CHAMPIONSHIPS_MESSAGE = 'Выберите чемпионат:';
 export const EMPTY_CHAMPIONSHIPS_MESSAGE =
   'Для выбранного сезона чемпионаты не найдены.';
+export const LEAGUES_MESSAGE = 'Выберите лигу:';
+export const EMPTY_LEAGUES_MESSAGE =
+  'Для выбранного чемпионата лиги не найдены.';
 export const IN_DEVELOPMENT_MESSAGE = 'Раздел находится в разработке 🛠';
