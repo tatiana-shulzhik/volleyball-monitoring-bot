@@ -53,6 +53,9 @@ export class TeamsRepository {
         '(SELECT 1 FROM team_leagues tl WHERE tl.team_id = t.id) ' +
         'AND NOT EXISTS ' +
         '(SELECT 1 FROM player_team_seasons pts WHERE pts.team_id = t.id) ' +
+        'AND NOT EXISTS ' +
+        '(SELECT 1 FROM matches m WHERE m.home_team_id = t.id ' +
+        'OR m.away_team_id = t.id) ' +
         'RETURNING t.id',
     );
 

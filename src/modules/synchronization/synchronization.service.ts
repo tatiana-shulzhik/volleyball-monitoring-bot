@@ -1,12 +1,14 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
+import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
+import { MatchesService } from '../matches/matches.service';
 import { PlayersService } from '../players/players.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
@@ -24,7 +26,9 @@ export class SynchronizationService {
     private readonly leaguesService: LeaguesService,
     private readonly teamsService: TeamsService,
     private readonly playersService: PlayersService,
+    private readonly matchesService: MatchesService,
     private readonly seasonsRepository: SeasonsRepository,
+    private readonly championshipsRepository: ChampionshipsRepository,
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
   ) {}
@@ -45,6 +49,18 @@ export class SynchronizationService {
   })
   async deleteOutdatedCatalogByCron(): Promise<void> {
     await this.runExclusive(() => this.removeOutdatedCatalog(), false);
+  }
+
+  @Cron('0 */3 * * *', {
+    name: 'upcoming-matches-synchronization',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async synchronizeMatchesByCron(): Promise<void> {
+    await this.runExclusive(async () => {
+      await this.performMatchesSynchronization(true);
+      await this.matchesService.startMonitoring();
+    }, false);
   }
 
   async synchronizeStoredCatalogRange(): Promise<void> {
@@ -100,6 +116,23 @@ export class SynchronizationService {
       await this.teamsService.synchronize(leagueCatalog);
 
     await this.playersService.synchronize(synchronizedTeams.rosterSources);
+    await this.performMatchesSynchronization(false);
+  }
+
+  private async performMatchesSynchronization(
+    frequentOnly: boolean,
+  ): Promise<void> {
+    const seasons = await this.seasonsRepository.findAll();
+    const championships = await this.championshipsRepository.findBySeasonIds(
+      seasons.map(({ id }) => id),
+    );
+
+    if (frequentOnly) {
+      await this.matchesService.synchronizeFrequently(championships);
+      return;
+    }
+
+    await this.matchesService.synchronize(championships);
   }
 
   private async runExclusive<T>(

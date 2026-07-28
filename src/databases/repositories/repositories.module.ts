@@ -4,6 +4,7 @@ import { ConfigModule } from '../../configs/config.module';
 import { DbConfig } from '../../configs/db.config';
 import { ChampionshipsEntity } from '../entities/championships.entity';
 import { LeaguesEntity } from '../entities/leagues.entity';
+import { MatchEntity } from '../entities/match.entity';
 import { PlayerTeamSeasonEntity } from '../entities/player-team-season.entity';
 import { PlayersEntity } from '../entities/players.entity';
 import { SeasonsEntity } from '../entities/seasons.entity';
@@ -26,6 +27,7 @@ import { TeamEntity } from '../entities/team.entity';
       TeamLeagueEntity,
       PlayersEntity,
       PlayerTeamSeasonEntity,
+      MatchEntity,
     ]),
   ],
   exports: [TypeOrmModule],

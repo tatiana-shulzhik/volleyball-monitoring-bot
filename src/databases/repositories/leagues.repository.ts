@@ -34,6 +34,13 @@ export class LeaguesRepository {
     });
   }
 
+  findByExternalIds(externalIds: number[]): Promise<LeaguesEntity[]> {
+    return this.repository.find({
+      where: { externalId: In(externalIds) },
+      relations: { championship: { season: true } },
+    });
+  }
+
   insertMany(leagues: Partial<LeaguesEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(LeaguesEntity) ?? this.repository;
 

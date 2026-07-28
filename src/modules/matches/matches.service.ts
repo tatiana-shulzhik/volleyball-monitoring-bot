@@ -1,0 +1,126 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
+import { MatchesRepository } from '../../databases/repositories/matches.repository';
+import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { CevGateway } from '../../gateway/cev.gateway';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { MATCH_MONITORING_WINDOW_HOURS } from '../../shared/consts/constants';
+import { calculateMatchChanges } from '../../shared/matches.utils';
+import {
+  applyEntityChanges,
+  logEntityChanges,
+} from '../../shared/synchronization.utils';
+
+@Injectable()
+export class MatchesService {
+  private readonly logger = new Logger(MatchesService.name);
+
+  constructor(
+    private readonly gateway: CevGateway,
+    private readonly matchesRepository: MatchesRepository,
+    private readonly leaguesRepository: LeaguesRepository,
+    private readonly teamsRepository: TeamsRepository,
+  ) {}
+
+  async synchronize(championships: ChampionshipsEntity[]): Promise<void> {
+    if (!championships.length) {
+      this.logger.warn('No current championships found; matches sync skipped');
+      return;
+    }
+
+    this.logger.log(
+      `Starting matches synchronization for ${championships.length} championships`,
+    );
+
+    const fetched = await this.gateway.fetchMatches(championships);
+    const leagueExternalIds = [
+      ...new Set(
+        fetched.matches.map(({ leagueExternalId }) => leagueExternalId),
+      ),
+    ];
+    const teamExternalIds = [
+      ...new Set(
+        fetched.matches.flatMap(
+          ({ homeTeamExternalId, awayTeamExternalId }) => [
+            homeTeamExternalId,
+            awayTeamExternalId,
+          ],
+        ),
+      ),
+    ];
+    const matchExternalIds = fetched.matches.map(
+      ({ externalId }) => externalId,
+    );
+    const [leagues, teams, existing] = await Promise.all([
+      this.leaguesRepository.findByExternalIds(leagueExternalIds),
+      this.teamsRepository.findByExternalIds(teamExternalIds),
+      this.matchesRepository.findByExternalIds(matchExternalIds),
+    ]);
+    const changes = calculateMatchChanges({
+      incoming: fetched.matches,
+      existing,
+      leaguesByExternalId: new Map(
+        leagues.map((league) => [league.externalId, league]),
+      ),
+      teamsByExternalId: new Map(teams.map((team) => [team.externalId, team])),
+    });
+
+    await applyEntityChanges({
+      repository: this.matchesRepository,
+      changes,
+      allowDeletion: false,
+    });
+    logEntityChanges({
+      logger: this.logger,
+      entityName: 'Matches',
+      changes,
+      isComplete: fetched.isComplete,
+      allowDeletion: false,
+    });
+  }
+
+  async synchronizeFrequently(
+    championships: ChampionshipsEntity[],
+  ): Promise<void> {
+    const currentYear = new Date().getFullYear();
+    const currentChampionships = championships.filter(
+      ({ season }) =>
+        season.yearStart <= currentYear && season.yearEnd >= currentYear,
+    );
+    const completedIds = currentChampionships.length
+      ? await this.matchesRepository.findCompletedChampionshipIds(
+          currentChampionships.map(({ id }) => id),
+        )
+      : [];
+    const completed = new Set(completedIds);
+    const relevant = championships.filter(
+      ({ id, season }) =>
+        season.yearEnd >= currentYear &&
+        (season.yearStart > currentYear || !completed.has(id)),
+    );
+
+    this.logger.log(
+      `Frequent matches sync: ${relevant.length} of ` +
+        `${championships.length} championships require refresh`,
+    );
+
+    await this.synchronize(relevant);
+  }
+
+  async startMonitoring(): Promise<number> {
+    const now = new Date();
+    const windowEnd = new Date(
+      now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 60 * 60 * 1000,
+    );
+    const started = await this.matchesRepository.startMonitoring(
+      now,
+      windowEnd,
+    );
+
+    if (started) {
+      this.logger.log(`${started} matches entered the monitoring window`);
+    }
+
+    return started;
+  }
+}

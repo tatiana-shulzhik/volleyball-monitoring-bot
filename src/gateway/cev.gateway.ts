@@ -3,6 +3,7 @@ import { ChampionshipsEntity } from '../databases/entities/championships.entity'
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { FetchedChampionships } from '../interfaces/requests/championships.interface';
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
+import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { FetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   FetchedSeasons,
@@ -11,6 +12,7 @@ import {
 import { PlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
+import { extractMatches } from '../shared/cev-matches.utils';
 import { extractPlayers } from '../shared/cev-players.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
 import {
@@ -19,13 +21,15 @@ import {
   getCalendarMetadata,
 } from '../shared/cev-calendar.utils';
 import {
+  CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
   createCompetitionUrl,
+  createMatchesUrl,
   createTeamUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
 
-interface MapSettledParams<TInput, TOutput> {
+interface IMapSettledParams<TInput, TOutput> {
   items: TInput[];
   mapper: (item: TInput) => Promise<TOutput>;
   concurrency: number;
@@ -145,6 +149,31 @@ export class CevGateway {
     };
   }
 
+  async fetchMatches(
+    championships: ChampionshipsEntity[],
+  ): Promise<IFetchedMatches> {
+    const results = await this.mapSettled({
+      items: championships,
+      mapper: async (championship) =>
+        extractMatches(
+          await this.http.get(
+            createMatchesUrl(
+              championship.season.externalId,
+              championship.externalId,
+            ),
+          ),
+        ),
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    return {
+      matches: results.flatMap((result) =>
+        result.status === 'fulfilled' ? result.value : [],
+      ),
+      isComplete: results.every((result) => result.status === 'fulfilled'),
+    };
+  }
+
   private fetchCalendarYear(
     initialHtml: string,
     year: number,
@@ -155,7 +184,7 @@ export class CevGateway {
   }
 
   private async mapSettled<TInput, TOutput>(
-    data: MapSettledParams<TInput, TOutput>,
+    data: IMapSettledParams<TInput, TOutput>,
   ): Promise<PromiseSettledResult<TOutput>[]> {
     const { items, mapper, concurrency } = data;
     const results = new Array<PromiseSettledResult<TOutput>>(items.length);
