@@ -23,6 +23,10 @@ export class SeasonsRepository {
     return this.repository.find();
   }
 
+  hasAny(): Promise<boolean> {
+    return this.repository.exists();
+  }
+
   findCurrent(): Promise<SeasonsEntity[]> {
     return this.repository.find({
       select: { id: true, name: true },

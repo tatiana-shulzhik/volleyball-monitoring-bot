@@ -5,7 +5,6 @@ import { MatchesModule } from '../matches/matches.module';
 import { PlayersModule } from '../players/players.module';
 import { SeasonsModule } from '../seasons/seasons.module';
 import { TeamsModule } from '../teams/teams.module';
-import { SynchronizationController } from './synchronization.controller';
 import { SynchronizationService } from './synchronization.service';
 
 @Module({
@@ -17,7 +16,6 @@ import { SynchronizationService } from './synchronization.service';
     TeamsModule,
     PlayersModule,
   ],
-  controllers: [SynchronizationController],
   providers: [SynchronizationService],
 })
 export class SynchronizationModule {}

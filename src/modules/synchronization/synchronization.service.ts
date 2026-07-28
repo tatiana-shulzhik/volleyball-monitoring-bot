@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
@@ -16,7 +21,7 @@ import { TeamsService } from '../teams/teams.service';
 const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 
 @Injectable()
-export class SynchronizationService {
+export class SynchronizationService implements OnApplicationBootstrap {
   private readonly logger = new Logger(SynchronizationService.name);
   private isRunning = false;
 
@@ -32,6 +37,10 @@ export class SynchronizationService {
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
   ) {}
+
+  onApplicationBootstrap(): void {
+    void this.initializeEmptyCatalog();
+  }
 
   @Cron('0 0 * * *', {
     name: 'daily-new-seasons-discovery',
@@ -61,20 +70,6 @@ export class SynchronizationService {
       await this.performMatchesSynchronization(true);
       await this.matchesService.startMonitoring();
     }, false);
-  }
-
-  async synchronizeStoredCatalogRange(): Promise<void> {
-    await this.runExclusive(() => this.performStoredCatalogSynchronization());
-  }
-
-  async deleteOutdatedCatalog(): Promise<CleanupResult> {
-    return (
-      (await this.runExclusive(() => this.removeOutdatedCatalog())) ?? {
-        seasons: 0,
-        players: 0,
-        teams: 0,
-      }
-    );
   }
 
   private async removeOutdatedCatalog(): Promise<CleanupResult> {
@@ -117,6 +112,25 @@ export class SynchronizationService {
 
     await this.playersService.synchronize(synchronizedTeams.rosterSources);
     await this.performMatchesSynchronization(false);
+  }
+
+  private async initializeEmptyCatalog(): Promise<void> {
+    try {
+      if (await this.seasonsRepository.hasAny()) {
+        return;
+      }
+
+      this.logger.log(
+        'Empty catalog detected; starting initial synchronization',
+      );
+      await this.runExclusive(() => this.performStoredCatalogSynchronization());
+      this.logger.log('Initial catalog synchronization completed');
+    } catch (error) {
+      this.logger.error(
+        'Initial catalog synchronization failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   private async performMatchesSynchronization(
