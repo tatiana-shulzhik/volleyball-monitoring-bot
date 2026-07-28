@@ -1,40 +1,41 @@
-import { PlayerTeamSeasonEntity } from '../../databases/entities/player-team-season.entity';
+import { LeaguesEntity } from '../../databases/entities/leagues.entity';
+import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { PlayersEntity } from '../../databases/entities/players.entity';
-import { SeasonsEntity } from '../../databases/entities/seasons.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { EntityChanges } from '../responses/entity-changes.interface';
-import { RelationChanges } from '../responses/relation-changes.interface';
+import { IRelationChanges } from '../responses/relation-changes.interface';
 
 export interface ICevPlayer {
   externalId: string;
   fullName: string;
   position: string;
+  shirtNumber: number | null;
   teamExternalId: string;
-  seasonExternalId: number;
+  leagueExternalId: number;
 }
 
-export interface FetchedPlayers {
+export interface IFetchedPlayers {
   players: ICevPlayer[];
   isComplete: boolean;
 }
 
-export interface ExtractPlayersParams {
+export interface IExtractPlayersParams {
   html: string;
   teamExternalId: string;
-  seasonExternalId: number;
+  leagueExternalId: number;
 }
 
-export interface CalculatePlayerChangesParams {
+export interface ICalculatePlayerChangesParams {
   incoming: ICevPlayer[];
   existing: PlayersEntity[];
 }
 
-export interface CalculatePlayerRelationChangesParams {
+export interface ICalculatePlayerRelationChangesParams {
   incoming: ICevPlayer[];
-  existing: PlayerTeamSeasonEntity[];
+  existing: PlayerTeamLeagueEntity[];
   playersByExternalId: Map<string, PlayersEntity>;
   teamsByExternalId: Map<string, TeamEntity>;
-  seasonsByExternalId: Map<number, SeasonsEntity>;
+  leaguesByExternalId: Map<number, LeaguesEntity>;
 }
 
 export type PlayerChanges = EntityChanges<
@@ -42,6 +43,6 @@ export type PlayerChanges = EntityChanges<
   Omit<PlayersEntity, 'id'>
 >;
 
-export type PlayerRelationChanges = RelationChanges<
-  Omit<PlayerTeamSeasonEntity, 'id'>
+export type PlayerRelationChanges = IRelationChanges<
+  Omit<PlayerTeamLeagueEntity, 'id'>
 >;

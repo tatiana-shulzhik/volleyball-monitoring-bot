@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { Agent } from 'https';
-import { MAX_ATTEMPTS } from '../consts/constants';
+import { CEV_HTTP_CONCURRENCY, MAX_ATTEMPTS } from '../consts/constants';
 
 @Injectable()
 export class HttpService {
@@ -12,8 +12,8 @@ export class HttpService {
       timeout: 10000,
       httpsAgent: new Agent({
         keepAlive: true,
-        maxSockets: 5,
-        maxFreeSockets: 5,
+        maxSockets: CEV_HTTP_CONCURRENCY,
+        maxFreeSockets: CEV_HTTP_CONCURRENCY,
       }),
       headers: {
         'User-Agent': 'CEV_MONITOR_BOT',

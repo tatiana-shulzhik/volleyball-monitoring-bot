@@ -1,18 +1,28 @@
 import {
-  ExtractPlayersParams,
+  IExtractPlayersParams,
   ICevPlayer,
 } from '../interfaces/requests/players.interface';
 
 const PLAYER_ROW = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
+const TABLE_CELL = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
 const PLAYER_DETAILS =
-  /<a\b[^>]*id=['"][^'"]*_playerDetails['"][^>]*href=['"][^'"]*PlayerID=(\d+)[^'"]*['"][^>]*>([\s\S]*?)<\/a>\s*<\/td>\s*<td\b[^>]*>([\s\S]*?)<\/td>/i;
+  /<a\b[^>]*id=['"][^'"]*_playerDetails['"][^>]*href=['"][^'"]*PlayerID=(\d+)[^'"]*['"][^>]*>([\s\S]*?)<\/a>/i;
 
-export function extractPlayers(data: ExtractPlayersParams): ICevPlayer[] {
-  const { html, teamExternalId, seasonExternalId } = data;
+export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
+  const { html, teamExternalId, leagueExternalId } = data;
   const players = new Map<string, ICevPlayer>();
 
   for (const rowMatch of html.matchAll(PLAYER_ROW)) {
-    const playerMatch = rowMatch[1].match(PLAYER_DETAILS);
+    const cells = [...rowMatch[1].matchAll(TABLE_CELL)].map(
+      (match) => match[1],
+    );
+    const playerCellIndex = cells.findIndex((cell) =>
+      PLAYER_DETAILS.test(cell),
+    );
+    const playerMatch =
+      playerCellIndex >= 0
+        ? cells[playerCellIndex].match(PLAYER_DETAILS)
+        : null;
 
     if (!playerMatch) {
       continue;
@@ -20,20 +30,27 @@ export function extractPlayers(data: ExtractPlayersParams): ICevPlayer[] {
 
     const externalId = playerMatch[1];
     const fullName = cleanText(playerMatch[2]);
-    const position = cleanText(playerMatch[3]);
+    const shirtNumber = parseShirtNumber(cells[playerCellIndex - 1]);
+    const position = cleanText(cells[playerCellIndex + 1] ?? '');
 
     if (fullName) {
       players.set(externalId, {
         externalId,
         fullName,
         position,
+        shirtNumber,
         teamExternalId,
-        seasonExternalId,
+        leagueExternalId,
       });
     }
   }
 
   return [...players.values()];
+}
+
+function parseShirtNumber(value: string | undefined): number | null {
+  const number = cleanText(value ?? '').match(/\d+/)?.[0];
+  return number ? Number(number) : null;
 }
 
 function cleanText(value: string): string {

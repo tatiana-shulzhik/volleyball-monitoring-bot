@@ -4,8 +4,8 @@ import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { SynchronizeTeamsParams } from '../../interfaces/requests/teams.interface';
 import {
-  PlayerRosterSource,
-  SynchronizedTeams,
+  IPlayerRosterSource,
+  ISynchronizedTeams,
 } from '../../interfaces/responses/synchronized-teams.interface';
 import { applyRelationChanges } from '../../shared/relation-changes.utils';
 import {
@@ -26,7 +26,7 @@ export class TeamsService {
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
   ) {}
 
-  async synchronize(data: SynchronizeTeamsParams): Promise<SynchronizedTeams> {
+  async synchronize(data: SynchronizeTeamsParams): Promise<ISynchronizedTeams> {
     const { leagues, teams: incomingTeams, isComplete } = data;
 
     if (!leagues.length) {
@@ -104,7 +104,7 @@ export class TeamsService {
     incomingTeams: SynchronizeTeamsParams['teams'];
     teams: TeamEntity[];
     leagues: SynchronizeTeamsParams['leagues'];
-  }): PlayerRosterSource[] {
+  }): IPlayerRosterSource[] {
     const { incomingTeams, teams, leagues } = data;
     const teamsByExternalId = new Map(
       teams.map((team) => [team.externalId, team]),
@@ -112,16 +112,17 @@ export class TeamsService {
     const leaguesByExternalId = new Map(
       leagues.map((league) => [league.externalId, league]),
     );
-    const sources = new Map<string, PlayerRosterSource>();
+    const sources = new Map<string, IPlayerRosterSource>();
 
     for (const incomingTeam of incomingTeams) {
       const team = teamsByExternalId.get(incomingTeam.externalId);
       const league = leaguesByExternalId.get(incomingTeam.leagueExternalId);
       const season = league?.championship.season;
 
-      if (team && season) {
-        sources.set(`${team.externalId}:${season.externalId}`, {
+      if (team && league && season) {
+        sources.set(`${team.externalId}:${league.externalId}`, {
           team,
+          league,
           season,
         });
       }

@@ -33,10 +33,9 @@ export class PlayersRepository {
 
   updateMany(players: PlayersEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
-    const values = players.map(({ externalId, fullName, position }) => ({
+    const values = players.map(({ externalId, fullName }) => ({
       externalId,
       fullName,
-      position,
     }));
 
     return repository.upsert(values, {
@@ -54,7 +53,7 @@ export class PlayersRepository {
   async deleteOrphans(manager: EntityManager): Promise<number> {
     const deleted: Array<{ id: number }> = await manager.query(
       'DELETE FROM players p WHERE NOT EXISTS ' +
-        '(SELECT 1 FROM player_team_seasons pts WHERE pts.player_id = p.id) ' +
+        '(SELECT 1 FROM player_team_leagues ptl WHERE ptl.player_id = p.id) ' +
         'RETURNING p.id',
     );
 

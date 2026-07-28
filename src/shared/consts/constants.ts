@@ -8,6 +8,8 @@ export const CEV_HTTP_CONCURRENCY = 10;
 
 export const PREVIOUS_YEARS_COUNT = 3;
 
+export const WRITE_BATCH_SIZE = 1000;
+
 export const MATCH_MONITORING_WINDOW_HOURS = 36;
 
 export function createCompetitionUrl(

@@ -33,6 +33,16 @@ export class TeamLeaguesRepository {
     return repository.insert(relations);
   }
 
+  updateMany(relations: Partial<TeamLeagueEntity>[], manager?: EntityManager) {
+    const repository =
+      manager?.getRepository(TeamLeagueEntity) ?? this.repository;
+
+    return repository.upsert(relations, {
+      conflictPaths: ['team', 'league'],
+      skipUpdateIfNoValuesChanged: true,
+    });
+  }
+
   deleteMany(ids: number[], manager?: EntityManager) {
     const repository =
       manager?.getRepository(TeamLeagueEntity) ?? this.repository;

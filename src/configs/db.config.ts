@@ -3,7 +3,7 @@ import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { LeaguesEntity } from '../databases/entities/leagues.entity';
 import { MatchEntity } from '../databases/entities/match.entity';
-import { PlayerTeamSeasonEntity } from '../databases/entities/player-team-season.entity';
+import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import { PlayersEntity } from '../databases/entities/players.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
@@ -44,7 +44,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         TeamEntity,
         TeamLeagueEntity,
         PlayersEntity,
-        PlayerTeamSeasonEntity,
+        PlayerTeamLeagueEntity,
         MatchEntity,
       ],
       migrations: [],

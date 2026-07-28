@@ -1,6 +1,6 @@
 import {
-  CalculatePlayerChangesParams,
-  CalculatePlayerRelationChangesParams,
+  ICalculatePlayerChangesParams,
+  ICalculatePlayerRelationChangesParams,
   PlayerChanges,
   PlayerRelationChanges,
 } from '../interfaces/requests/players.interface';
@@ -8,14 +8,14 @@ import { calculateEntityChanges } from './entity-changes.utils';
 import { calculateRelationChanges } from './relation-changes.utils';
 
 export function calculatePlayerChanges(
-  data: CalculatePlayerChangesParams,
+  data: ICalculatePlayerChangesParams,
 ): PlayerChanges {
   const { incoming, existing } = data;
   const uniquePlayers = [
     ...new Map(
-      incoming.map(({ externalId, fullName, position }) => [
+      incoming.map(({ externalId, fullName }) => [
         externalId,
-        { externalId, fullName, position },
+        { externalId, fullName },
       ]),
     ).values(),
   ];
@@ -23,34 +23,34 @@ export function calculatePlayerChanges(
   return calculateEntityChanges({
     incoming: uniquePlayers,
     existing,
-    hasChanges: (stored, player) =>
-      stored.fullName !== player.fullName ||
-      stored.position !== player.position,
+    hasChanges: (stored, player) => stored.fullName !== player.fullName,
   });
 }
 
 export function calculatePlayerRelationChanges(
-  data: CalculatePlayerRelationChangesParams,
+  data: ICalculatePlayerRelationChangesParams,
 ): PlayerRelationChanges {
   const {
     incoming,
     existing,
     playersByExternalId,
     teamsByExternalId,
-    seasonsByExternalId,
+    leaguesByExternalId,
   } = data;
   const desired = new Map<string, PlayerRelationChanges['missing'][number]>();
 
   for (const item of incoming) {
     const player = playersByExternalId.get(item.externalId);
     const team = teamsByExternalId.get(item.teamExternalId);
-    const season = seasonsByExternalId.get(item.seasonExternalId);
+    const league = leaguesByExternalId.get(item.leagueExternalId);
 
-    if (player && team && season) {
-      desired.set(createRelationKey(player.id, team.id, season.id), {
+    if (player && team && league) {
+      desired.set(createRelationKey(player.id, team.id, league.id), {
         player,
         team,
-        season,
+        league,
+        shirtNumber: item.shirtNumber,
+        position: item.position || null,
       });
     }
   }
@@ -58,15 +58,18 @@ export function calculatePlayerRelationChanges(
   return calculateRelationChanges({
     desired,
     existing,
-    existingKey: ({ player, team, season }) =>
-      createRelationKey(player.id, team.id, season.id),
+    existingKey: ({ player, team, league }) =>
+      createRelationKey(player.id, team.id, league.id),
+    hasChanges: (stored, incoming) =>
+      stored.shirtNumber !== incoming.shirtNumber ||
+      stored.position !== incoming.position,
   });
 }
 
 function createRelationKey(
   playerId: number,
   teamId: number,
-  seasonId: number,
+  leagueId: number,
 ): string {
-  return `${playerId}:${teamId}:${seasonId}`;
+  return `${playerId}:${teamId}:${leagueId}`;
 }

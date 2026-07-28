@@ -8,9 +8,6 @@ export class PlayersEntity {
   @Column({ name: 'full_name' })
   fullName: string;
 
-  @Column()
-  position: string;
-
   @Column({ name: 'external_id', unique: true })
   externalId: string;
 }

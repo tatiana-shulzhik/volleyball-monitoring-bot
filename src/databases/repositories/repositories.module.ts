@@ -5,7 +5,7 @@ import { DbConfig } from '../../configs/db.config';
 import { ChampionshipsEntity } from '../entities/championships.entity';
 import { LeaguesEntity } from '../entities/leagues.entity';
 import { MatchEntity } from '../entities/match.entity';
-import { PlayerTeamSeasonEntity } from '../entities/player-team-season.entity';
+import { PlayerTeamLeagueEntity } from '../entities/player-team-league.entity';
 import { PlayersEntity } from '../entities/players.entity';
 import { SeasonsEntity } from '../entities/seasons.entity';
 import { TeamLeagueEntity } from '../entities/team-league.entity';
@@ -26,7 +26,7 @@ import { TeamEntity } from '../entities/team.entity';
       TeamEntity,
       TeamLeagueEntity,
       PlayersEntity,
-      PlayerTeamSeasonEntity,
+      PlayerTeamLeagueEntity,
       MatchEntity,
     ]),
   ],

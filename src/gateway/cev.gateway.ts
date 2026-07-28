@@ -4,12 +4,12 @@ import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { FetchedChampionships } from '../interfaces/requests/championships.interface';
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
-import { FetchedPlayers } from '../interfaces/requests/players.interface';
+import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   FetchedSeasons,
   ICevSeason,
 } from '../interfaces/requests/seasons.interface';
-import { PlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
+import { IPlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
@@ -127,18 +127,39 @@ export class CevGateway {
     };
   }
 
-  async fetchPlayers(sources: PlayerRosterSource[]): Promise<FetchedPlayers> {
+  async fetchPlayers(sources: IPlayerRosterSource[]): Promise<IFetchedPlayers> {
+    const sourceGroups = [
+      ...sources
+        .reduce((groups, source) => {
+          const key = `${source.team.externalId}:${source.season.externalId}`;
+          const group = groups.get(key) ?? [];
+
+          group.push(source);
+          groups.set(key, group);
+          return groups;
+        }, new Map<string, IPlayerRosterSource[]>())
+        .values(),
+    ];
     const results = await this.mapSettled({
-      items: sources,
-      mapper: async ({ team, season }) =>
-        extractPlayers({
+      items: sourceGroups,
+      mapper: async (group) => {
+        const { team, league, season } = group[0];
+        const roster = extractPlayers({
           html: await this.http.get(
             createTeamUrl(team.externalId, season.externalId),
           ),
           teamExternalId: team.externalId,
-          seasonExternalId: season.externalId,
-        }),
-      concurrency: 5,
+          leagueExternalId: league.externalId,
+        });
+
+        return group.flatMap((source) =>
+          roster.map((player) => ({
+            ...player,
+            leagueExternalId: source.league.externalId,
+          })),
+        );
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
     });
 
     return {

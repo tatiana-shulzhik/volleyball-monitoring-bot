@@ -2,7 +2,7 @@ import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamLeagueEntity } from '../../databases/entities/team-league.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { EntityChanges } from '../responses/entity-changes.interface';
-import { RelationChanges } from '../responses/relation-changes.interface';
+import { IRelationChanges } from '../responses/relation-changes.interface';
 
 export interface ICevTeam {
   externalId: string;
@@ -35,4 +35,4 @@ export interface SynchronizeTeamsParams {
 
 export type TeamChanges = EntityChanges<TeamEntity, Omit<TeamEntity, 'id'>>;
 
-export type TeamLeagueChanges = RelationChanges<Omit<TeamLeagueEntity, 'id'>>;
+export type TeamLeagueChanges = IRelationChanges<Omit<TeamLeagueEntity, 'id'>>;
