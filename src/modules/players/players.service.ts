@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
+import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
+import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
+import { createTeamStatistics } from '../../shared/player-statistics.utils';
 import {
   calculatePlayerChanges,
   calculatePlayerRelationChanges,
@@ -21,7 +24,32 @@ export class PlayersService {
     private readonly gateway: CevGateway,
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
+    private readonly statisticsRepository: PlayerStatisticsRepository,
   ) {}
+
+  async findTeamStatistics(
+    teamId: number,
+    leagueId: number,
+  ): Promise<ITeamStatistics | null> {
+    const relations = await this.relationsRepository.findByTeamIdAndLeagueId(
+      teamId,
+      leagueId,
+    );
+
+    if (!relations.length) {
+      return null;
+    }
+
+    const { team, league } = relations[0];
+    const statistics =
+      await this.statisticsRepository.findByPlayerIdsAndTeamIdAndSeasonId(
+        relations.map(({ player }) => player.id),
+        team.id,
+        league.championship.season.id,
+      );
+
+    return createTeamStatistics(relations, statistics);
+  }
 
   async synchronize(sources: IPlayerRosterSource[]): Promise<void> {
     if (!sources.length) {

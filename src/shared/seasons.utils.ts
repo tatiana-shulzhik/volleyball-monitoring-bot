@@ -13,12 +13,7 @@ export function selectRelevantSeasons(
 ): RelevantSeason[] {
   const earliestRelevantYear = currentYear - PREVIOUS_YEARS_COUNT;
 
-  return seasons
-    .filter((season) => season.yearEnd >= earliestRelevantYear)
-    .map((season) => ({
-      ...season,
-      isCurrent: isCurrentSeason(season),
-    }));
+  return seasons.filter((season) => season.yearEnd >= earliestRelevantYear);
 }
 
 export function calculateSeasonsChanges(
@@ -32,10 +27,6 @@ export function calculateSeasonsChanges(
   });
 }
 
-function isCurrentSeason(season: ICevSeason, now = new Date()): boolean {
-  return season.startsAt <= now && season.endsAt >= now;
-}
-
 function hasSeasonChanges(
   existing: SeasonsEntity,
   incoming: RelevantSeason,
@@ -45,7 +36,6 @@ function hasSeasonChanges(
     existing.yearStart !== incoming.yearStart ||
     existing.yearEnd !== incoming.yearEnd ||
     existing.startsAt?.getTime() !== incoming.startsAt.getTime() ||
-    existing.endsAt?.getTime() !== incoming.endsAt.getTime() ||
-    existing.isCurrent !== incoming.isCurrent
+    existing.endsAt?.getTime() !== incoming.endsAt.getTime()
   );
 }

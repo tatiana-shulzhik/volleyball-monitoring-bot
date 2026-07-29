@@ -1,6 +1,6 @@
 import { SeasonsEntity } from '../../databases/entities/seasons.entity';
 
-export type RelevantSeason = ICevSeason & Pick<SeasonsEntity, 'isCurrent'>;
+export type RelevantSeason = ICevSeason;
 
 export interface SeasonsChanges {
   missing: RelevantSeason[];

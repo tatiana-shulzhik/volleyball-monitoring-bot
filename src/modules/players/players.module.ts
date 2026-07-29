@@ -13,6 +13,11 @@ import { PlayerStatisticsService } from './player-statistics.service';
     PlayerTeamLeaguesRepository,
     PlayerStatisticsRepository,
   ],
-  exports: [PlayersService, PlayerStatisticsService, PlayersRepository],
+  exports: [
+    PlayersService,
+    PlayerStatisticsService,
+    PlayersRepository,
+    PlayerTeamLeaguesRepository,
+  ],
 })
 export class PlayersModule {}

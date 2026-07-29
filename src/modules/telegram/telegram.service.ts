@@ -1,10 +1,12 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { Telegraf } from 'telegraf';
+import { Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
+import { PlayersService } from '../players/players.service';
+import { formatTeamStatistics } from '../../shared/player-statistics.utils';
 import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
@@ -23,6 +25,7 @@ export class TelegramService implements OnApplicationBootstrap {
     private readonly championshipsRepository: ChampionshipsRepository,
     private readonly leaguesRepository: LeaguesRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
+    private readonly playersService: PlayersService,
   ) {
     this.bot = new Telegraf(config.token);
     this.registerHandlers();
@@ -48,7 +51,11 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     this.bot.action(TELEGRAM_CALLBACKS.menu.statistics, async (context) => {
-      const seasons = await this.seasonsRepository.findCurrent();
+      const now = new Date();
+      const activeSeasons = await this.seasonsRepository.findActive(now);
+      const seasons = activeSeasons.length
+        ? activeSeasons
+        : await this.seasonsRepository.findUpcoming(now);
 
       await showList(context, {
         items: seasons.map(({ id, name }) => ({
@@ -114,7 +121,12 @@ export class TelegramService implements OnApplicationBootstrap {
       await showList(context, {
         items: teamLeagues.map(({ team }) => ({
           text: team.name,
-          callbackData: TELEGRAM_CALLBACKS.team(team.id),
+          callbackData: TELEGRAM_CALLBACKS.team(
+            team.id,
+            leagueId,
+            championshipId,
+            seasonId,
+          ),
         })),
         message: TELEGRAM_MESSAGES.teams.select,
         emptyMessage: TELEGRAM_MESSAGES.teams.empty,
@@ -124,6 +136,35 @@ export class TelegramService implements OnApplicationBootstrap {
           seasonId,
         ),
       });
+    });
+
+    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.team, async (context) => {
+      const teamId = Number(context.match[1]);
+      const leagueId = Number(context.match[2]);
+      const championshipId = Number(context.match[3]);
+      const seasonId = Number(context.match[4]);
+      const statistics = await this.playersService.findTeamStatistics(
+        teamId,
+        leagueId,
+      );
+
+      await context.answerCbQuery();
+      await context.editMessageText(
+        statistics
+          ? formatTeamStatistics(statistics)
+          : TELEGRAM_MESSAGES.teams.statisticsEmpty,
+        {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                TELEGRAM_MESSAGES.teams.back,
+                TELEGRAM_CALLBACKS.league(leagueId, championshipId, seasonId),
+              ),
+            ],
+          ]),
+        },
+      );
     });
 
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.development, async (context) => {

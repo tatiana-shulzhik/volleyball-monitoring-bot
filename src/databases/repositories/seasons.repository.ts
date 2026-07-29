@@ -27,12 +27,23 @@ export class SeasonsRepository {
     return this.repository.exists();
   }
 
-  findCurrent(): Promise<SeasonsEntity[]> {
-    return this.repository.find({
-      select: { id: true, name: true },
-      where: { isCurrent: true },
-      order: { yearStart: 'DESC' },
-    });
+  findActive(now: Date): Promise<SeasonsEntity[]> {
+    return this.repository
+      .createQueryBuilder('season')
+      .select(['season.id', 'season.name'])
+      .where('season.starts_at <= :now', { now })
+      .andWhere('season.ends_at >= :now', { now })
+      .orderBy('season.starts_at', 'DESC')
+      .getMany();
+  }
+
+  findUpcoming(now: Date): Promise<SeasonsEntity[]> {
+    return this.repository
+      .createQueryBuilder('season')
+      .select(['season.id', 'season.name'])
+      .where('season.starts_at > :now', { now })
+      .orderBy('season.starts_at', 'ASC')
+      .getMany();
   }
 
   findWithIncompleteStatistics(now: Date): Promise<SeasonsEntity[]> {
@@ -78,18 +89,9 @@ export class SeasonsRepository {
   async updateMany(seasons: SeasonsEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
     const values = seasons.map(
-      ({
+      ({ externalId, name, yearStart, yearEnd, startsAt, endsAt }) => ({
         externalId,
         name,
-        isCurrent,
-        yearStart,
-        yearEnd,
-        startsAt,
-        endsAt,
-      }) => ({
-        externalId,
-        name,
-        isCurrent,
         yearStart,
         yearEnd,
         startsAt,

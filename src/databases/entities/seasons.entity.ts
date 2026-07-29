@@ -11,9 +11,6 @@ export class SeasonsEntity {
   @Column({ name: 'external_id', unique: true })
   externalId: number;
 
-  @Column({ name: 'is_current', default: false })
-  isCurrent: boolean;
-
   @Column({
     name: 'year_start',
     type: 'int',
