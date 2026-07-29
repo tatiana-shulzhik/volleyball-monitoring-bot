@@ -8,3 +8,8 @@ export enum ECronExpression {
   EveryHourAtMinute10 = '10 * * * *',
   Every3HoursAtMinute30 = '30 */3 * * *',
 }
+
+export enum ECompetitionType {
+  Club = 'club',
+  NationalTeam = 'national_team',
+}

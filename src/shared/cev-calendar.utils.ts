@@ -1,7 +1,12 @@
 import { ICevSeason } from '../interfaces/requests/seasons.interface';
+import { ECompetitionType } from './enums';
 
 const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
 const PERIOD_CLIENT_STATE = 'ctl00_Content_Left_RCB_Period_ClientState';
+const VOLLEY_TYPE_CONTROL = 'ctl00$Content_Left$RTS_VolleyType';
+const VOLLEY_TYPE_CLIENT_STATE =
+  'ctl00_Content_Left_RTS_VolleyType_ClientState';
+const HIDDEN_VOLLEY_TYPE = 'ctl00$Content_Left$HiddenType';
 
 export function getCalendarMetadata(html: string) {
   const availableYears = [
@@ -25,14 +30,7 @@ export function createCalendarForm(
   html: string,
   year: number,
 ): URLSearchParams {
-  const form = new URLSearchParams();
-  const inputRegex =
-    /<input\b(?=[^>]*type="hidden")(?=[^>]*name="([^"]+)")(?=[^>]*value="([^"]*)")[^>]*>/gi;
-
-  for (const match of html.matchAll(inputRegex)) {
-    form.set(match[1], decodeHtml(match[2]));
-  }
-
+  const form = createPostbackForm(html);
   form.set('__EVENTTARGET', PERIOD_CONTROL);
   form.set('__EVENTARGUMENT', '');
   form.set(
@@ -50,7 +48,36 @@ export function createCalendarForm(
   return form;
 }
 
-export function extractCalendarSeasons(html: string): ICevSeason[] {
+export function createNationalTeamCalendarForm(html: string): URLSearchParams {
+  const form = createPostbackForm(html);
+
+  form.set('__EVENTTARGET', VOLLEY_TYPE_CONTROL);
+  form.set('__EVENTARGUMENT', '1');
+  form.set(HIDDEN_VOLLEY_TYPE, '3');
+  form.set(
+    VOLLEY_TYPE_CLIENT_STATE,
+    JSON.stringify({ selectedIndexes: ['1'], logEntries: [] }),
+  );
+
+  return form;
+}
+
+function createPostbackForm(html: string): URLSearchParams {
+  const form = new URLSearchParams();
+  const inputRegex =
+    /<input\b(?=[^>]*type="hidden")(?=[^>]*name="([^"]+)")(?=[^>]*value="([^"]*)")[^>]*>/gi;
+
+  for (const match of html.matchAll(inputRegex)) {
+    form.set(match[1], decodeHtml(match[2]));
+  }
+
+  return form;
+}
+
+export function extractCalendarSeasons(
+  html: string,
+  competitionType: ECompetitionType,
+): ICevSeason[] {
   const seasons = new Map<number, ICevSeason>();
   const rowRegex = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
   const linkRegex =
@@ -87,6 +114,7 @@ export function extractCalendarSeasons(html: string): ICevSeason[] {
     seasons.set(externalId, {
       externalId,
       name: competition[1].trim(),
+      competitionType,
       yearStart: year,
       yearEnd: year,
       startsAt:

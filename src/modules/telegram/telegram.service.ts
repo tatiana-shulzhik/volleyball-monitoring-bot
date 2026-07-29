@@ -7,6 +7,7 @@ import { SeasonsRepository } from '../../databases/repositories/seasons.reposito
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { PlayersService } from '../players/players.service';
 import { formatTeamStatistics } from '../../shared/player-statistics.utils';
+import { getErrorMessage } from '../../shared/error.utils';
 import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
@@ -179,7 +180,7 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     this.bot.catch(async (error, context) => {
-      this.logger.error(error instanceof Error ? error.message : String(error));
+      this.logger.error(getErrorMessage(error));
 
       if (context.callbackQuery) {
         await context

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
 import { FetchedChampionships } from '../interfaces/requests/championships.interface';
@@ -17,11 +17,14 @@ import { extractMatches } from '../shared/cev-matches.utils';
 import { extractPlayers } from '../shared/cev-players.utils';
 import { extractPlayerStatistics } from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
+import { getErrorMessage } from '../shared/error.utils';
 import {
   createCalendarForm,
+  createNationalTeamCalendarForm,
   extractCalendarSeasons,
   getCalendarMetadata,
 } from '../shared/cev-calendar.utils';
+import { ECompetitionType } from '../shared/enums';
 import {
   CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
@@ -40,23 +43,39 @@ interface IMapSettledParams<TInput, TOutput> {
 
 @Injectable()
 export class CevGateway {
+  private readonly logger = new Logger(CevGateway.name);
+
   constructor(private readonly http: HttpService) {}
 
   async fetchSeasonsSince(earliestYear: number): Promise<FetchedSeasons> {
     const initialHtml = await this.http.get(CEV_CALENDAR_URL);
+    const calendarResults = await Promise.allSettled([
+      Promise.resolve({
+        html: initialHtml,
+        competitionType: ECompetitionType.Club,
+      }),
+      this.fetchNationalTeamCalendar(initialHtml).then((html) => ({
+        html,
+        competitionType: ECompetitionType.NationalTeam,
+      })),
+    ]);
+    const requests = calendarResults.flatMap((calendarResult) => {
+      if (calendarResult.status === 'rejected') {
+        return [];
+      }
 
-    const { availableYears, selectedYear } = getCalendarMetadata(initialHtml);
+      const { html, competitionType } = calendarResult.value;
+      const { availableYears, selectedYear } = getCalendarMetadata(html);
 
-    const requestedYears = availableYears.filter(
-      (year) => year >= earliestYear,
-    );
-
-    const requests = requestedYears.map((year) =>
-      year === selectedYear
-        ? Promise.resolve(initialHtml)
-        : this.fetchCalendarYear(initialHtml, year),
-    );
-
+      return availableYears
+        .filter((year) => year >= earliestYear)
+        .map((year) =>
+          (year === selectedYear
+            ? Promise.resolve(html)
+            : this.fetchCalendarYear(html, year)
+          ).then((yearHtml) => ({ html: yearHtml, competitionType })),
+        );
+    });
     const results = await Promise.allSettled(requests);
     const seasons = new Map<number, ICevSeason>();
 
@@ -65,7 +84,10 @@ export class CevGateway {
         continue;
       }
 
-      for (const season of extractCalendarSeasons(result.value)) {
+      for (const season of extractCalendarSeasons(
+        result.value.html,
+        result.value.competitionType,
+      )) {
         const existing = seasons.get(season.externalId);
 
         seasons.set(season.externalId, {
@@ -84,7 +106,9 @@ export class CevGateway {
 
     return {
       seasons: [...seasons.values()],
-      isComplete: results.every((result) => result.status === 'fulfilled'),
+      isComplete:
+        calendarResults.every((result) => result.status === 'fulfilled') &&
+        results.every((result) => result.status === 'fulfilled'),
     };
   }
 
@@ -177,6 +201,20 @@ export class CevGateway {
       concurrency: CEV_HTTP_CONCURRENCY,
     });
 
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        return;
+      }
+
+      const { team, season } = sourceGroups[index][0];
+      const url = createTeamUrl(team.externalId, season.externalId);
+
+      this.logger.warn(
+        `Player roster request failed for "${team.name}" ` +
+          `in "${season.name}" (${url}): ${getErrorMessage(result.reason)}`,
+      );
+    });
+
     return {
       players: results.flatMap((result) =>
         result.status === 'fulfilled' ? result.value : [],
@@ -234,6 +272,12 @@ export class CevGateway {
     year: number,
   ): Promise<string> {
     const form = createCalendarForm(initialHtml, year);
+
+    return this.http.postForm(CEV_CALENDAR_URL, form);
+  }
+
+  private fetchNationalTeamCalendar(initialHtml: string): Promise<string> {
+    const form = createNationalTeamCalendarForm(initialHtml);
 
     return this.http.postForm(CEV_CALENDAR_URL, form);
   }

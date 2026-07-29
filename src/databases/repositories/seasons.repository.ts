@@ -89,9 +89,18 @@ export class SeasonsRepository {
   async updateMany(seasons: SeasonsEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
     const values = seasons.map(
-      ({ externalId, name, yearStart, yearEnd, startsAt, endsAt }) => ({
+      ({
         externalId,
         name,
+        competitionType,
+        yearStart,
+        yearEnd,
+        startsAt,
+        endsAt,
+      }) => ({
+        externalId,
+        name,
+        competitionType,
         yearStart,
         yearEnd,
         startsAt,

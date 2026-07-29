@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { ECompetitionType } from '../../shared/enums';
 
 @Entity({ name: 'seasons' })
 export class SeasonsEntity {
@@ -10,6 +11,13 @@ export class SeasonsEntity {
 
   @Column({ name: 'external_id', unique: true })
   externalId: number;
+
+  @Column({
+    name: 'competition_type',
+    type: 'varchar',
+    default: ECompetitionType.Club,
+  })
+  competitionType: ECompetitionType;
 
   @Column({
     name: 'year_start',

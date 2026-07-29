@@ -4,10 +4,7 @@ import { SeasonsRepository } from '../../databases/repositories/seasons.reposito
 import { CevGateway } from '../../gateway/cev.gateway';
 import { FetchedSeasons } from '../../interfaces/requests/seasons.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
-import {
-  calculateSeasonsChanges,
-  selectRelevantSeasons,
-} from '../../shared/seasons.utils';
+import { calculateSeasonsChanges } from '../../shared/seasons.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -36,16 +33,18 @@ export class SeasonsService {
   }
 
   private async synchronizeFrom(
-    earliestYear: number,
+    earliestSeasonYear: number,
   ): Promise<SeasonsEntity[]> {
-    this.logger.log(`Starting seasons synchronization from ${earliestYear}`);
+    this.logger.log(
+      `Starting seasons synchronization from ${earliestSeasonYear}`,
+    );
 
-    const fetched = await this.fetchSeasons(earliestYear);
-    const incomingSeasons = selectRelevantSeasons(fetched.seasons).filter(
-      ({ yearEnd }) => yearEnd >= earliestYear,
+    const fetched = await this.fetchSeasons(earliestSeasonYear - 1);
+    const incomingSeasons = fetched.seasons.filter(
+      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
     );
     const storedSeasons = (await this.repository.findAll()).filter(
-      ({ yearEnd }) => yearEnd >= earliestYear,
+      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
     );
     const changes = calculateSeasonsChanges(incomingSeasons, storedSeasons);
 
@@ -63,7 +62,7 @@ export class SeasonsService {
     });
 
     return (await this.repository.findAll()).filter(
-      ({ yearEnd }) => yearEnd >= earliestYear,
+      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
     );
   }
 

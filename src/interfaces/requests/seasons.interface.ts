@@ -1,4 +1,5 @@
 import { SeasonsEntity } from '../../databases/entities/seasons.entity';
+import { ECompetitionType } from '../../shared/enums';
 
 export type RelevantSeason = ICevSeason;
 
@@ -18,6 +19,7 @@ export interface ICevSeason {
   yearStart: number;
   yearEnd: number;
   externalId: number;
+  competitionType: ECompetitionType;
   startsAt: Date;
   endsAt: Date;
 }
