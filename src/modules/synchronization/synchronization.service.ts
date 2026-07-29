@@ -4,21 +4,24 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
-import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import {
+  MOSCOW_TIME_ZONE,
+  PREVIOUS_YEARS_COUNT,
+} from '../../shared/consts/constants';
+import { ECronExpression } from '../../shared/enums';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
 import { MatchesService } from '../matches/matches.service';
 import { PlayersService } from '../players/players.service';
+import { PlayerStatisticsService } from '../players/player-statistics.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
-
-const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 
 @Injectable()
 export class SynchronizationService implements OnApplicationBootstrap {
@@ -31,6 +34,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly leaguesService: LeaguesService,
     private readonly teamsService: TeamsService,
     private readonly playersService: PlayersService,
+    private readonly playerStatisticsService: PlayerStatisticsService,
     private readonly matchesService: MatchesService,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
@@ -42,7 +46,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     void this.initializeEmptyCatalog();
   }
 
-  @Cron('0 0 * * *', {
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
     name: 'daily-new-seasons-discovery',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -51,7 +55,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     await this.runExclusive(() => this.synchronizeCurrentCatalog(), false);
   }
 
-  @Cron('0 1 * * *', {
+  @Cron(CronExpression.EVERY_DAY_AT_1AM, {
     name: 'daily-outdated-catalog-cleanup',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -60,7 +64,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     await this.runExclusive(() => this.removeOutdatedCatalog(), false);
   }
 
-  @Cron('0 */3 * * *', {
+  @Cron(ECronExpression.Every3HoursAtMinute30, {
     name: 'upcoming-matches-synchronization',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -70,6 +74,15 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.performMatchesSynchronization(true);
       await this.matchesService.startMonitoring();
     }, false);
+  }
+
+  @Cron(ECronExpression.EveryHourAtMinute10, {
+    name: 'hourly-player-statistics-synchronization',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async synchronizePlayerStatisticsByCron(): Promise<void> {
+    await this.runExclusive(() => this.synchronizePlayerStatistics(), false);
   }
 
   private async removeOutdatedCatalog(): Promise<CleanupResult> {
@@ -116,15 +129,19 @@ export class SynchronizationService implements OnApplicationBootstrap {
 
   private async initializeEmptyCatalog(): Promise<void> {
     try {
-      if (await this.seasonsRepository.hasAny()) {
-        return;
+      if (!(await this.seasonsRepository.hasAny())) {
+        this.logger.log(
+          'Empty catalog detected; starting initial synchronization',
+        );
+        await this.runExclusive(() =>
+          this.performStoredCatalogSynchronization(),
+        );
+        this.logger.log('Initial catalog synchronization completed');
       }
 
-      this.logger.log(
-        'Empty catalog detected; starting initial synchronization',
+      await this.runExclusive(() =>
+        this.synchronizeIncompletePlayerStatistics(),
       );
-      await this.runExclusive(() => this.performStoredCatalogSynchronization());
-      this.logger.log('Initial catalog synchronization completed');
     } catch (error) {
       this.logger.error(
         'Initial catalog synchronization failed',
@@ -147,6 +164,36 @@ export class SynchronizationService implements OnApplicationBootstrap {
     }
 
     await this.matchesService.synchronize(championships);
+  }
+
+  private async synchronizePlayerStatistics(): Promise<void> {
+    const now = new Date();
+    const seasons =
+      await this.seasonsRepository.findRequiringStatisticsSync(now);
+
+    await this.loadPlayerStatistics(seasons);
+  }
+
+  private async synchronizeIncompletePlayerStatistics(): Promise<void> {
+    const seasons = await this.seasonsRepository.findWithIncompleteStatistics(
+      new Date(),
+    );
+
+    await this.loadPlayerStatistics(seasons);
+  }
+
+  private async loadPlayerStatistics(
+    seasons: Awaited<ReturnType<SeasonsRepository['findAll']>>,
+  ): Promise<void> {
+    const result = await this.playerStatisticsService.synchronize(seasons);
+    const synchronized = new Set(result.synchronizedSeasonExternalIds);
+    const seasonIds = seasons
+      .filter(({ externalId }) => synchronized.has(externalId))
+      .map(({ id }) => id);
+    await this.seasonsRepository.markStatisticsLoadedIfCompleted(
+      seasonIds,
+      new Date(),
+    );
   }
 
   private async runExclusive<T>(

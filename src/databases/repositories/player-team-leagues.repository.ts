@@ -24,6 +24,23 @@ export class PlayerTeamLeaguesRepository {
     });
   }
 
+  findBySeasonExternalIds(
+    seasonExternalIds: number[],
+  ): Promise<PlayerTeamLeagueEntity[]> {
+    return this.repository.find({
+      where: {
+        league: {
+          championship: { season: { externalId: In(seasonExternalIds) } },
+        },
+      },
+      relations: {
+        player: true,
+        team: true,
+        league: { championship: { season: true } },
+      },
+    });
+  }
+
   async insertMany(
     relations: Partial<PlayerTeamLeagueEntity>[],
     manager?: EntityManager,

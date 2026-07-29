@@ -18,4 +18,6 @@ export interface ICevSeason {
   yearStart: number;
   yearEnd: number;
   externalId: number;
+  startsAt: Date;
+  endsAt: Date;
 }

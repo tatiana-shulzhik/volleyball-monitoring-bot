@@ -52,12 +52,25 @@ export function createCalendarForm(
 
 export function extractCalendarSeasons(html: string): ICevSeason[] {
   const seasons = new Map<number, ICevSeason>();
+  const rowRegex = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
   const linkRegex =
-    /<a\b(?=[^>]*href=['"][^'"]*Competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=\d+[^'"]*['"])[^>]*>([\s\S]*?)<\/a>/gi;
+    /<a\b(?=[^>]*href=['"][^'"]*competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=\d+[^'"]*['"])[^>]*>([\s\S]*?)<\/a>/gi;
 
-  for (const match of html.matchAll(linkRegex)) {
+  for (const row of html.matchAll(rowRegex)) {
+    const links = [...row[1].matchAll(linkRegex)];
+    const dateRange = cleanText(links[0]?.[2] ?? '').match(
+      /^(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})$/,
+    );
+    const match = links.find((link) =>
+      /\b20\d{2}\s*\|/.test(cleanText(link[2])),
+    );
+
+    if (!match || !dateRange) {
+      continue;
+    }
+
     const externalId = Number(match[1]);
-    const text = decodeHtml(match[2].replace(/<[^>]+>/g, '').trim());
+    const text = cleanText(match[2]);
     const competition = text.match(
       /^(.*?\b(20\d{2})\s*\|\s*(?:Men|Women))(?:\s*-\s*.*)?$/i,
     );
@@ -67,15 +80,43 @@ export function extractCalendarSeasons(html: string): ICevSeason[] {
     }
 
     const year = Number(competition[2]);
+    const startsAt = parseCevDate(dateRange[1], false);
+    const endsAt = parseCevDate(dateRange[2], true);
+    const existing = seasons.get(externalId);
+
     seasons.set(externalId, {
       externalId,
       name: competition[1].trim(),
       yearStart: year,
       yearEnd: year,
+      startsAt:
+        existing && existing.startsAt < startsAt ? existing.startsAt : startsAt,
+      endsAt: existing && existing.endsAt > endsAt ? existing.endsAt : endsAt,
     });
   }
 
   return [...seasons.values()];
+}
+
+function parseCevDate(value: string, endOfDay: boolean): Date {
+  const [day, month, year] = value.split('/').map(Number);
+
+  return new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+    ),
+  );
+}
+
+function cleanText(value: string): string {
+  return decodeHtml(value.replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function decodeHtml(value: string): string {

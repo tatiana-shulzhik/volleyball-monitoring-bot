@@ -5,6 +5,7 @@ import { FetchedChampionships } from '../interfaces/requests/championships.inter
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
+import { IFetchedPlayerStatistics } from '../interfaces/requests/player-statistics.interface';
 import {
   FetchedSeasons,
   ICevSeason,
@@ -14,6 +15,7 @@ import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
 import { extractPlayers } from '../shared/cev-players.utils';
+import { extractPlayerStatistics } from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
 import {
   createCalendarForm,
@@ -25,6 +27,7 @@ import {
   CEV_CALENDAR_URL,
   createCompetitionUrl,
   createMatchesUrl,
+  createPlayerStatisticsUrl,
   createTeamUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
@@ -63,7 +66,19 @@ export class CevGateway {
       }
 
       for (const season of extractCalendarSeasons(result.value)) {
-        seasons.set(season.externalId, season);
+        const existing = seasons.get(season.externalId);
+
+        seasons.set(season.externalId, {
+          ...season,
+          startsAt:
+            existing && existing.startsAt < season.startsAt
+              ? existing.startsAt
+              : season.startsAt,
+          endsAt:
+            existing && existing.endsAt > season.endsAt
+              ? existing.endsAt
+              : season.endsAt,
+        });
       }
     }
 
@@ -193,6 +208,25 @@ export class CevGateway {
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };
+  }
+
+  async fetchPlayerStatistics(
+    seasons: SeasonsEntity[],
+  ): Promise<PromiseSettledResult<IFetchedPlayerStatistics>[]> {
+    const uniqueSeasons = [
+      ...new Map(seasons.map((season) => [season.externalId, season])).values(),
+    ];
+
+    return this.mapSettled({
+      items: uniqueSeasons,
+      mapper: async (season) => ({
+        seasonExternalId: season.externalId,
+        statistics: extractPlayerStatistics(
+          await this.http.get(createPlayerStatisticsUrl(season.externalId)),
+        ),
+      }),
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
   }
 
   private fetchCalendarYear(

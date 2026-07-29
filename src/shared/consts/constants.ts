@@ -12,6 +12,8 @@ export const WRITE_BATCH_SIZE = 1000;
 
 export const MATCH_MONITORING_WINDOW_HOURS = 36;
 
+export const MOSCOW_TIME_ZONE = 'Europe/Moscow';
+
 export function createCompetitionUrl(
   seasonExternalId: number,
   championshipExternalId = -2,
@@ -40,4 +42,8 @@ export function createMatchesUrl(
     `${CEV_BASE_URL}/Competition-Area/CompetitionView.aspx` +
     `?ID=${seasonExternalId}&PID=${championshipExternalId}`
   );
+}
+
+export function createPlayerStatisticsUrl(seasonExternalId: number): string {
+  return `${CEV_BASE_URL}/Competition-Area/Statistics.aspx?ID=${seasonExternalId}`;
 }

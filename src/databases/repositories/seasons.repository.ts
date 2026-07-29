@@ -35,6 +35,40 @@ export class SeasonsRepository {
     });
   }
 
+  findWithIncompleteStatistics(now: Date): Promise<SeasonsEntity[]> {
+    return this.repository
+      .createQueryBuilder('season')
+      .where('season.statistics_loaded = false')
+      .andWhere('season.starts_at <= :now', { now })
+      .getMany();
+  }
+
+  findRequiringStatisticsSync(now: Date): Promise<SeasonsEntity[]> {
+    return this.repository
+      .createQueryBuilder('season')
+      .where('season.starts_at <= :now', { now })
+      .andWhere('(season.ends_at >= :now OR season.statistics_loaded = false)')
+      .getMany();
+  }
+
+  async markStatisticsLoadedIfCompleted(
+    seasonIds: number[],
+    now: Date,
+  ): Promise<void> {
+    if (!seasonIds.length) {
+      return;
+    }
+
+    await this.repository
+      .createQueryBuilder()
+      .update(SeasonsEntity)
+      .set({ statisticsLoaded: true })
+      .where('id IN (:...seasonIds)', { seasonIds })
+      .andWhere('statistics_loaded = false')
+      .andWhere('ends_at < :now', { now })
+      .execute();
+  }
+
   async insertMany(seasons: Partial<SeasonsEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
 
@@ -44,12 +78,22 @@ export class SeasonsRepository {
   async updateMany(seasons: SeasonsEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
     const values = seasons.map(
-      ({ externalId, name, isCurrent, yearStart, yearEnd }) => ({
+      ({
         externalId,
         name,
         isCurrent,
         yearStart,
         yearEnd,
+        startsAt,
+        endsAt,
+      }) => ({
+        externalId,
+        name,
+        isCurrent,
+        yearStart,
+        yearEnd,
+        startsAt,
+        endsAt,
       }),
     );
 

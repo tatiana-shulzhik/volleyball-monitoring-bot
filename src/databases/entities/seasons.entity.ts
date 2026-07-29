@@ -25,4 +25,13 @@ export class SeasonsEntity {
     type: 'int',
   })
   yearEnd: number;
+
+  @Column({ name: 'starts_at', type: 'timestamptz', nullable: true })
+  startsAt: Date | null;
+
+  @Column({ name: 'ends_at', type: 'timestamptz', nullable: true })
+  endsAt: Date | null;
+
+  @Column({ name: 'statistics_loaded', default: false })
+  statisticsLoaded: boolean;
 }
