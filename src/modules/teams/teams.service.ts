@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
@@ -42,7 +43,7 @@ export class TeamsService {
       ...new Set(incomingTeams.map(({ externalId }) => externalId)),
     ];
     const existingTeams = externalIds.length
-      ? await this.teamsRepository.findByExternalIds(externalIds)
+      ? await this.teamsRepository.getWhere({ externalId: In(externalIds) })
       : [];
     const calculatedChanges = calculateTeamChanges({
       incoming: incomingTeams,
@@ -57,11 +58,11 @@ export class TeamsService {
     });
 
     const teams = externalIds.length
-      ? await this.teamsRepository.findByExternalIds(externalIds)
+      ? await this.teamsRepository.getWhere({ externalId: In(externalIds) })
       : [];
-    const existingRelations = await this.teamLeaguesRepository.findByLeagueIds(
-      leagues.map(({ id }) => id),
-    );
+    const existingRelations = await this.teamLeaguesRepository.getWhere({
+      league: { id: In(leagues.map(({ id }) => id)) },
+    });
     const relationChanges = calculateTeamLeagueChanges({
       incoming: incomingTeams,
       existing: existingRelations,

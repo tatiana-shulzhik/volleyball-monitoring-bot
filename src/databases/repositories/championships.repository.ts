@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { ChampionshipsEntity } from '../entities/championships.entity';
 
 @Injectable()
@@ -19,58 +24,14 @@ export class ChampionshipsRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findAll(): Promise<ChampionshipsEntity[]> {
-    return this.repository.find();
-  }
-
-  findByExternalIds(externalIds: number[]): Promise<ChampionshipsEntity[]> {
-    return this.repository.find({
-      where: { externalId: In(externalIds) },
-    });
-  }
-
-  findFinishedBySeasonId(
-    seasonId: number,
-    now: Date,
+  getWhere(
+    where: FindOptionsWhere<ChampionshipsEntity>,
+    manager?: EntityManager,
   ): Promise<ChampionshipsEntity[]> {
-    return this.repository
-      .createQueryBuilder('championship')
-      .innerJoin('championship.stages', 'stage')
-      .where('stage.season_id = :seasonId', { seasonId })
-      .andWhere('stage.ends_at < :now', { now })
-      .distinct(true)
-      .orderBy('championship.name', 'ASC')
-      .getMany();
-  }
+    const repository =
+      manager?.getRepository(ChampionshipsEntity) ?? this.repository;
 
-  findBySeasonName(seasonName: string): Promise<ChampionshipsEntity[]> {
-    return this.repository
-      .createQueryBuilder('championship')
-      .innerJoin('championship.stages', 'stage')
-      .innerJoin('stage.season', 'season')
-      .where('season.name = :seasonName', { seasonName })
-      .distinct(true)
-      .orderBy('championship.name', 'ASC')
-      .getMany();
-  }
-
-  findActive(now: Date): Promise<ChampionshipsEntity[]> {
-    return this.repository
-      .createQueryBuilder('championship')
-      .innerJoin('championship.stages', 'stage')
-      .where('stage.starts_at <= :now', { now })
-      .andWhere('stage.ends_at >= :now', { now })
-      .distinct(true)
-      .getMany();
-  }
-
-  findStarted(now: Date): Promise<ChampionshipsEntity[]> {
-    return this.repository
-      .createQueryBuilder('championship')
-      .innerJoin('championship.stages', 'stage')
-      .where('stage.starts_at <= :now', { now })
-      .distinct(true)
-      .getMany();
+    return repository.find({ where });
   }
 
   insertMany(

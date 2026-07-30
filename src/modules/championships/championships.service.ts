@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
@@ -27,9 +28,9 @@ export class ChampionshipsService {
     }
 
     const fetched = await this.gateway.fetchCompetitionStages(championships);
-    const existing = await this.repository.findByChampionshipIds(
-      championships.map(({ id }) => id),
-    );
+    const existing = await this.repository.getWhere({
+      championship: { id: In(championships.map(({ id }) => id)) },
+    });
     const changes = calculateStageChanges({
       incoming: fetched.stages,
       existing,
@@ -54,8 +55,8 @@ export class ChampionshipsService {
       allowDeletion: true,
     });
 
-    return this.repository.findByChampionshipIds(
-      championships.map(({ id }) => id),
-    );
+    return this.repository.getWhere({
+      championship: { id: In(championships.map(({ id }) => id)) },
+    });
   }
 }

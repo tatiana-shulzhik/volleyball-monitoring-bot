@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
@@ -31,22 +32,21 @@ export class PlayersService {
     teamId: number,
     leagueId: number,
   ): Promise<ITeamStatistics | null> {
-    const relations = await this.relationsRepository.findByTeamIdAndLeagueId(
-      teamId,
-      leagueId,
-    );
+    const relations = await this.relationsRepository.getWhere({
+      team: { id: teamId },
+      league: { id: leagueId },
+    });
 
     if (!relations.length) {
       return null;
     }
 
     const { team, league } = relations[0];
-    const statistics =
-      await this.statisticsRepository.findByPlayerIdsAndTeamIdAndChampionshipId(
-        relations.map(({ player }) => player.id),
-        team.id,
-        league.stage.championship.id,
-      );
+    const statistics = await this.statisticsRepository.getWhere({
+      player: { id: In(relations.map(({ player }) => player.id)) },
+      team: { id: team.id },
+      championship: { id: league.stage.championship.id },
+    });
 
     return createTeamStatistics(relations, statistics);
   }
@@ -66,7 +66,7 @@ export class PlayersService {
       ...new Set(fetched.players.map(({ externalId }) => externalId)),
     ];
     const existingPlayers = externalIds.length
-      ? await this.playersRepository.findByExternalIds(externalIds)
+      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
       : [];
     const calculatedChanges = calculatePlayerChanges({
       incoming: fetched.players,
@@ -81,7 +81,7 @@ export class PlayersService {
     });
 
     const players = externalIds.length
-      ? await this.playersRepository.findByExternalIds(externalIds)
+      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
       : [];
     const teams = [
       ...new Map(sources.map(({ team }) => [team.externalId, team])).values(),
@@ -95,10 +95,10 @@ export class PlayersService {
       sources.map(({ team, league }) => `${team.id}:${league.id}`),
     );
     const existingRelations = (
-      await this.relationsRepository.findByTeamIdsAndLeagueIds(
-        teams.map(({ id }) => id),
-        leagues.map(({ id }) => id),
-      )
+      await this.relationsRepository.getWhere({
+        team: { id: In(teams.map(({ id }) => id)) },
+        league: { id: In(leagues.map(({ id }) => id)) },
+      })
     ).filter(({ team, league }) => sourceKeys.has(`${team.id}:${league.id}`));
     const relationChanges = calculatePlayerRelationChanges({
       incoming: fetched.players,

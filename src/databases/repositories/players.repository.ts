@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { PlayersEntity } from '../entities/players.entity';
 
 @Injectable()
@@ -19,10 +24,13 @@ export class PlayersRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByExternalIds(externalIds: string[]): Promise<PlayersEntity[]> {
-    return this.repository.find({
-      where: { externalId: In(externalIds) },
-    });
+  getWhere(
+    where: FindOptionsWhere<PlayersEntity>,
+    manager?: EntityManager,
+  ): Promise<PlayersEntity[]> {
+    const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
+
+    return repository.find({ where });
   }
 
   insertMany(players: Partial<PlayersEntity>[], manager?: EntityManager) {

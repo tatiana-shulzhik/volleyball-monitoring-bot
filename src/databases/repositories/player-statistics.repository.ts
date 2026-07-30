@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { splitIntoBatches } from '../../shared/array.utils';
 import { PlayerStatisticsEntity } from '../entities/player-statistics.entity';
 
@@ -11,17 +11,15 @@ export class PlayerStatisticsRepository {
     private readonly repository: Repository<PlayerStatisticsEntity>,
   ) {}
 
-  findByPlayerIdsAndTeamIdAndChampionshipId(
-    playerIds: number[],
-    teamId: number,
-    championshipId: number,
+  getWhere(
+    where: FindOptionsWhere<PlayerStatisticsEntity>,
+    manager?: EntityManager,
   ): Promise<PlayerStatisticsEntity[]> {
-    return this.repository.find({
-      where: {
-        player: { id: In(playerIds) },
-        team: { id: teamId },
-        championship: { id: championshipId },
-      },
+    const repository =
+      manager?.getRepository(PlayerStatisticsEntity) ?? this.repository;
+
+    return repository.find({
+      where,
       relations: { player: true },
     });
   }

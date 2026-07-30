@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { ISeason } from '../../interfaces/requests/seasons.interface';
 import { SeasonsEntity } from '../entities/seasons.entity';
 
@@ -20,10 +25,13 @@ export class SeasonsRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findAll(): Promise<SeasonsEntity[]> {
-    return this.repository.find({
-      order: { name: 'ASC' },
-    });
+  getWhere(
+    where: FindOptionsWhere<SeasonsEntity>,
+    manager?: EntityManager,
+  ): Promise<SeasonsEntity[]> {
+    const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
+
+    return repository.find({ where });
   }
 
   findFinished(now: Date): Promise<SeasonsEntity[]> {

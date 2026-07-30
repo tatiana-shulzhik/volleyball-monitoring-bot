@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
+import { LessThan } from 'typeorm';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
@@ -54,9 +55,12 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     this.bot.action(TELEGRAM_CALLBACKS.menu.statistics, async (context) => {
-      const championships = await this.championshipsRepository.findBySeasonName(
-        String(new Date().getFullYear()),
-      );
+      const championships = await this.championshipsRepository.getWhere({
+        stages: {
+          season: { name: String(new Date().getFullYear()) },
+        },
+      });
+      championships.sort((left, right) => left.name.localeCompare(right.name));
 
       await showList(context, {
         items: championships.map(({ id, name }) => ({
@@ -92,11 +96,15 @@ export class TelegramService implements OnApplicationBootstrap {
       TELEGRAM_CALLBACK_PATTERNS.retroStatistics.season,
       async (context) => {
         const seasonId = Number(context.match[1]);
-        const championships =
-          await this.championshipsRepository.findFinishedBySeasonId(
-            seasonId,
-            new Date(),
-          );
+        const championships = await this.championshipsRepository.getWhere({
+          stages: {
+            season: { id: seasonId },
+            endsAt: LessThan(new Date()),
+          },
+        });
+        championships.sort((left, right) =>
+          left.name.localeCompare(right.name),
+        );
 
         await showList(context, {
           items: championships.map(({ id, name }) => ({
@@ -118,11 +126,11 @@ export class TelegramService implements OnApplicationBootstrap {
       TELEGRAM_CALLBACK_PATTERNS.statistics.championship,
       async (context) => {
         const championshipId = Number(context.match[1]);
-        const stages =
-          await this.stagesRepository.findByChampionshipIdAndSeasonName(
-            championshipId,
-            String(new Date().getFullYear()),
-          );
+        const stages = await this.stagesRepository.getWhere({
+          championship: { id: championshipId },
+          season: { name: String(new Date().getFullYear()) },
+        });
+        stages.sort((left, right) => left.name.localeCompare(right.name));
 
         await showList(context, {
           items: stages.map(({ id, name }) => ({
@@ -145,7 +153,10 @@ export class TelegramService implements OnApplicationBootstrap {
       async (context) => {
         const stageId = Number(context.match[1]);
         const championshipId = Number(context.match[2]);
-        const leagues = await this.leaguesRepository.findByStageId(stageId);
+        const leagues = await this.leaguesRepository.getWhere({
+          stage: { id: stageId },
+        });
+        leagues.sort((left, right) => left.name.localeCompare(right.name));
 
         await showList(context, {
           items: leagues.map(({ id, name }) => ({
@@ -171,8 +182,12 @@ export class TelegramService implements OnApplicationBootstrap {
         const leagueId = Number(context.match[1]);
         const stageId = Number(context.match[2]);
         const championshipId = Number(context.match[3]);
-        const teamLeagues =
-          await this.teamLeaguesRepository.findByLeagueId(leagueId);
+        const teamLeagues = await this.teamLeaguesRepository.getWhere({
+          league: { id: leagueId },
+        });
+        teamLeagues.sort((left, right) =>
+          left.team.name.localeCompare(right.team.name),
+        );
 
         await showList(context, {
           items: teamLeagues.map(({ team }) => ({
@@ -236,10 +251,11 @@ export class TelegramService implements OnApplicationBootstrap {
       async (context) => {
         const championshipId = Number(context.match[1]);
         const seasonId = Number(context.match[2]);
-        const stages = await this.stagesRepository.findByChampionshipId(
-          championshipId,
-          seasonId,
-        );
+        const stages = await this.stagesRepository.getWhere({
+          championship: { id: championshipId },
+          season: { id: seasonId },
+        });
+        stages.sort((left, right) => left.name.localeCompare(right.name));
 
         await showList(context, {
           items: stages.map(({ id, name }) => ({
@@ -264,7 +280,10 @@ export class TelegramService implements OnApplicationBootstrap {
         const stageId = Number(context.match[1]);
         const championshipId = Number(context.match[2]);
         const seasonId = Number(context.match[3]);
-        const leagues = await this.leaguesRepository.findByStageId(stageId);
+        const leagues = await this.leaguesRepository.getWhere({
+          stage: { id: stageId },
+        });
+        leagues.sort((left, right) => left.name.localeCompare(right.name));
 
         await showList(context, {
           items: leagues.map(({ id, name }) => ({
@@ -294,8 +313,12 @@ export class TelegramService implements OnApplicationBootstrap {
         const stageId = Number(context.match[2]);
         const championshipId = Number(context.match[3]);
         const seasonId = Number(context.match[4]);
-        const teamLeagues =
-          await this.teamLeaguesRepository.findByLeagueId(leagueId);
+        const teamLeagues = await this.teamLeaguesRepository.getWhere({
+          league: { id: leagueId },
+        });
+        teamLeagues.sort((left, right) =>
+          left.team.name.localeCompare(right.team.name),
+        );
 
         await showList(context, {
           items: teamLeagues.map(({ team }) => ({

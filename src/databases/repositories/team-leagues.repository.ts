@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { TeamLeagueEntity } from '../entities/team-league.entity';
 
 @Injectable()
@@ -10,19 +10,16 @@ export class TeamLeaguesRepository {
     private readonly repository: Repository<TeamLeagueEntity>,
   ) {}
 
-  findByLeagueIds(leagueIds: number[]): Promise<TeamLeagueEntity[]> {
-    return this.repository.find({
-      where: { league: { id: In(leagueIds) } },
-      relations: { team: true, league: true },
-    });
-  }
+  getWhere(
+    where: FindOptionsWhere<TeamLeagueEntity>,
+    manager?: EntityManager,
+  ): Promise<TeamLeagueEntity[]> {
+    const repository =
+      manager?.getRepository(TeamLeagueEntity) ?? this.repository;
 
-  findByLeagueId(leagueId: number): Promise<TeamLeagueEntity[]> {
-    return this.repository.find({
-      select: { team: { id: true, name: true } },
-      where: { league: { id: leagueId } },
-      relations: { team: true },
-      order: { team: { name: 'ASC' } },
+    return repository.find({
+      where,
+      relations: { team: true, league: true },
     });
   }
 

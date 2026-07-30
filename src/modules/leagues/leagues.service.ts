@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
@@ -31,9 +32,10 @@ export class LeaguesService {
     );
 
     const fetched = await this.gateway.fetchLeagueCatalog(stages);
-    const existing = await this.repository.findByStageIds(
-      stages.map(({ id }) => id),
-    );
+    const stageIds = stages.map(({ id }) => id);
+    const existing = await this.repository.getWhere({
+      stage: { id: In(stageIds) },
+    });
     const changes = calculateLeagueChanges({
       incoming: fetched.leagues,
       existing,
@@ -56,7 +58,9 @@ export class LeaguesService {
     });
 
     return {
-      leagues: await this.repository.findByStageIds(stages.map(({ id }) => id)),
+      leagues: await this.repository.getWhere({
+        stage: { id: In(stageIds) },
+      }),
       teams: fetched.teams,
       isComplete: fetched.isComplete,
     };

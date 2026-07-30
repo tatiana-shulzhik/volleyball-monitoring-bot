@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
@@ -56,13 +57,12 @@ export class SeasonsService {
     const incomingSeasons = this.toSeasons(incomingStages);
 
     await this.seasonsRepository.upsertMany(incomingSeasons);
-    const seasons = (await this.seasonsRepository.findAll()).filter(
+    const seasons = (await this.seasonsRepository.getWhere({})).filter(
       ({ name }) => Number(name) >= earliestSeasonYear,
     );
-    const existingChampionships =
-      await this.championshipsRepository.findByExternalIds([
-        ...championshipExternalIds,
-      ]);
+    const existingChampionships = await this.championshipsRepository.getWhere({
+      externalId: In([...championshipExternalIds]),
+    });
     const championshipChanges = calculateChampionshipChanges({
       incoming: incomingChampionships,
       existing: existingChampionships,
@@ -81,12 +81,12 @@ export class SeasonsService {
       allowDeletion: false,
     });
 
-    const championships = await this.championshipsRepository.findByExternalIds([
-      ...championshipExternalIds,
-    ]);
-    const existingStages = await this.stagesRepository.findByChampionshipIds(
-      championships.map(({ id }) => id),
-    );
+    const championships = await this.championshipsRepository.getWhere({
+      externalId: In([...championshipExternalIds]),
+    });
+    const existingStages = await this.stagesRepository.getWhere({
+      championship: { id: In(championships.map(({ id }) => id)) },
+    });
     const stageChanges = calculateStageChanges({
       incoming: incomingStages,
       existing: existingStages,

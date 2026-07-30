@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { LeaguesEntity } from '../entities/leagues.entity';
 
 @Injectable()
@@ -19,24 +24,14 @@ export class LeaguesRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByStageIds(stageIds: number[]): Promise<LeaguesEntity[]> {
-    return this.repository.find({
-      where: { stage: { id: In(stageIds) } },
-      relations: { stage: { championship: true, season: true } },
-    });
-  }
+  getWhere(
+    where: FindOptionsWhere<LeaguesEntity>,
+    manager?: EntityManager,
+  ): Promise<LeaguesEntity[]> {
+    const repository = manager?.getRepository(LeaguesEntity) ?? this.repository;
 
-  findByStageId(stageId: number): Promise<LeaguesEntity[]> {
-    return this.repository.find({
-      select: { id: true, name: true },
-      where: { stage: { id: stageId } },
-      order: { name: 'ASC' },
-    });
-  }
-
-  findByExternalIds(externalIds: number[]): Promise<LeaguesEntity[]> {
-    return this.repository.find({
-      where: { externalId: In(externalIds) },
+    return repository.find({
+      where,
       relations: { stage: { championship: true, season: true } },
     });
   }

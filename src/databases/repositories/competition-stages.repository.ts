@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { CompetitionStagesEntity } from '../entities/competition-stages.entity';
 
 @Injectable()
@@ -19,41 +24,17 @@ export class CompetitionStagesRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByChampionshipIds(
-    championshipIds: number[],
+  getWhere(
+    where: FindOptionsWhere<CompetitionStagesEntity>,
+    manager?: EntityManager,
   ): Promise<CompetitionStagesEntity[]> {
-    return this.repository.find({
-      where: { championship: { id: In(championshipIds) } },
+    const repository =
+      manager?.getRepository(CompetitionStagesEntity) ?? this.repository;
+
+    return repository.find({
+      where,
       relations: { championship: true, season: true },
     });
-  }
-
-  findByChampionshipId(
-    championshipId: number,
-    seasonId?: number,
-  ): Promise<CompetitionStagesEntity[]> {
-    return this.repository.find({
-      select: { id: true, name: true },
-      where: {
-        championship: { id: championshipId },
-        ...(seasonId === undefined ? {} : { season: { id: seasonId } }),
-      },
-      order: { name: 'ASC' },
-    });
-  }
-
-  findByChampionshipIdAndSeasonName(
-    championshipId: number,
-    seasonName: string,
-  ): Promise<CompetitionStagesEntity[]> {
-    return this.repository
-      .createQueryBuilder('stage')
-      .select(['stage.id', 'stage.name'])
-      .innerJoin('stage.season', 'season')
-      .where('stage.championship_id = :championshipId', { championshipId })
-      .andWhere('season.name = :seasonName', { seasonName })
-      .orderBy('stage.name', 'ASC')
-      .getMany();
   }
 
   hasCalendarMetadata(): Promise<boolean> {

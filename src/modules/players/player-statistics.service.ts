@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
@@ -32,7 +33,13 @@ export class PlayerStatisticsService {
     ];
     const [fetched, relations] = await Promise.all([
       this.gateway.fetchPlayerStatistics(championships),
-      this.relationsRepository.findByChampionshipExternalIds(externalIds),
+      this.relationsRepository.getWhere({
+        league: {
+          stage: {
+            championship: { externalId: In(externalIds) },
+          },
+        },
+      }),
     ]);
     const relationsByPlayer = new Map(
       relations.map((relation) => [

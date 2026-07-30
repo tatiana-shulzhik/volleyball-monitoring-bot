@@ -5,6 +5,8 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
@@ -150,10 +152,10 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async performMatchesSynchronization(
     frequentOnly: boolean,
   ): Promise<void> {
-    const championships = await this.championshipsRepository.findAll();
-    const stages = await this.stagesRepository.findByChampionshipIds(
-      championships.map(({ id }) => id),
-    );
+    const championships = await this.championshipsRepository.getWhere({});
+    const stages = await this.stagesRepository.getWhere({
+      championship: { id: In(championships.map(({ id }) => id)) },
+    });
 
     if (frequentOnly) {
       await this.matchesService.synchronizeFrequently(stages);
@@ -166,18 +168,25 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async synchronizePlayerStatistics(): Promise<void> {
     const now = new Date();
     await this.loadPlayerStatistics(
-      await this.championshipsRepository.findActive(now),
+      await this.championshipsRepository.getWhere({
+        stages: {
+          startsAt: LessThanOrEqual(now),
+          endsAt: MoreThanOrEqual(now),
+        },
+      }),
     );
   }
 
   private async synchronizeIncompletePlayerStatistics(): Promise<void> {
     await this.loadPlayerStatistics(
-      await this.championshipsRepository.findStarted(new Date()),
+      await this.championshipsRepository.getWhere({
+        stages: { startsAt: LessThanOrEqual(new Date()) },
+      }),
     );
   }
 
   private async loadPlayerStatistics(
-    championships: Awaited<ReturnType<ChampionshipsRepository['findAll']>>,
+    championships: ChampionshipsEntity[],
   ): Promise<void> {
     await this.playerStatisticsService.synchronize(championships);
   }

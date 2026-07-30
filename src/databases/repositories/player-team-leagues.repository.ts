@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
+import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { splitIntoBatches } from '../../shared/array.utils';
 import { PlayerTeamLeagueEntity } from '../entities/player-team-league.entity';
 
@@ -11,44 +11,15 @@ export class PlayerTeamLeaguesRepository {
     private readonly repository: Repository<PlayerTeamLeagueEntity>,
   ) {}
 
-  findByTeamIdsAndLeagueIds(
-    teamIds: number[],
-    leagueIds: number[],
+  getWhere(
+    where: FindOptionsWhere<PlayerTeamLeagueEntity>,
+    manager?: EntityManager,
   ): Promise<PlayerTeamLeagueEntity[]> {
-    return this.repository.find({
-      where: {
-        team: { id: In(teamIds) },
-        league: { id: In(leagueIds) },
-      },
-      relations: { player: true, team: true, league: true },
-    });
-  }
+    const repository =
+      manager?.getRepository(PlayerTeamLeagueEntity) ?? this.repository;
 
-  findByChampionshipExternalIds(
-    championshipExternalIds: number[],
-  ): Promise<PlayerTeamLeagueEntity[]> {
-    return this.repository.find({
-      where: {
-        league: {
-          stage: {
-            championship: { externalId: In(championshipExternalIds) },
-          },
-        },
-      },
-      relations: {
-        player: true,
-        team: true,
-        league: { stage: { championship: true, season: true } },
-      },
-    });
-  }
-
-  findByTeamIdAndLeagueId(
-    teamId: number,
-    leagueId: number,
-  ): Promise<PlayerTeamLeagueEntity[]> {
-    return this.repository.find({
-      where: { team: { id: teamId }, league: { id: leagueId } },
+    return repository.find({
+      where,
       relations: {
         player: true,
         team: true,

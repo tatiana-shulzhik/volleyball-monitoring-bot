@@ -4,7 +4,7 @@ import {
   Between,
   DataSource,
   EntityManager,
-  In,
+  FindOptionsWhere,
   IsNull,
   Repository,
 } from 'typeorm';
@@ -27,9 +27,14 @@ export class MatchesRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByExternalIds(externalIds: string[]): Promise<MatchEntity[]> {
-    return this.repository.find({
-      where: { externalId: In(externalIds) },
+  getWhere(
+    where: FindOptionsWhere<MatchEntity>,
+    manager?: EntityManager,
+  ): Promise<MatchEntity[]> {
+    const repository = manager?.getRepository(MatchEntity) ?? this.repository;
+
+    return repository.find({
+      where,
       relations: {
         league: true,
         homeTeam: true,

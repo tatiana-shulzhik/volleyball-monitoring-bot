@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
@@ -52,9 +53,11 @@ export class MatchesService {
       ({ externalId }) => externalId,
     );
     const [leagues, teams, existing] = await Promise.all([
-      this.leaguesRepository.findByExternalIds(leagueExternalIds),
-      this.teamsRepository.findByExternalIds(teamExternalIds),
-      this.matchesRepository.findByExternalIds(matchExternalIds),
+      this.leaguesRepository.getWhere({
+        externalId: In(leagueExternalIds),
+      }),
+      this.teamsRepository.getWhere({ externalId: In(teamExternalIds) }),
+      this.matchesRepository.getWhere({ externalId: In(matchExternalIds) }),
     ]);
     const changes = calculateMatchChanges({
       incoming: fetched.matches,
