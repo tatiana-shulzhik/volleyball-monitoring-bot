@@ -14,6 +14,8 @@ export const MATCH_MONITORING_WINDOW_HOURS = 36;
 
 export const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 
+export const INITIAL_SYNCHRONIZATION_KEY = 'initial-catalog';
+
 export function createCompetitionUrl(
   seasonExternalId: number,
   championshipExternalId = -2,

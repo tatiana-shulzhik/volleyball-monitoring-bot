@@ -12,6 +12,7 @@ import { SeasonsEntity } from '../entities/seasons.entity';
 import { CompetitionStagesEntity } from '../entities/competition-stages.entity';
 import { TeamLeagueEntity } from '../entities/team-league.entity';
 import { TeamEntity } from '../entities/team.entity';
+import { SynchronizationStateEntity } from '../entities/synchronization-state.entity';
 
 @Global()
 @Module({
@@ -32,6 +33,7 @@ import { TeamEntity } from '../entities/team.entity';
       PlayerTeamLeagueEntity,
       PlayerStatisticsEntity,
       MatchEntity,
+      SynchronizationStateEntity,
     ]),
   ],
   exports: [TypeOrmModule],

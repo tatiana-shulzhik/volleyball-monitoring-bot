@@ -11,8 +11,10 @@ import { PlayersRepository } from '../../databases/repositories/players.reposito
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
 import {
+  INITIAL_SYNCHRONIZATION_KEY,
   MOSCOW_TIME_ZONE,
   PREVIOUS_YEARS_COUNT,
 } from '../../shared/consts/constants';
@@ -42,6 +44,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly stagesRepository: CompetitionStagesRepository,
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
+    private readonly synchronizationStateRepository: SynchronizationStateRepository,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -132,12 +135,26 @@ export class SynchronizationService implements OnApplicationBootstrap {
 
   private async initializeEmptyCatalog(): Promise<void> {
     try {
+      if (
+        await this.synchronizationStateRepository.hasCompleted(
+          INITIAL_SYNCHRONIZATION_KEY,
+        )
+      ) {
+        this.logger.log(
+          'Catalog is already initialized; startup synchronization skipped',
+        );
+        return;
+      }
+
       this.logger.log('Starting full catalog synchronization');
       await this.runExclusive(() => this.performStoredCatalogSynchronization());
       this.logger.log('Full catalog synchronization completed');
 
       await this.runExclusive(() =>
         this.synchronizeIncompletePlayerStatistics(),
+      );
+      await this.synchronizationStateRepository.markCompleted(
+        INITIAL_SYNCHRONIZATION_KEY,
       );
     } catch (error) {
       this.logger.error(

@@ -6,6 +6,7 @@ import { PlayersModule } from '../players/players.module';
 import { SeasonsModule } from '../seasons/seasons.module';
 import { TeamsModule } from '../teams/teams.module';
 import { SynchronizationService } from './synchronization.service';
+import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
 
 @Module({
   imports: [
@@ -16,6 +17,6 @@ import { SynchronizationService } from './synchronization.service';
     TeamsModule,
     PlayersModule,
   ],
-  providers: [SynchronizationService],
+  providers: [SynchronizationService, SynchronizationStateRepository],
 })
 export class SynchronizationModule {}
