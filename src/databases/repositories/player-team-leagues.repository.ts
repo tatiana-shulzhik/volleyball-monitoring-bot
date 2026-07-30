@@ -24,19 +24,21 @@ export class PlayerTeamLeaguesRepository {
     });
   }
 
-  findBySeasonExternalIds(
-    seasonExternalIds: number[],
+  findByChampionshipExternalIds(
+    championshipExternalIds: number[],
   ): Promise<PlayerTeamLeagueEntity[]> {
     return this.repository.find({
       where: {
         league: {
-          championship: { season: { externalId: In(seasonExternalIds) } },
+          stage: {
+            championship: { externalId: In(championshipExternalIds) },
+          },
         },
       },
       relations: {
         player: true,
         team: true,
-        league: { championship: { season: true } },
+        league: { stage: { championship: { season: true } } },
       },
     });
   }
@@ -50,7 +52,7 @@ export class PlayerTeamLeaguesRepository {
       relations: {
         player: true,
         team: true,
-        league: { championship: { season: true } },
+        league: { stage: { championship: { season: true } } },
       },
     });
   }

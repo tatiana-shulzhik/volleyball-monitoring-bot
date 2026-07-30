@@ -7,6 +7,7 @@ import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league
 import { PlayerStatisticsEntity } from '../databases/entities/player-statistics.entity';
 import { PlayersEntity } from '../databases/entities/players.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
+import { CompetitionStagesEntity } from '../databases/entities/competition-stages.entity';
 import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
 import { TeamEntity } from '../databases/entities/team.entity';
 import { ConfigService } from './config.service';
@@ -41,6 +42,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
       entities: [
         SeasonsEntity,
         ChampionshipsEntity,
+        CompetitionStagesEntity,
         LeaguesEntity,
         TeamEntity,
         TeamLeagueEntity,

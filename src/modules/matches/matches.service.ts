@@ -3,7 +3,7 @@ import { LeaguesRepository } from '../../databases/repositories/leagues.reposito
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { MATCH_MONITORING_WINDOW_HOURS } from '../../shared/consts/constants';
 import { calculateMatchChanges } from '../../shared/matches.utils';
 import {
@@ -22,17 +22,17 @@ export class MatchesService {
     private readonly teamsRepository: TeamsRepository,
   ) {}
 
-  async synchronize(championships: ChampionshipsEntity[]): Promise<void> {
-    if (!championships.length) {
+  async synchronize(stages: CompetitionStagesEntity[]): Promise<void> {
+    if (!stages.length) {
       this.logger.warn('No current championships found; matches sync skipped');
       return;
     }
 
     this.logger.log(
-      `Starting matches synchronization for ${championships.length} championships`,
+      `Starting matches synchronization for ${stages.length} stages`,
     );
 
-    const fetched = await this.gateway.fetchMatches(championships);
+    const fetched = await this.gateway.fetchMatches(stages);
     const leagueExternalIds = [
       ...new Set(
         fetched.matches.map(({ leagueExternalId }) => leagueExternalId),
@@ -80,28 +80,28 @@ export class MatchesService {
   }
 
   async synchronizeFrequently(
-    championships: ChampionshipsEntity[],
+    stages: CompetitionStagesEntity[],
   ): Promise<void> {
     const currentYear = new Date().getFullYear();
-    const currentChampionships = championships.filter(
-      ({ season }) =>
+    const currentStages = stages.filter(
+      ({ championship: { season } }) =>
         season.yearStart <= currentYear && season.yearEnd >= currentYear,
     );
-    const completedIds = currentChampionships.length
-      ? await this.matchesRepository.findCompletedChampionshipIds(
-          currentChampionships.map(({ id }) => id),
+    const completedIds = currentStages.length
+      ? await this.matchesRepository.findCompletedStageIds(
+          currentStages.map(({ id }) => id),
         )
       : [];
     const completed = new Set(completedIds);
-    const relevant = championships.filter(
-      ({ id, season }) =>
+    const relevant = stages.filter(
+      ({ id, championship: { season } }) =>
         season.yearEnd >= currentYear &&
         (season.yearStart > currentYear || !completed.has(id)),
     );
 
     this.logger.log(
       `Frequent matches sync: ${relevant.length} of ` +
-        `${championships.length} championships require refresh`,
+        `${stages.length} stages require refresh`,
     );
 
     await this.synchronize(relevant);

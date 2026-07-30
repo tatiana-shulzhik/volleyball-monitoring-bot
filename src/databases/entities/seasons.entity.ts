@@ -1,16 +1,21 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  Unique,
+} from 'typeorm';
 import { ECompetitionType } from '../../shared/enums';
+import { ChampionshipsEntity } from './championships.entity';
 
 @Entity({ name: 'seasons' })
+@Unique(['competitionType', 'yearStart', 'yearEnd'])
 export class SeasonsEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
   name: string;
-
-  @Column({ name: 'external_id', unique: true })
-  externalId: number;
 
   @Column({
     name: 'competition_type',
@@ -31,12 +36,6 @@ export class SeasonsEntity {
   })
   yearEnd: number;
 
-  @Column({ name: 'starts_at', type: 'timestamptz', nullable: true })
-  startsAt: Date | null;
-
-  @Column({ name: 'ends_at', type: 'timestamptz', nullable: true })
-  endsAt: Date | null;
-
-  @Column({ name: 'statistics_loaded', default: false })
-  statisticsLoaded: boolean;
+  @OneToMany(() => ChampionshipsEntity, (championship) => championship.season)
+  championships: ChampionshipsEntity[];
 }

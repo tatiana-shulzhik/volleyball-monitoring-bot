@@ -5,7 +5,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { ChampionshipsEntity } from './championships.entity';
+import { CompetitionStagesEntity } from './competition-stages.entity';
 
 @Entity({ name: 'leagues' })
 export class LeaguesEntity {
@@ -18,10 +18,10 @@ export class LeaguesEntity {
   @Column({ name: 'external_id', unique: true })
   externalId: number;
 
-  @ManyToOne(() => ChampionshipsEntity, {
+  @ManyToOne(() => CompetitionStagesEntity, {
     nullable: false,
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'championship_id' })
-  championship: ChampionshipsEntity;
+  @JoinColumn({ name: 'stage_id' })
+  stage: CompetitionStagesEntity;
 }

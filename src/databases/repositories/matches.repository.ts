@@ -80,17 +80,15 @@ export class MatchesRepository {
     return result.affected ?? 0;
   }
 
-  async findCompletedChampionshipIds(
-    championshipIds: number[],
-  ): Promise<number[]> {
+  async findCompletedStageIds(stageIds: number[]): Promise<number[]> {
     const rows: Array<{ championship_id: number }> = await this.repository
       .createQueryBuilder('match')
       .innerJoin('match.league', 'league')
-      .select('league.championship_id', 'championship_id')
-      .where('league.championship_id IN (:...championshipIds)', {
-        championshipIds,
+      .select('league.stage_id', 'championship_id')
+      .where('league.stage_id IN (:...stageIds)', {
+        stageIds,
       })
-      .groupBy('league.championship_id')
+      .groupBy('league.stage_id')
       .having('COUNT(match.id) > 0')
       .andHaving(
         'COUNT(match.id) FILTER (WHERE match.status = :scheduled) = 0',

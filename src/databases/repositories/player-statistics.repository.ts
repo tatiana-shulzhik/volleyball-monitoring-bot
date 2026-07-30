@@ -11,16 +11,16 @@ export class PlayerStatisticsRepository {
     private readonly repository: Repository<PlayerStatisticsEntity>,
   ) {}
 
-  findByPlayerIdsAndTeamIdAndSeasonId(
+  findByPlayerIdsAndTeamIdAndChampionshipId(
     playerIds: number[],
     teamId: number,
-    seasonId: number,
+    championshipId: number,
   ): Promise<PlayerStatisticsEntity[]> {
     return this.repository.find({
       where: {
         player: { id: In(playerIds) },
         team: { id: teamId },
-        season: { id: seasonId },
+        championship: { id: championshipId },
       },
       relations: { player: true },
     });
@@ -31,7 +31,7 @@ export class PlayerStatisticsRepository {
   ): Promise<void> {
     for (const batch of splitIntoBatches(statistics)) {
       await this.repository.upsert(batch, {
-        conflictPaths: ['player', 'team', 'season'],
+        conflictPaths: ['player', 'team', 'championship'],
         skipUpdateIfNoValuesChanged: true,
       });
     }

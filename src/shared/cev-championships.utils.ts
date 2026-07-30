@@ -1,13 +1,13 @@
-import { ICevChampionship } from '../interfaces/requests/championships.interface';
+import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 
 const CHAMPIONSHIP_LINK =
   /<a\b[^>]*href=['"][^'"]*Competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=(\d+)[^'"]*['"][^>]*>([\s\S]*?)<\/a>/gi;
 
 export function extractChampionships(
   html: string,
-  seasonExternalId: number,
-): ICevChampionship[] {
-  const championships = new Map<number, ICevChampionship>();
+  championshipExternalId: number,
+): ICevCompetitionStage[] {
+  const stages = new Map<number, ICevCompetitionStage>();
 
   for (const match of html.matchAll(CHAMPIONSHIP_LINK)) {
     const linkedSeasonId = Number(match[1]);
@@ -15,7 +15,7 @@ export function extractChampionships(
     const name = cleanText(match[3]);
 
     if (
-      linkedSeasonId !== seasonExternalId ||
+      linkedSeasonId !== championshipExternalId ||
       externalId < 0 ||
       !name ||
       name === 'Final Standing'
@@ -23,14 +23,14 @@ export function extractChampionships(
       continue;
     }
 
-    championships.set(externalId, {
+    stages.set(externalId, {
       externalId,
       name,
-      seasonExternalId,
+      championshipExternalId,
     });
   }
 
-  return [...championships.values()];
+  return [...stages.values()];
 }
 
 function cleanText(value: string): string {

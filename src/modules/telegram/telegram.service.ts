@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
@@ -24,6 +25,7 @@ export class TelegramService implements OnApplicationBootstrap {
     private readonly config: TelegramConfig,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
+    private readonly stagesRepository: CompetitionStagesRepository,
     private readonly leaguesRepository: LeaguesRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
     private readonly playersService: PlayersService,
@@ -52,121 +54,304 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     this.bot.action(TELEGRAM_CALLBACKS.menu.statistics, async (context) => {
-      const now = new Date();
-      const activeSeasons = await this.seasonsRepository.findActive(now);
-      const seasons = activeSeasons.length
-        ? activeSeasons
-        : await this.seasonsRepository.findUpcoming(now);
+      const championships = await this.championshipsRepository.findActive(
+        new Date(),
+      );
 
       await showList(context, {
-        items: seasons.map(({ id, name }) => ({
+        items: championships.map(({ id, name }) => ({
           text: name,
-          callbackData: TELEGRAM_CALLBACKS.season(id),
+          callbackData: TELEGRAM_CALLBACKS.statistics.championship(id),
         })),
-        message: TELEGRAM_MESSAGES.seasons.select,
-        emptyMessage: TELEGRAM_MESSAGES.seasons.empty,
+        message: TELEGRAM_MESSAGES.championships.select,
+        emptyMessage: TELEGRAM_MESSAGES.championships.empty,
         backText: '⬅️ Назад',
         backCallbackData: TELEGRAM_CALLBACKS.menu.back,
       });
     });
 
-    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.season, async (context) => {
-      const seasonId = Number(context.match[1]);
-      const championships =
-        await this.championshipsRepository.findBySeasonId(seasonId);
+    this.bot.action(
+      TELEGRAM_CALLBACKS.menu.retroStatistics,
+      async (context) => {
+        const seasons = await this.seasonsRepository.findFinished(new Date());
 
-      await showList(context, {
-        items: championships.map(({ id, name }) => ({
-          text: name,
-          callbackData: TELEGRAM_CALLBACKS.championship(id, seasonId),
-        })),
-        message: TELEGRAM_MESSAGES.championships.select,
-        emptyMessage: TELEGRAM_MESSAGES.championships.empty,
-        backText: '⬅️ К сезонам',
-        backCallbackData: TELEGRAM_CALLBACKS.menu.statistics,
-      });
-    });
+        await showList(context, {
+          items: seasons.map(({ id, name }) => ({
+            text: name,
+            callbackData: TELEGRAM_CALLBACKS.retroStatistics.season(id),
+          })),
+          message: TELEGRAM_MESSAGES.seasons.select,
+          emptyMessage: TELEGRAM_MESSAGES.seasons.empty,
+          backText: '⬅️ Назад',
+          backCallbackData: TELEGRAM_CALLBACKS.menu.back,
+        });
+      },
+    );
 
     this.bot.action(
-      TELEGRAM_CALLBACK_PATTERNS.championship,
+      TELEGRAM_CALLBACK_PATTERNS.retroStatistics.season,
+      async (context) => {
+        const seasonId = Number(context.match[1]);
+        const championships =
+          await this.championshipsRepository.findFinishedBySeasonId(
+            seasonId,
+            new Date(),
+          );
+
+        await showList(context, {
+          items: championships.map(({ id, name }) => ({
+            text: name,
+            callbackData: TELEGRAM_CALLBACKS.retroStatistics.championship(
+              id,
+              seasonId,
+            ),
+          })),
+          message: TELEGRAM_MESSAGES.championships.select,
+          emptyMessage: TELEGRAM_MESSAGES.championships.empty,
+          backText: '⬅️ К сезонам',
+          backCallbackData: TELEGRAM_CALLBACKS.menu.retroStatistics,
+        });
+      },
+    );
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.statistics.championship,
       async (context) => {
         const championshipId = Number(context.match[1]);
-        const seasonId = Number(context.match[2]);
-        const leagues =
-          await this.leaguesRepository.findByChampionshipId(championshipId);
+        const stages =
+          await this.stagesRepository.findByChampionshipId(championshipId);
+
+        await showList(context, {
+          items: stages.map(({ id, name }) => ({
+            text: name,
+            callbackData: TELEGRAM_CALLBACKS.statistics.stage(
+              id,
+              championshipId,
+            ),
+          })),
+          message: TELEGRAM_MESSAGES.stages.select,
+          emptyMessage: TELEGRAM_MESSAGES.stages.empty,
+          backText: '⬅️ К чемпионатам',
+          backCallbackData: TELEGRAM_CALLBACKS.menu.statistics,
+        });
+      },
+    );
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.statistics.stage,
+      async (context) => {
+        const stageId = Number(context.match[1]);
+        const championshipId = Number(context.match[2]);
+        const leagues = await this.leaguesRepository.findByStageId(stageId);
 
         await showList(context, {
           items: leagues.map(({ id, name }) => ({
             text: name,
-            callbackData: TELEGRAM_CALLBACKS.league(
+            callbackData: TELEGRAM_CALLBACKS.statistics.league(
               id,
+              stageId,
+              championshipId,
+            ),
+          })),
+          message: TELEGRAM_MESSAGES.leagues.select,
+          emptyMessage: TELEGRAM_MESSAGES.leagues.empty,
+          backText: '⬅️ К этапам',
+          backCallbackData:
+            TELEGRAM_CALLBACKS.statistics.championship(championshipId),
+        });
+      },
+    );
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.statistics.league,
+      async (context) => {
+        const leagueId = Number(context.match[1]);
+        const stageId = Number(context.match[2]);
+        const championshipId = Number(context.match[3]);
+        const teamLeagues =
+          await this.teamLeaguesRepository.findByLeagueId(leagueId);
+
+        await showList(context, {
+          items: teamLeagues.map(({ team }) => ({
+            text: team.name,
+            callbackData: TELEGRAM_CALLBACKS.statistics.team(
+              team.id,
+              leagueId,
+              stageId,
+              championshipId,
+            ),
+          })),
+          message: TELEGRAM_MESSAGES.teams.select,
+          emptyMessage: TELEGRAM_MESSAGES.teams.empty,
+          backText: '⬅️ К лигам',
+          backCallbackData: TELEGRAM_CALLBACKS.statistics.stage(
+            stageId,
+            championshipId,
+          ),
+        });
+      },
+    );
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.statistics.team,
+      async (context) => {
+        const teamId = Number(context.match[1]);
+        const leagueId = Number(context.match[2]);
+        const stageId = Number(context.match[3]);
+        const championshipId = Number(context.match[4]);
+        const statistics = await this.playersService.findTeamStatistics(
+          teamId,
+          leagueId,
+        );
+
+        await context.answerCbQuery();
+        await context.editMessageText(
+          statistics
+            ? formatTeamStatistics(statistics)
+            : TELEGRAM_MESSAGES.teams.statisticsEmpty,
+          {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  TELEGRAM_MESSAGES.teams.back,
+                  TELEGRAM_CALLBACKS.statistics.league(
+                    leagueId,
+                    stageId,
+                    championshipId,
+                  ),
+                ),
+              ],
+            ]),
+          },
+        );
+      },
+    );
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.retroStatistics.championship,
+      async (context) => {
+        const championshipId = Number(context.match[1]);
+        const seasonId = Number(context.match[2]);
+        const stages =
+          await this.stagesRepository.findByChampionshipId(championshipId);
+
+        await showList(context, {
+          items: stages.map(({ id, name }) => ({
+            text: name,
+            callbackData: TELEGRAM_CALLBACKS.retroStatistics.stage(
+              id,
+              championshipId,
+              seasonId,
+            ),
+          })),
+          message: TELEGRAM_MESSAGES.stages.select,
+          emptyMessage: TELEGRAM_MESSAGES.stages.empty,
+          backText: '⬅️ К чемпионатам',
+          backCallbackData: TELEGRAM_CALLBACKS.retroStatistics.season(seasonId),
+        });
+      },
+    );
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.retroStatistics.stage,
+      async (context) => {
+        const stageId = Number(context.match[1]);
+        const championshipId = Number(context.match[2]);
+        const seasonId = Number(context.match[3]);
+        const leagues = await this.leaguesRepository.findByStageId(stageId);
+
+        await showList(context, {
+          items: leagues.map(({ id, name }) => ({
+            text: name,
+            callbackData: TELEGRAM_CALLBACKS.retroStatistics.league(
+              id,
+              stageId,
               championshipId,
               seasonId,
             ),
           })),
           message: TELEGRAM_MESSAGES.leagues.select,
           emptyMessage: TELEGRAM_MESSAGES.leagues.empty,
-          backText: '⬅️ К чемпионатам',
-          backCallbackData: TELEGRAM_CALLBACKS.season(seasonId),
+          backText: '⬅️ К этапам',
+          backCallbackData: TELEGRAM_CALLBACKS.retroStatistics.championship(
+            championshipId,
+            seasonId,
+          ),
         });
       },
     );
 
-    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.league, async (context) => {
-      const leagueId = Number(context.match[1]);
-      const championshipId = Number(context.match[2]);
-      const seasonId = Number(context.match[3]);
-      const teamLeagues =
-        await this.teamLeaguesRepository.findByLeagueId(leagueId);
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.retroStatistics.league,
+      async (context) => {
+        const leagueId = Number(context.match[1]);
+        const stageId = Number(context.match[2]);
+        const championshipId = Number(context.match[3]);
+        const seasonId = Number(context.match[4]);
+        const teamLeagues =
+          await this.teamLeaguesRepository.findByLeagueId(leagueId);
 
-      await showList(context, {
-        items: teamLeagues.map(({ team }) => ({
-          text: team.name,
-          callbackData: TELEGRAM_CALLBACKS.team(
-            team.id,
-            leagueId,
+        await showList(context, {
+          items: teamLeagues.map(({ team }) => ({
+            text: team.name,
+            callbackData: TELEGRAM_CALLBACKS.retroStatistics.team(
+              team.id,
+              leagueId,
+              stageId,
+              championshipId,
+              seasonId,
+            ),
+          })),
+          message: TELEGRAM_MESSAGES.teams.select,
+          emptyMessage: TELEGRAM_MESSAGES.teams.empty,
+          backText: '⬅️ К лигам',
+          backCallbackData: TELEGRAM_CALLBACKS.retroStatistics.stage(
+            stageId,
             championshipId,
             seasonId,
           ),
-        })),
-        message: TELEGRAM_MESSAGES.teams.select,
-        emptyMessage: TELEGRAM_MESSAGES.teams.empty,
-        backText: '⬅️ К лигам',
-        backCallbackData: TELEGRAM_CALLBACKS.championship(
-          championshipId,
-          seasonId,
-        ),
-      });
-    });
+        });
+      },
+    );
 
-    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.team, async (context) => {
-      const teamId = Number(context.match[1]);
-      const leagueId = Number(context.match[2]);
-      const championshipId = Number(context.match[3]);
-      const seasonId = Number(context.match[4]);
-      const statistics = await this.playersService.findTeamStatistics(
-        teamId,
-        leagueId,
-      );
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.retroStatistics.team,
+      async (context) => {
+        const teamId = Number(context.match[1]);
+        const leagueId = Number(context.match[2]);
+        const stageId = Number(context.match[3]);
+        const championshipId = Number(context.match[4]);
+        const seasonId = Number(context.match[5]);
+        const statistics = await this.playersService.findTeamStatistics(
+          teamId,
+          leagueId,
+        );
 
-      await context.answerCbQuery();
-      await context.editMessageText(
-        statistics
-          ? formatTeamStatistics(statistics)
-          : TELEGRAM_MESSAGES.teams.statisticsEmpty,
-        {
-          parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                TELEGRAM_MESSAGES.teams.back,
-                TELEGRAM_CALLBACKS.league(leagueId, championshipId, seasonId),
-              ),
-            ],
-          ]),
-        },
-      );
-    });
+        await context.answerCbQuery();
+        await context.editMessageText(
+          statistics
+            ? formatTeamStatistics(statistics)
+            : TELEGRAM_MESSAGES.teams.statisticsEmpty,
+          {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  TELEGRAM_MESSAGES.teams.back,
+                  TELEGRAM_CALLBACKS.retroStatistics.league(
+                    leagueId,
+                    stageId,
+                    championshipId,
+                    seasonId,
+                  ),
+                ),
+              ],
+            ]),
+          },
+        );
+      },
+    );
 
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.development, async (context) => {
       await context.answerCbQuery(TELEGRAM_MESSAGES.inDevelopment, {

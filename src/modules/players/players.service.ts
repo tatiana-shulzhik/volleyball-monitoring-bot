@@ -42,10 +42,10 @@ export class PlayersService {
 
     const { team, league } = relations[0];
     const statistics =
-      await this.statisticsRepository.findByPlayerIdsAndTeamIdAndSeasonId(
+      await this.statisticsRepository.findByPlayerIdsAndTeamIdAndChampionshipId(
         relations.map(({ player }) => player.id),
         team.id,
-        league.championship.season.id,
+        league.stage.championship.id,
       );
 
     return createTeamStatistics(relations, statistics);

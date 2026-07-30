@@ -11,12 +11,12 @@ export function normalizeName(value: string): string {
 }
 
 export function createPlayerRelationKey(
-  seasonExternalId: number,
+  championshipExternalId: number,
   teamName: string,
   playerName: string,
 ): string {
   return (
-    `${seasonExternalId}:` +
+    `${championshipExternalId}:` +
     `${normalizeName(teamName)}:${normalizeName(playerName)}`
   );
 }
@@ -34,7 +34,7 @@ export function uniquePlayerStatistics(
   return [
     ...new Map(
       rows.map((row) => [
-        `${row.season?.id}:${row.team?.id}:${row.player?.id}`,
+        `${row.championship?.id}:${row.team?.id}:${row.player?.id}`,
         row,
       ]),
     ).values(),

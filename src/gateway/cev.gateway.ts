@@ -1,15 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
-import { SeasonsEntity } from '../databases/entities/seasons.entity';
-import { FetchedChampionships } from '../interfaces/requests/championships.interface';
+import { CompetitionStagesEntity } from '../databases/entities/competition-stages.entity';
+import { FetchedCompetitionStages } from '../interfaces/requests/competition-stages.interface';
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import { IFetchedPlayerStatistics } from '../interfaces/requests/player-statistics.interface';
-import {
-  FetchedSeasons,
-  ICevSeason,
-} from '../interfaces/requests/seasons.interface';
+import { ICevChampionship } from '../interfaces/requests/championships.interface';
+import { FetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
 import { IPlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
@@ -21,7 +19,7 @@ import { getErrorMessage } from '../shared/error.utils';
 import {
   createCalendarForm,
   createNationalTeamCalendarForm,
-  extractCalendarSeasons,
+  extractCalendarChampionships,
   getCalendarMetadata,
 } from '../shared/cev-calendar.utils';
 import { ECompetitionType } from '../shared/enums';
@@ -47,7 +45,9 @@ export class CevGateway {
 
   constructor(private readonly http: HttpService) {}
 
-  async fetchSeasonsSince(earliestYear: number): Promise<FetchedSeasons> {
+  async fetchSeasonCatalogSince(
+    earliestYear: number,
+  ): Promise<FetchedSeasonCatalog> {
     const initialHtml = await this.http.get(CEV_CALENDAR_URL);
     const calendarResults = await Promise.allSettled([
       Promise.resolve({
@@ -77,56 +77,56 @@ export class CevGateway {
         );
     });
     const results = await Promise.allSettled(requests);
-    const seasons = new Map<number, ICevSeason>();
+    const championships = new Map<number, ICevChampionship>();
 
     for (const result of results) {
       if (result.status === 'rejected') {
         continue;
       }
 
-      for (const season of extractCalendarSeasons(
+      for (const championship of extractCalendarChampionships(
         result.value.html,
         result.value.competitionType,
       )) {
-        const existing = seasons.get(season.externalId);
+        const existing = championships.get(championship.externalId);
 
-        seasons.set(season.externalId, {
-          ...season,
+        championships.set(championship.externalId, {
+          ...championship,
           startsAt:
-            existing && existing.startsAt < season.startsAt
+            existing && existing.startsAt < championship.startsAt
               ? existing.startsAt
-              : season.startsAt,
+              : championship.startsAt,
           endsAt:
-            existing && existing.endsAt > season.endsAt
+            existing && existing.endsAt > championship.endsAt
               ? existing.endsAt
-              : season.endsAt,
+              : championship.endsAt,
         });
       }
     }
 
     return {
-      seasons: [...seasons.values()],
+      championships: [...championships.values()],
       isComplete:
         calendarResults.every((result) => result.status === 'fulfilled') &&
         results.every((result) => result.status === 'fulfilled'),
     };
   }
 
-  async fetchChampionships(
-    seasons: SeasonsEntity[],
-  ): Promise<FetchedChampionships> {
+  async fetchCompetitionStages(
+    championships: ChampionshipsEntity[],
+  ): Promise<FetchedCompetitionStages> {
     const results = await this.mapSettled({
-      items: seasons,
-      mapper: async (season) =>
+      items: championships,
+      mapper: async (championship) =>
         extractChampionships(
-          await this.http.get(createCompetitionUrl(season.externalId)),
-          season.externalId,
+          await this.http.get(createCompetitionUrl(championship.externalId)),
+          championship.externalId,
         ),
       concurrency: 5,
     });
 
     return {
-      championships: results.flatMap((result) =>
+      stages: results.flatMap((result) =>
         result.status === 'fulfilled' ? result.value : [],
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
@@ -134,18 +134,15 @@ export class CevGateway {
   }
 
   async fetchLeagueCatalog(
-    championships: ChampionshipsEntity[],
+    stages: CompetitionStagesEntity[],
   ): Promise<FetchedLeagueCatalog> {
     const results = await this.mapSettled({
-      items: championships,
-      mapper: async (championship) => {
+      items: stages,
+      mapper: async (stage) => {
         const html = await this.http.get(
-          createCompetitionUrl(
-            championship.season.externalId,
-            championship.externalId,
-          ),
+          createCompetitionUrl(stage.championship.externalId, stage.externalId),
         );
-        const leagues = extractLeagues(html, championship.externalId);
+        const leagues = extractLeagues(html, stage.externalId);
 
         return {
           leagues,
@@ -170,7 +167,7 @@ export class CevGateway {
     const sourceGroups = [
       ...sources
         .reduce((groups, source) => {
-          const key = `${source.team.externalId}:${source.season.externalId}`;
+          const key = `${source.team.externalId}:${source.championship.externalId}`;
           const group = groups.get(key) ?? [];
 
           group.push(source);
@@ -182,10 +179,10 @@ export class CevGateway {
     const results = await this.mapSettled({
       items: sourceGroups,
       mapper: async (group) => {
-        const { team, league, season } = group[0];
+        const { team, league, championship } = group[0];
         const roster = extractPlayers({
           html: await this.http.get(
-            createTeamUrl(team.externalId, season.externalId),
+            createTeamUrl(team.externalId, championship.externalId),
           ),
           teamExternalId: team.externalId,
           leagueExternalId: league.externalId,
@@ -206,12 +203,12 @@ export class CevGateway {
         return;
       }
 
-      const { team, season } = sourceGroups[index][0];
-      const url = createTeamUrl(team.externalId, season.externalId);
+      const { team, championship } = sourceGroups[index][0];
+      const url = createTeamUrl(team.externalId, championship.externalId);
 
       this.logger.warn(
         `Player roster request failed for "${team.name}" ` +
-          `in "${season.name}" (${url}): ${getErrorMessage(result.reason)}`,
+          `in "${championship.name}" (${url}): ${getErrorMessage(result.reason)}`,
       );
     });
 
@@ -224,17 +221,14 @@ export class CevGateway {
   }
 
   async fetchMatches(
-    championships: ChampionshipsEntity[],
+    stages: CompetitionStagesEntity[],
   ): Promise<IFetchedMatches> {
     const results = await this.mapSettled({
-      items: championships,
-      mapper: async (championship) =>
+      items: stages,
+      mapper: async (stage) =>
         extractMatches(
           await this.http.get(
-            createMatchesUrl(
-              championship.season.externalId,
-              championship.externalId,
-            ),
+            createMatchesUrl(stage.championship.externalId, stage.externalId),
           ),
         ),
       concurrency: CEV_HTTP_CONCURRENCY,
@@ -249,18 +243,25 @@ export class CevGateway {
   }
 
   async fetchPlayerStatistics(
-    seasons: SeasonsEntity[],
+    championships: ChampionshipsEntity[],
   ): Promise<PromiseSettledResult<IFetchedPlayerStatistics>[]> {
-    const uniqueSeasons = [
-      ...new Map(seasons.map((season) => [season.externalId, season])).values(),
+    const uniqueChampionships = [
+      ...new Map(
+        championships.map((championship) => [
+          championship.externalId,
+          championship,
+        ]),
+      ).values(),
     ];
 
     return this.mapSettled({
-      items: uniqueSeasons,
-      mapper: async (season) => ({
-        seasonExternalId: season.externalId,
+      items: uniqueChampionships,
+      mapper: async (championship) => ({
+        championshipExternalId: championship.externalId,
         statistics: extractPlayerStatistics(
-          await this.http.get(createPlayerStatisticsUrl(season.externalId)),
+          await this.http.get(
+            createPlayerStatisticsUrl(championship.externalId),
+          ),
         ),
       }),
       concurrency: CEV_HTTP_CONCURRENCY,

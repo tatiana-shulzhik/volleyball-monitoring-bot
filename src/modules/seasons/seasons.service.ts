@@ -1,10 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SeasonsEntity } from '../../databases/entities/seasons.entity';
-import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import {
+  SeasonCycle,
+  SeasonsRepository,
+} from '../../databases/repositories/seasons.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { FetchedSeasons } from '../../interfaces/requests/seasons.interface';
+import { ICevChampionship } from '../../interfaces/requests/championships.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
-import { calculateSeasonsChanges } from '../../shared/seasons.utils';
+import { ECompetitionType } from '../../shared/enums';
+import { calculateChampionshipChanges } from '../../shared/championships.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -16,57 +21,92 @@ export class SeasonsService {
 
   constructor(
     private readonly gateway: CevGateway,
-    private readonly repository: SeasonsRepository,
+    private readonly seasonsRepository: SeasonsRepository,
+    private readonly championshipsRepository: ChampionshipsRepository,
   ) {}
 
-  async discoverCurrentAndFutureSeasons(): Promise<SeasonsEntity[]> {
-    const currentYear = new Date().getFullYear();
-
-    return this.synchronizeFrom(currentYear);
+  discoverCurrentAndFutureSeasons(): Promise<ChampionshipsEntity[]> {
+    return this.synchronizeFrom(new Date().getFullYear());
   }
 
-  async synchronizeStoredRange(): Promise<SeasonsEntity[]> {
-    const currentYear = new Date().getFullYear();
-    const earliestStoredYear = currentYear - PREVIOUS_YEARS_COUNT;
-
-    return this.synchronizeFrom(earliestStoredYear);
+  synchronizeStoredRange(): Promise<ChampionshipsEntity[]> {
+    return this.synchronizeFrom(
+      new Date().getFullYear() - PREVIOUS_YEARS_COUNT,
+    );
   }
 
   private async synchronizeFrom(
     earliestSeasonYear: number,
-  ): Promise<SeasonsEntity[]> {
+  ): Promise<ChampionshipsEntity[]> {
     this.logger.log(
-      `Starting seasons synchronization from ${earliestSeasonYear}`,
+      `Starting season catalog synchronization from ${earliestSeasonYear}`,
     );
+    const fetched = await this.gateway.fetchSeasonCatalogSince(
+      earliestSeasonYear - 1,
+    );
+    const incoming = fetched.championships.filter(
+      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
+    );
+    const seasonCycles = this.toSeasonCycles(incoming);
 
-    const fetched = await this.fetchSeasons(earliestSeasonYear - 1);
-    const incomingSeasons = fetched.seasons.filter(
+    await this.seasonsRepository.upsertMany(seasonCycles);
+    const seasons = (await this.seasonsRepository.findAll()).filter(
       ({ yearEnd }) => yearEnd >= earliestSeasonYear,
     );
-    const storedSeasons = (await this.repository.findAll()).filter(
-      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
+    const existing = await this.championshipsRepository.findBySeasonIds(
+      seasons.map(({ id }) => id),
     );
-    const changes = calculateSeasonsChanges(incomingSeasons, storedSeasons);
+    const changes = calculateChampionshipChanges({
+      incoming,
+      existing,
+      seasonsByCycle: new Map(
+        seasons.map((season) => [this.cycleKey(season), season]),
+      ),
+    });
 
     await applyEntityChanges({
-      repository: this.repository,
+      repository: this.championshipsRepository,
       changes,
-      allowDeletion: false,
+      allowDeletion: fetched.isComplete,
     });
     logEntityChanges({
       logger: this.logger,
-      entityName: 'Seasons',
+      entityName: 'Championships',
       changes,
       isComplete: fetched.isComplete,
-      allowDeletion: false,
+      allowDeletion: true,
     });
 
-    return (await this.repository.findAll()).filter(
-      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
+    return this.championshipsRepository.findBySeasonIds(
+      seasons.map(({ id }) => id),
     );
   }
 
-  private async fetchSeasons(earliestYear: number): Promise<FetchedSeasons> {
-    return this.gateway.fetchSeasonsSince(earliestYear);
+  private toSeasonCycles(championships: ICevChampionship[]): SeasonCycle[] {
+    return [
+      ...new Map(
+        championships.map((championship) => {
+          const cycle = {
+            name:
+              championship.yearStart === championship.yearEnd
+                ? String(championship.yearEnd)
+                : `${championship.yearStart}/${championship.yearEnd}`,
+            competitionType: championship.competitionType,
+            yearStart: championship.yearStart,
+            yearEnd: championship.yearEnd,
+          };
+
+          return [this.cycleKey(cycle), cycle];
+        }),
+      ).values(),
+    ];
+  }
+
+  private cycleKey(cycle: {
+    competitionType: ECompetitionType;
+    yearStart: number;
+    yearEnd: number;
+  }): string {
+    return `${cycle.competitionType}:${cycle.yearStart}:${cycle.yearEnd}`;
   }
 }

@@ -7,6 +7,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
@@ -38,6 +39,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly matchesService: MatchesService,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
+    private readonly stagesRepository: CompetitionStagesRepository,
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
   ) {}
@@ -107,9 +109,10 @@ export class SynchronizationService implements OnApplicationBootstrap {
   }
 
   private async synchronizeCurrentCatalog(): Promise<void> {
-    const seasons = await this.seasonsService.discoverCurrentAndFutureSeasons();
-    const championships = await this.championshipsService.synchronize(seasons);
-    const leagueCatalog = await this.leaguesService.synchronize(championships);
+    const championships =
+      await this.seasonsService.discoverCurrentAndFutureSeasons();
+    const stages = await this.championshipsService.synchronize(championships);
+    const leagueCatalog = await this.leaguesService.synchronize(stages);
     const synchronizedTeams =
       await this.teamsService.synchronize(leagueCatalog);
 
@@ -117,9 +120,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
   }
 
   private async performStoredCatalogSynchronization(): Promise<void> {
-    const seasons = await this.seasonsService.synchronizeStoredRange();
-    const championships = await this.championshipsService.synchronize(seasons);
-    const leagueCatalog = await this.leaguesService.synchronize(championships);
+    const championships = await this.seasonsService.synchronizeStoredRange();
+    const stages = await this.championshipsService.synchronize(championships);
+    const leagueCatalog = await this.leaguesService.synchronize(stages);
     const synchronizedTeams =
       await this.teamsService.synchronize(leagueCatalog);
 
@@ -153,47 +156,36 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async performMatchesSynchronization(
     frequentOnly: boolean,
   ): Promise<void> {
-    const seasons = await this.seasonsRepository.findAll();
-    const championships = await this.championshipsRepository.findBySeasonIds(
-      seasons.map(({ id }) => id),
+    const championships = await this.championshipsRepository.findAll();
+    const stages = await this.stagesRepository.findByChampionshipIds(
+      championships.map(({ id }) => id),
     );
 
     if (frequentOnly) {
-      await this.matchesService.synchronizeFrequently(championships);
+      await this.matchesService.synchronizeFrequently(stages);
       return;
     }
 
-    await this.matchesService.synchronize(championships);
+    await this.matchesService.synchronize(stages);
   }
 
   private async synchronizePlayerStatistics(): Promise<void> {
     const now = new Date();
-    const seasons =
-      await this.seasonsRepository.findRequiringStatisticsSync(now);
-
-    await this.loadPlayerStatistics(seasons);
+    await this.loadPlayerStatistics(
+      await this.championshipsRepository.findActive(now),
+    );
   }
 
   private async synchronizeIncompletePlayerStatistics(): Promise<void> {
-    const seasons = await this.seasonsRepository.findWithIncompleteStatistics(
-      new Date(),
+    await this.loadPlayerStatistics(
+      await this.championshipsRepository.findStarted(new Date()),
     );
-
-    await this.loadPlayerStatistics(seasons);
   }
 
   private async loadPlayerStatistics(
-    seasons: Awaited<ReturnType<SeasonsRepository['findAll']>>,
+    championships: Awaited<ReturnType<ChampionshipsRepository['findAll']>>,
   ): Promise<void> {
-    const result = await this.playerStatisticsService.synchronize(seasons);
-    const synchronized = new Set(result.synchronizedSeasonExternalIds);
-    const seasonIds = seasons
-      .filter(({ externalId }) => synchronized.has(externalId))
-      .map(({ id }) => id);
-    await this.seasonsRepository.markStatisticsLoadedIfCompleted(
-      seasonIds,
-      new Date(),
-    );
+    await this.playerStatisticsService.synchronize(championships);
   }
 
   private async runExclusive<T>(

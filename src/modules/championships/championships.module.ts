@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { ChampionshipsService } from './championships.service';
 
 @Module({
-  providers: [ChampionshipsService, ChampionshipsRepository],
-  exports: [ChampionshipsService, ChampionshipsRepository],
+  providers: [ChampionshipsService, CompetitionStagesRepository],
+  exports: [ChampionshipsService, CompetitionStagesRepository],
 })
 export class ChampionshipsModule {}

@@ -1,4 +1,4 @@
-import { ICevSeason } from '../interfaces/requests/seasons.interface';
+import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { ECompetitionType } from './enums';
 
 const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
@@ -74,11 +74,11 @@ function createPostbackForm(html: string): URLSearchParams {
   return form;
 }
 
-export function extractCalendarSeasons(
+export function extractCalendarChampionships(
   html: string,
   competitionType: ECompetitionType,
-): ICevSeason[] {
-  const seasons = new Map<number, ICevSeason>();
+): ICevChampionship[] {
+  const championships = new Map<number, ICevChampionship>();
   const rowRegex = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
   const linkRegex =
     /<a\b(?=[^>]*href=['"][^'"]*competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=\d+[^'"]*['"])[^>]*>([\s\S]*?)<\/a>/gi;
@@ -109,13 +109,15 @@ export function extractCalendarSeasons(
     const year = Number(competition[2]);
     const startsAt = parseCevDate(dateRange[1], false);
     const endsAt = parseCevDate(dateRange[2], true);
-    const existing = seasons.get(externalId);
+    const yearStart =
+      competitionType === ECompetitionType.Club ? year - 1 : year;
+    const existing = championships.get(externalId);
 
-    seasons.set(externalId, {
+    championships.set(externalId, {
       externalId,
       name: competition[1].trim(),
       competitionType,
-      yearStart: year,
+      yearStart,
       yearEnd: year,
       startsAt:
         existing && existing.startsAt < startsAt ? existing.startsAt : startsAt,
@@ -123,7 +125,7 @@ export function extractCalendarSeasons(
     });
   }
 
-  return [...seasons.values()];
+  return [...championships.values()];
 }
 
 function parseCevDate(value: string, endOfDay: boolean): Date {

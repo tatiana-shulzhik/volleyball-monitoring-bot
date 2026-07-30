@@ -117,13 +117,13 @@ export class TeamsService {
     for (const incomingTeam of incomingTeams) {
       const team = teamsByExternalId.get(incomingTeam.externalId);
       const league = leaguesByExternalId.get(incomingTeam.leagueExternalId);
-      const season = league?.championship.season;
+      const championship = league?.stage.championship;
 
-      if (team && league && season) {
+      if (team && league && championship) {
         sources.set(`${team.externalId}:${league.externalId}`, {
           team,
           league,
-          season,
+          championship,
         });
       }
     }

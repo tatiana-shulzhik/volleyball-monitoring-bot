@@ -7,11 +7,11 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { PlayersEntity } from './players.entity';
-import { SeasonsEntity } from './seasons.entity';
+import { ChampionshipsEntity } from './championships.entity';
 import { TeamEntity } from './team.entity';
 
 @Entity({ name: 'player_statistics' })
-@Index(['player', 'team', 'season'], { unique: true })
+@Index(['player', 'team', 'championship'], { unique: true })
 export class PlayerStatisticsEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -24,9 +24,12 @@ export class PlayerStatisticsEntity {
   @JoinColumn({ name: 'team_id' })
   team: TeamEntity;
 
-  @ManyToOne(() => SeasonsEntity, { nullable: false, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'season_id' })
-  season: SeasonsEntity;
+  @ManyToOne(() => ChampionshipsEntity, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'championship_id' })
+  championship: ChampionshipsEntity;
 
   @Column({ name: 'matches_played', type: 'smallint' })
   matchesPlayed: number;

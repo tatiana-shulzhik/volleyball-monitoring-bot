@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SeasonsEntity } from '../../databases/entities/seasons.entity';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
@@ -21,23 +21,23 @@ export class PlayerStatisticsService {
   ) {}
 
   async synchronize(
-    seasons: SeasonsEntity[],
+    championships: ChampionshipsEntity[],
   ): Promise<IPlayerStatisticsSynchronizationResult> {
-    if (!seasons.length) {
-      return { loadedRows: 0, synchronizedSeasonExternalIds: [] };
+    if (!championships.length) {
+      return { loadedRows: 0, synchronizedChampionshipExternalIds: [] };
     }
 
     const externalIds = [
-      ...new Set(seasons.map(({ externalId }) => externalId)),
+      ...new Set(championships.map(({ externalId }) => externalId)),
     ];
     const [fetched, relations] = await Promise.all([
-      this.gateway.fetchPlayerStatistics(seasons),
-      this.relationsRepository.findBySeasonExternalIds(externalIds),
+      this.gateway.fetchPlayerStatistics(championships),
+      this.relationsRepository.findByChampionshipExternalIds(externalIds),
     ]);
     const relationsByPlayer = new Map(
       relations.map((relation) => [
         createPlayerRelationKey(
-          relation.league.championship.season.externalId,
+          relation.league.stage.championship.externalId,
           relation.team.name,
           relation.player.fullName,
         ),
@@ -46,7 +46,7 @@ export class PlayerStatisticsService {
     );
     const sourceUpdatedAt = new Date();
     const rows: Partial<PlayerStatisticsEntity>[] = [];
-    const synchronizedSeasonExternalIds: number[] = [];
+    const synchronizedChampionshipExternalIds: number[] = [];
 
     for (const result of fetched) {
       if (result.status === 'rejected') {
@@ -56,12 +56,14 @@ export class PlayerStatisticsService {
         continue;
       }
 
-      synchronizedSeasonExternalIds.push(result.value.seasonExternalId);
+      synchronizedChampionshipExternalIds.push(
+        result.value.championshipExternalId,
+      );
 
       for (const item of result.value.statistics) {
         const relation = relationsByPlayer.get(
           createPlayerRelationKey(
-            result.value.seasonExternalId,
+            result.value.championshipExternalId,
             item.teamName,
             item.playerName,
           ),
@@ -74,7 +76,7 @@ export class PlayerStatisticsService {
         rows.push({
           player: relation.player,
           team: relation.team,
-          season: relation.league.championship.season,
+          championship: relation.league.stage.championship,
           matchesPlayed: item.matchesPlayed,
           points: item.points,
           setsPlayed: item.setsPlayed,
@@ -88,7 +90,7 @@ export class PlayerStatisticsService {
     this.logger.log(`${unique.length} player statistics rows loaded`);
     return {
       loadedRows: unique.length,
-      synchronizedSeasonExternalIds,
+      synchronizedChampionshipExternalIds,
     };
   }
 }

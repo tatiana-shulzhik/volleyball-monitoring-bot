@@ -19,17 +19,17 @@ export class LeaguesRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByChampionshipIds(championshipIds: number[]): Promise<LeaguesEntity[]> {
+  findByStageIds(stageIds: number[]): Promise<LeaguesEntity[]> {
     return this.repository.find({
-      where: { championship: { id: In(championshipIds) } },
-      relations: { championship: { season: true } },
+      where: { stage: { id: In(stageIds) } },
+      relations: { stage: { championship: { season: true } } },
     });
   }
 
-  findByChampionshipId(championshipId: number): Promise<LeaguesEntity[]> {
+  findByStageId(stageId: number): Promise<LeaguesEntity[]> {
     return this.repository.find({
       select: { id: true, name: true },
-      where: { championship: { id: championshipId } },
+      where: { stage: { id: stageId } },
       order: { name: 'ASC' },
     });
   }
@@ -37,7 +37,7 @@ export class LeaguesRepository {
   findByExternalIds(externalIds: number[]): Promise<LeaguesEntity[]> {
     return this.repository.find({
       where: { externalId: In(externalIds) },
-      relations: { championship: { season: true } },
+      relations: { stage: { championship: { season: true } } },
     });
   }
 
@@ -49,10 +49,10 @@ export class LeaguesRepository {
 
   updateMany(leagues: LeaguesEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(LeaguesEntity) ?? this.repository;
-    const values = leagues.map(({ externalId, name, championship }) => ({
+    const values = leagues.map(({ externalId, name, stage }) => ({
       externalId,
       name,
-      championship,
+      stage,
     }));
 
     return repository.upsert(values, {
