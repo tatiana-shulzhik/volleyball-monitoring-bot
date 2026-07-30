@@ -1,4 +1,32 @@
 import { ICevPlayerStatistics } from '../interfaces/requests/player-statistics.interface';
+import { createPostbackForm } from './aspnet-form.utils';
+
+const PHASE_CONTROL = 'ctl00$Content_Left$DDL_Phases';
+
+export function getStatisticsPhaseIds(html: string): Set<number> {
+  const select = html.match(
+    /<select\b[^>]*id=["']Content_Left_DDL_Phases["'][^>]*>([\s\S]*?)<\/select>/i,
+  )?.[1];
+
+  return new Set(
+    [...(select?.matchAll(/<option\b[^>]*value=["'](\d+)["'][^>]*>/gi) ?? [])]
+      .map((match) => Number(match[1]))
+      .filter((id) => id > 0),
+  );
+}
+
+export function createStatisticsPhaseForm(
+  html: string,
+  stageExternalId: number,
+): URLSearchParams {
+  const form = createPostbackForm(html);
+
+  form.set('__EVENTTARGET', PHASE_CONTROL);
+  form.set('__EVENTARGUMENT', '');
+  form.set(PHASE_CONTROL, String(stageExternalId));
+
+  return form;
+}
 
 const SCORER_TABLE =
   /<table\b[^>]*id=['"][^'"]*Ranking_BestScorer_RadGrid_Score_ctl00['"][^>]*>([\s\S]*?)<\/table>/i;

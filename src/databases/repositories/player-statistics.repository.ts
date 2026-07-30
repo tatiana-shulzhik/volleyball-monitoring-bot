@@ -20,7 +20,7 @@ export class PlayerStatisticsRepository {
 
     return repository.find({
       where,
-      relations: { player: true },
+      relations: { player: true, stage: { season: true } },
     });
   }
 
@@ -29,7 +29,7 @@ export class PlayerStatisticsRepository {
   ): Promise<void> {
     for (const batch of splitIntoBatches(statistics)) {
       await this.repository.upsert(batch, {
-        conflictPaths: ['player', 'team', 'championship'],
+        conflictPaths: ['player', 'team', 'stage'],
         skipUpdateIfNoValuesChanged: true,
       });
     }

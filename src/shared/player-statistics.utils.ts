@@ -11,12 +11,12 @@ export function normalizeName(value: string): string {
 }
 
 export function createPlayerRelationKey(
-  championshipExternalId: number,
+  sourceExternalId: string | number,
   teamName: string,
   playerName: string,
 ): string {
   return (
-    `${championshipExternalId}:` +
+    `${sourceExternalId}:` +
     `${normalizeName(teamName)}:${normalizeName(playerName)}`
   );
 }
@@ -34,7 +34,7 @@ export function uniquePlayerStatistics(
   return [
     ...new Map(
       rows.map((row) => [
-        `${row.championship?.id}:${row.team?.id}:${row.player?.id}`,
+        `${row.stage?.id}:${row.team?.id}:${row.player?.id}`,
         row,
       ]),
     ).values(),
@@ -49,9 +49,17 @@ export function createTeamStatistics(
     return null;
   }
 
-  const statisticsByPlayerId = new Map(
-    statistics.map((item) => [item.player.id, item]),
-  );
+  const statisticsByPlayerId = statistics.reduce((result, item) => {
+    const stored = result.get(item.player.id) ?? {
+      points: 0,
+      setsPlayed: 0,
+    };
+
+    stored.points += item.points;
+    stored.setsPlayed += item.setsPlayed;
+    result.set(item.player.id, stored);
+    return result;
+  }, new Map<number, { points: number; setsPlayed: number }>());
   const players = relations
     .map((relation) => {
       const playerStatistics = statisticsByPlayerId.get(relation.player.id);

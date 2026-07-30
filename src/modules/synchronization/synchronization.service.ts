@@ -5,10 +5,9 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
-import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
-import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
@@ -40,7 +39,6 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly playerStatisticsService: PlayerStatisticsService,
     private readonly matchesService: MatchesService,
     private readonly seasonsRepository: SeasonsRepository,
-    private readonly championshipsRepository: ChampionshipsRepository,
     private readonly stagesRepository: CompetitionStagesRepository,
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
@@ -152,10 +150,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async performMatchesSynchronization(
     frequentOnly: boolean,
   ): Promise<void> {
-    const championships = await this.championshipsRepository.getWhere({});
-    const stages = await this.stagesRepository.getWhere({
-      championship: { id: In(championships.map(({ id }) => id)) },
-    });
+    const stages = await this.stagesRepository.getWhere({});
 
     if (frequentOnly) {
       await this.matchesService.synchronizeFrequently(stages);
@@ -168,27 +163,25 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async synchronizePlayerStatistics(): Promise<void> {
     const now = new Date();
     await this.loadPlayerStatistics(
-      await this.championshipsRepository.getWhere({
-        stages: {
-          startsAt: LessThanOrEqual(now),
-          endsAt: MoreThanOrEqual(now),
-        },
+      await this.stagesRepository.getWhere({
+        startsAt: LessThanOrEqual(now),
+        endsAt: MoreThanOrEqual(now),
       }),
     );
   }
 
   private async synchronizeIncompletePlayerStatistics(): Promise<void> {
     await this.loadPlayerStatistics(
-      await this.championshipsRepository.getWhere({
-        stages: { startsAt: LessThanOrEqual(new Date()) },
+      await this.stagesRepository.getWhere({
+        startsAt: LessThanOrEqual(new Date()),
       }),
     );
   }
 
   private async loadPlayerStatistics(
-    championships: ChampionshipsEntity[],
+    stages: CompetitionStagesEntity[],
   ): Promise<void> {
-    await this.playerStatisticsService.synchronize(championships);
+    await this.playerStatisticsService.synchronize(stages);
   }
 
   private async runExclusive<T>(

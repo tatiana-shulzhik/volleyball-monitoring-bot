@@ -17,6 +17,10 @@ import { extractLeagues } from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
 import { extractPlayers } from '../shared/cev-players.utils';
 import { extractPlayerStatistics } from '../shared/cev-player-statistics.utils';
+import {
+  createStatisticsPhaseForm,
+  getStatisticsPhaseIds,
+} from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
 import { getErrorMessage } from '../shared/error.utils';
 import {
@@ -257,27 +261,43 @@ export class CevGateway {
   }
 
   async fetchPlayerStatistics(
-    championships: ChampionshipsEntity[],
+    stages: CompetitionStagesEntity[],
   ): Promise<PromiseSettledResult<IFetchedPlayerStatistics>[]> {
-    const uniqueChampionships = [
-      ...new Map(
-        championships.map((championship) => [
-          championship.externalId,
-          championship,
-        ]),
-      ).values(),
-    ];
+    const championshipPages = new Map<number, Promise<string>>();
 
     return this.mapSettled({
-      items: uniqueChampionships,
-      mapper: async (championship) => ({
-        championshipExternalId: championship.externalId,
-        statistics: extractPlayerStatistics(
-          await this.http.get(
-            createPlayerStatisticsUrl(championship.externalId),
-          ),
-        ),
-      }),
+      items: stages,
+      mapper: async (stage) => {
+        const championshipExternalId = stage.championship.externalId;
+        let page = championshipPages.get(championshipExternalId);
+
+        if (!page) {
+          page = this.http.get(
+            createPlayerStatisticsUrl(championshipExternalId),
+          );
+          championshipPages.set(championshipExternalId, page);
+        }
+
+        const html = await page;
+
+        if (!getStatisticsPhaseIds(html).has(stage.externalId)) {
+          throw new Error(
+            `Statistics phase ${stage.externalId} is unavailable ` +
+              `for championship ${championshipExternalId}`,
+          );
+        }
+
+        const phaseHtml = await this.http.postForm(
+          createPlayerStatisticsUrl(championshipExternalId),
+          createStatisticsPhaseForm(html, stage.externalId),
+        );
+
+        return {
+          championshipExternalId,
+          stageExternalId: stage.externalId,
+          statistics: extractPlayerStatistics(phaseHtml),
+        };
+      },
       concurrency: CEV_HTTP_CONCURRENCY,
     });
   }

@@ -6,12 +6,12 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { CompetitionStagesEntity } from './competition-stages.entity';
 import { PlayersEntity } from './players.entity';
-import { ChampionshipsEntity } from './championships.entity';
 import { TeamEntity } from './team.entity';
 
 @Entity({ name: 'player_statistics' })
-@Index(['player', 'team', 'championship'], { unique: true })
+@Index(['player', 'team', 'stage'], { unique: true })
 export class PlayerStatisticsEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -24,12 +24,12 @@ export class PlayerStatisticsEntity {
   @JoinColumn({ name: 'team_id' })
   team: TeamEntity;
 
-  @ManyToOne(() => ChampionshipsEntity, {
+  @ManyToOne(() => CompetitionStagesEntity, {
     nullable: false,
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'championship_id' })
-  championship: ChampionshipsEntity;
+  @JoinColumn({ name: 'stage_id' })
+  stage: CompetitionStagesEntity;
 
   @Column({ name: 'matches_played', type: 'smallint' })
   matchesPlayed: number;

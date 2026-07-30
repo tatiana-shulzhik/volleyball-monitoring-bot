@@ -7,6 +7,14 @@ export async function applyEntityChanges<TEntity, TIncoming>(
   data: ApplyEntityChangesParams<TEntity, TIncoming>,
 ): Promise<void> {
   const { repository, changes, allowDeletion } = data;
+  const hasChanges =
+    changes.missing.length > 0 ||
+    changes.changed.length > 0 ||
+    (allowDeletion && changes.obsoleteIds.length > 0);
+
+  if (!hasChanges) {
+    return;
+  }
 
   await repository.useTransaction(undefined, async (manager) => {
     if (changes.missing.length) {

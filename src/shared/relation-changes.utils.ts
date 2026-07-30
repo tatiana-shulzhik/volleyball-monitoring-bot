@@ -36,6 +36,14 @@ export async function applyRelationChanges<TIncoming>(
   data: IApplyRelationChangesParams<TIncoming>,
 ): Promise<void> {
   const { transactionOwner, repository, changes, allowDeletion } = data;
+  const hasChanges =
+    changes.missing.length > 0 ||
+    changes.changed.length > 0 ||
+    (allowDeletion && changes.obsoleteIds.length > 0);
+
+  if (!hasChanges) {
+    return;
+  }
 
   await transactionOwner.useTransaction(undefined, async (manager) => {
     if (changes.missing.length) {

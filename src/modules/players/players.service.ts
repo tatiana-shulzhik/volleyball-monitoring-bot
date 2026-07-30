@@ -42,10 +42,16 @@ export class PlayersService {
     }
 
     const { team, league } = relations[0];
+    const seasonId = league.stage.season?.id;
+
+    if (!seasonId) {
+      return null;
+    }
+
     const statistics = await this.statisticsRepository.getWhere({
       player: { id: In(relations.map(({ player }) => player.id)) },
       team: { id: team.id },
-      championship: { id: league.stage.championship.id },
+      stage: { season: { id: seasonId } },
     });
 
     return createTeamStatistics(relations, statistics);

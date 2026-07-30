@@ -1,5 +1,6 @@
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
+import { createPostbackForm } from './aspnet-form.utils';
 import { ECompetitionType } from './enums';
 
 const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
@@ -59,18 +60,6 @@ export function createNationalTeamCalendarForm(html: string): URLSearchParams {
     VOLLEY_TYPE_CLIENT_STATE,
     JSON.stringify({ selectedIndexes: ['1'], logEntries: [] }),
   );
-
-  return form;
-}
-
-function createPostbackForm(html: string): URLSearchParams {
-  const form = new URLSearchParams();
-  const inputRegex =
-    /<input\b(?=[^>]*type="hidden")(?=[^>]*name="([^"]+)")(?=[^>]*value="([^"]*)")[^>]*>/gi;
-
-  for (const match of html.matchAll(inputRegex)) {
-    form.set(match[1], decodeHtml(match[2]));
-  }
 
   return form;
 }

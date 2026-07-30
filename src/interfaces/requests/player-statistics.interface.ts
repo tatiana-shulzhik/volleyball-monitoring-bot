@@ -9,5 +9,6 @@ export interface ICevPlayerStatistics {
 
 export interface IFetchedPlayerStatistics {
   championshipExternalId: number;
+  stageExternalId: number;
   statistics: ICevPlayerStatistics[];
 }
