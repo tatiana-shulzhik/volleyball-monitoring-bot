@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { In } from 'typeorm';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
-import { SeasonsEntity } from '../../databases/entities/seasons.entity';
-import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { calculateChampionshipChanges } from '../../shared/championships.utils';
+import { calculateStageChanges } from '../../shared/competition-stages.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -15,27 +16,29 @@ export class ChampionshipsService {
 
   constructor(
     private readonly gateway: CevGateway,
-    private readonly repository: ChampionshipsRepository,
+    private readonly repository: CompetitionStagesRepository,
   ) {}
 
-  async synchronize(seasons: SeasonsEntity[]): Promise<ChampionshipsEntity[]> {
-    if (!seasons.length) {
-      this.logger.warn('No seasons found; championships sync skipped');
+  async synchronize(
+    championships: ChampionshipsEntity[],
+  ): Promise<CompetitionStagesEntity[]> {
+    if (!championships.length) {
+      this.logger.warn('No championships found; stage sync skipped');
       return [];
     }
 
-    this.logger.log(
-      `Starting championships synchronization for ${seasons.length} seasons`,
-    );
-
-    const seasonIds = seasons.map(({ id }) => id);
-    const fetched = await this.gateway.fetchChampionships(seasons);
-    const existing = await this.repository.findBySeasonIds(seasonIds);
-    const changes = calculateChampionshipChanges({
-      incoming: fetched.championships,
+    const fetched = await this.gateway.fetchCompetitionStages(championships);
+    const existing = await this.repository.getWhere({
+      championship: { id: In(championships.map(({ id }) => id)) },
+    });
+    const changes = calculateStageChanges({
+      incoming: fetched.stages,
       existing,
-      seasonsByExternalId: new Map(
-        seasons.map((season) => [season.externalId, season]),
+      championshipsByExternalId: new Map(
+        championships.map((championship) => [
+          championship.externalId,
+          championship,
+        ]),
       ),
     });
 
@@ -46,12 +49,14 @@ export class ChampionshipsService {
     });
     logEntityChanges({
       logger: this.logger,
-      entityName: 'Championships',
+      entityName: 'Competition stages',
       changes,
       isComplete: fetched.isComplete,
       allowDeletion: true,
     });
 
-    return this.repository.findBySeasonIds(seasonIds);
+    return this.repository.getWhere({
+      championship: { id: In(championships.map(({ id }) => id)) },
+    });
   }
 }

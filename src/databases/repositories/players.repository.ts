@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { PlayersEntity } from '../entities/players.entity';
 
 @Injectable()
@@ -19,10 +24,13 @@ export class PlayersRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByExternalIds(externalIds: string[]): Promise<PlayersEntity[]> {
-    return this.repository.find({
-      where: { externalId: In(externalIds) },
-    });
+  getWhere(
+    where: FindOptionsWhere<PlayersEntity>,
+    manager?: EntityManager,
+  ): Promise<PlayersEntity[]> {
+    const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
+
+    return repository.find({ where });
   }
 
   insertMany(players: Partial<PlayersEntity>[], manager?: EntityManager) {
@@ -33,10 +41,9 @@ export class PlayersRepository {
 
   updateMany(players: PlayersEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
-    const values = players.map(({ externalId, fullName, position }) => ({
+    const values = players.map(({ externalId, fullName }) => ({
       externalId,
       fullName,
-      position,
     }));
 
     return repository.upsert(values, {
@@ -54,7 +61,7 @@ export class PlayersRepository {
   async deleteOrphans(manager: EntityManager): Promise<number> {
     const deleted: Array<{ id: number }> = await manager.query(
       'DELETE FROM players p WHERE NOT EXISTS ' +
-        '(SELECT 1 FROM player_team_seasons pts WHERE pts.player_id = p.id) ' +
+        '(SELECT 1 FROM player_team_leagues ptl WHERE ptl.player_id = p.id) ' +
         'RETURNING p.id',
     );
 

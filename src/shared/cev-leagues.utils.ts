@@ -7,7 +7,7 @@ const LEAGUE_NAME =
 
 export function extractLeagues(
   html: string,
-  championshipExternalId: number,
+  stageExternalId: number,
 ): ICevLeague[] {
   const leagues = new Map<number, ICevLeague>();
 
@@ -30,7 +30,7 @@ export function extractLeagues(
     leagues.set(externalId, {
       externalId,
       name,
-      championshipExternalId,
+      stageExternalId,
     });
   }
 

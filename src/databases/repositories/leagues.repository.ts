@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { LeaguesEntity } from '../entities/leagues.entity';
 
 @Injectable()
@@ -19,18 +24,15 @@ export class LeaguesRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByChampionshipIds(championshipIds: number[]): Promise<LeaguesEntity[]> {
-    return this.repository.find({
-      where: { championship: { id: In(championshipIds) } },
-      relations: { championship: { season: true } },
-    });
-  }
+  getWhere(
+    where: FindOptionsWhere<LeaguesEntity>,
+    manager?: EntityManager,
+  ): Promise<LeaguesEntity[]> {
+    const repository = manager?.getRepository(LeaguesEntity) ?? this.repository;
 
-  findByChampionshipId(championshipId: number): Promise<LeaguesEntity[]> {
-    return this.repository.find({
-      select: { id: true, name: true },
-      where: { championship: { id: championshipId } },
-      order: { name: 'ASC' },
+    return repository.find({
+      where,
+      relations: { stage: { championship: true, season: true } },
     });
   }
 
@@ -42,10 +44,10 @@ export class LeaguesRepository {
 
   updateMany(leagues: LeaguesEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(LeaguesEntity) ?? this.repository;
-    const values = leagues.map(({ externalId, name, championship }) => ({
+    const values = leagues.map(({ externalId, name, stage }) => ({
       externalId,
       name,
-      championship,
+      stage,
     }));
 
     return repository.upsert(values, {

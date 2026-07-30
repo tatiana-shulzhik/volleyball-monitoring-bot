@@ -1,20 +1,34 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
-import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import {
+  INITIAL_SYNCHRONIZATION_KEY,
+  MOSCOW_TIME_ZONE,
+  PREVIOUS_YEARS_COUNT,
+} from '../../shared/consts/constants';
+import { ECronExpression } from '../../shared/enums';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
+import { MatchesService } from '../matches/matches.service';
 import { PlayersService } from '../players/players.service';
+import { PlayerStatisticsService } from '../players/player-statistics.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 
-const MOSCOW_TIME_ZONE = 'Europe/Moscow';
-
 @Injectable()
-export class SynchronizationService {
+export class SynchronizationService implements OnApplicationBootstrap {
   private readonly logger = new Logger(SynchronizationService.name);
   private isRunning = false;
 
@@ -24,12 +38,20 @@ export class SynchronizationService {
     private readonly leaguesService: LeaguesService,
     private readonly teamsService: TeamsService,
     private readonly playersService: PlayersService,
+    private readonly playerStatisticsService: PlayerStatisticsService,
+    private readonly matchesService: MatchesService,
     private readonly seasonsRepository: SeasonsRepository,
+    private readonly stagesRepository: CompetitionStagesRepository,
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
+    private readonly synchronizationStateRepository: SynchronizationStateRepository,
   ) {}
 
-  @Cron('0 0 * * *', {
+  onApplicationBootstrap(): void {
+    void this.initializeEmptyCatalog();
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
     name: 'daily-new-seasons-discovery',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -38,7 +60,7 @@ export class SynchronizationService {
     await this.runExclusive(() => this.synchronizeCurrentCatalog(), false);
   }
 
-  @Cron('0 1 * * *', {
+  @Cron(CronExpression.EVERY_DAY_AT_1AM, {
     name: 'daily-outdated-catalog-cleanup',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -47,18 +69,25 @@ export class SynchronizationService {
     await this.runExclusive(() => this.removeOutdatedCatalog(), false);
   }
 
-  async synchronizeStoredCatalogRange(): Promise<void> {
-    await this.runExclusive(() => this.performStoredCatalogSynchronization());
+  @Cron(ECronExpression.Every3HoursAtMinute30, {
+    name: 'upcoming-matches-synchronization',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async synchronizeMatchesByCron(): Promise<void> {
+    await this.runExclusive(async () => {
+      await this.performMatchesSynchronization(true);
+      await this.matchesService.startMonitoring();
+    }, false);
   }
 
-  async deleteOutdatedCatalog(): Promise<CleanupResult> {
-    return (
-      (await this.runExclusive(() => this.removeOutdatedCatalog())) ?? {
-        seasons: 0,
-        players: 0,
-        teams: 0,
-      }
-    );
+  @Cron(ECronExpression.EveryHourAtMinute10, {
+    name: 'hourly-player-statistics-synchronization',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async synchronizePlayerStatisticsByCron(): Promise<void> {
+    await this.runExclusive(() => this.synchronizePlayerStatistics(), false);
   }
 
   private async removeOutdatedCatalog(): Promise<CleanupResult> {
@@ -83,9 +112,10 @@ export class SynchronizationService {
   }
 
   private async synchronizeCurrentCatalog(): Promise<void> {
-    const seasons = await this.seasonsService.discoverCurrentAndFutureSeasons();
-    const championships = await this.championshipsService.synchronize(seasons);
-    const leagueCatalog = await this.leaguesService.synchronize(championships);
+    const championships =
+      await this.seasonsService.discoverCurrentAndFutureSeasons();
+    const stages = await this.championshipsService.synchronize(championships);
+    const leagueCatalog = await this.leaguesService.synchronize(stages);
     const synchronizedTeams =
       await this.teamsService.synchronize(leagueCatalog);
 
@@ -93,13 +123,82 @@ export class SynchronizationService {
   }
 
   private async performStoredCatalogSynchronization(): Promise<void> {
-    const seasons = await this.seasonsService.synchronizeStoredRange();
-    const championships = await this.championshipsService.synchronize(seasons);
-    const leagueCatalog = await this.leaguesService.synchronize(championships);
+    const championships = await this.seasonsService.synchronizeStoredRange();
+    const stages = await this.championshipsService.synchronize(championships);
+    const leagueCatalog = await this.leaguesService.synchronize(stages);
     const synchronizedTeams =
       await this.teamsService.synchronize(leagueCatalog);
 
     await this.playersService.synchronize(synchronizedTeams.rosterSources);
+    await this.performMatchesSynchronization(false);
+  }
+
+  private async initializeEmptyCatalog(): Promise<void> {
+    try {
+      if (
+        await this.synchronizationStateRepository.hasCompleted(
+          INITIAL_SYNCHRONIZATION_KEY,
+        )
+      ) {
+        this.logger.log(
+          'Catalog is already initialized; startup synchronization skipped',
+        );
+        return;
+      }
+
+      this.logger.log('Starting full catalog synchronization');
+      await this.runExclusive(() => this.performStoredCatalogSynchronization());
+      this.logger.log('Full catalog synchronization completed');
+
+      await this.runExclusive(() =>
+        this.synchronizeIncompletePlayerStatistics(),
+      );
+      await this.synchronizationStateRepository.markCompleted(
+        INITIAL_SYNCHRONIZATION_KEY,
+      );
+    } catch (error) {
+      this.logger.error(
+        'Initial catalog synchronization failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async performMatchesSynchronization(
+    frequentOnly: boolean,
+  ): Promise<void> {
+    const stages = await this.stagesRepository.getWhere({});
+
+    if (frequentOnly) {
+      await this.matchesService.synchronizeFrequently(stages);
+      return;
+    }
+
+    await this.matchesService.synchronize(stages);
+  }
+
+  private async synchronizePlayerStatistics(): Promise<void> {
+    const now = new Date();
+    await this.loadPlayerStatistics(
+      await this.stagesRepository.getWhere({
+        startsAt: LessThanOrEqual(now),
+        endsAt: MoreThanOrEqual(now),
+      }),
+    );
+  }
+
+  private async synchronizeIncompletePlayerStatistics(): Promise<void> {
+    await this.loadPlayerStatistics(
+      await this.stagesRepository.getWhere({
+        startsAt: LessThanOrEqual(new Date()),
+      }),
+    );
+  }
+
+  private async loadPlayerStatistics(
+    stages: CompetitionStagesEntity[],
+  ): Promise<void> {
+    await this.playerStatisticsService.synchronize(stages);
   }
 
   private async runExclusive<T>(

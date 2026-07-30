@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { ChampionshipsEntity } from '../entities/championships.entity';
 
 @Injectable()
@@ -19,39 +24,35 @@ export class ChampionshipsRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findBySeasonIds(seasonIds: number[]): Promise<ChampionshipsEntity[]> {
-    return this.repository.find({
-      where: { season: { id: In(seasonIds) } },
-      relations: { season: true },
-    });
-  }
+  getWhere(
+    where: FindOptionsWhere<ChampionshipsEntity>,
+    manager?: EntityManager,
+  ): Promise<ChampionshipsEntity[]> {
+    const repository =
+      manager?.getRepository(ChampionshipsEntity) ?? this.repository;
 
-  findBySeasonId(seasonId: number): Promise<ChampionshipsEntity[]> {
-    return this.repository.find({
-      select: { id: true, name: true },
-      where: { season: { id: seasonId } },
-      order: { name: 'ASC' },
-    });
+    return repository.find({ where });
   }
 
   insertMany(
     championships: Partial<ChampionshipsEntity>[],
     manager?: EntityManager,
   ) {
-    const repository =
-      manager?.getRepository(ChampionshipsEntity) ?? this.repository;
-
-    return repository.insert(championships);
+    return (
+      manager?.getRepository(ChampionshipsEntity) ?? this.repository
+    ).insert(championships);
   }
 
   updateMany(championships: ChampionshipsEntity[], manager?: EntityManager) {
     const repository =
       manager?.getRepository(ChampionshipsEntity) ?? this.repository;
-    const values = championships.map(({ externalId, name, season }) => ({
-      externalId,
-      name,
-      season,
-    }));
+    const values = championships.map(
+      ({ externalId, name, competitionType }) => ({
+        externalId,
+        name,
+        competitionType,
+      }),
+    );
 
     return repository.upsert(values, {
       conflictPaths: ['externalId'],
@@ -60,9 +61,8 @@ export class ChampionshipsRepository {
   }
 
   deleteMany(ids: number[], manager?: EntityManager) {
-    const repository =
-      manager?.getRepository(ChampionshipsEntity) ?? this.repository;
-
-    return repository.delete(ids);
+    return (
+      manager?.getRepository(ChampionshipsEntity) ?? this.repository
+    ).delete(ids);
   }
 }

@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PlayerTeamSeasonsRepository } from '../../databases/repositories/player-team-seasons.repository';
+import { In } from 'typeorm';
+import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
+import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { PlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
+import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
+import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
+import { createTeamStatistics } from '../../shared/player-statistics.utils';
 import {
   calculatePlayerChanges,
   calculatePlayerRelationChanges,
@@ -20,10 +24,40 @@ export class PlayersService {
   constructor(
     private readonly gateway: CevGateway,
     private readonly playersRepository: PlayersRepository,
-    private readonly relationsRepository: PlayerTeamSeasonsRepository,
+    private readonly relationsRepository: PlayerTeamLeaguesRepository,
+    private readonly statisticsRepository: PlayerStatisticsRepository,
   ) {}
 
-  async synchronize(sources: PlayerRosterSource[]): Promise<void> {
+  async findTeamStatistics(
+    teamId: number,
+    leagueId: number,
+  ): Promise<ITeamStatistics | null> {
+    const relations = await this.relationsRepository.getWhere({
+      team: { id: teamId },
+      league: { id: leagueId },
+    });
+
+    if (!relations.length) {
+      return null;
+    }
+
+    const { team, league } = relations[0];
+    const seasonId = league.stage.season?.id;
+
+    if (!seasonId) {
+      return null;
+    }
+
+    const statistics = await this.statisticsRepository.getWhere({
+      player: { id: In(relations.map(({ player }) => player.id)) },
+      team: { id: team.id },
+      stage: { season: { id: seasonId } },
+    });
+
+    return createTeamStatistics(relations, statistics);
+  }
+
+  async synchronize(sources: IPlayerRosterSource[]): Promise<void> {
     if (!sources.length) {
       this.logger.warn('No roster sources found; players sync skipped');
       return;
@@ -38,7 +72,7 @@ export class PlayersService {
       ...new Set(fetched.players.map(({ externalId }) => externalId)),
     ];
     const existingPlayers = externalIds.length
-      ? await this.playersRepository.findByExternalIds(externalIds)
+      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
       : [];
     const calculatedChanges = calculatePlayerChanges({
       incoming: fetched.players,
@@ -53,25 +87,25 @@ export class PlayersService {
     });
 
     const players = externalIds.length
-      ? await this.playersRepository.findByExternalIds(externalIds)
+      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
       : [];
     const teams = [
       ...new Map(sources.map(({ team }) => [team.externalId, team])).values(),
     ];
-    const seasons = [
+    const leagues = [
       ...new Map(
-        sources.map(({ season }) => [season.externalId, season]),
+        sources.map(({ league }) => [league.externalId, league]),
       ).values(),
     ];
     const sourceKeys = new Set(
-      sources.map(({ team, season }) => `${team.id}:${season.id}`),
+      sources.map(({ team, league }) => `${team.id}:${league.id}`),
     );
     const existingRelations = (
-      await this.relationsRepository.findByTeamIdsAndSeasonIds(
-        teams.map(({ id }) => id),
-        seasons.map(({ id }) => id),
-      )
-    ).filter(({ team, season }) => sourceKeys.has(`${team.id}:${season.id}`));
+      await this.relationsRepository.getWhere({
+        team: { id: In(teams.map(({ id }) => id)) },
+        league: { id: In(leagues.map(({ id }) => id)) },
+      })
+    ).filter(({ team, league }) => sourceKeys.has(`${team.id}:${league.id}`));
     const relationChanges = calculatePlayerRelationChanges({
       incoming: fetched.players,
       existing: existingRelations,
@@ -79,8 +113,8 @@ export class PlayersService {
         players.map((player) => [player.externalId, player]),
       ),
       teamsByExternalId: new Map(teams.map((team) => [team.externalId, team])),
-      seasonsByExternalId: new Map(
-        seasons.map((season) => [season.externalId, season]),
+      leaguesByExternalId: new Map(
+        leagues.map((league) => [league.externalId, league]),
       ),
     });
 
@@ -99,7 +133,8 @@ export class PlayersService {
       allowDeletion: false,
     });
     this.logger.log(
-      `Player team seasons synchronized: ${relationChanges.missing.length} inserted, ` +
+      `Player team leagues synchronized: ${relationChanges.missing.length} inserted, ` +
+        `${relationChanges.changed.length} updated, ` +
         `${fetched.isComplete ? relationChanges.obsoleteIds.length : 0} deleted`,
     );
   }

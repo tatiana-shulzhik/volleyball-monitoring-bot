@@ -1,28 +1,14 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { CompetitionStagesEntity } from './competition-stages.entity';
 
 @Entity({ name: 'seasons' })
 export class SeasonsEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ unique: true })
   name: string;
 
-  @Column({ name: 'external_id', unique: true })
-  externalId: number;
-
-  @Column({ name: 'is_current', default: false })
-  isCurrent: boolean;
-
-  @Column({
-    name: 'year_start',
-    type: 'int',
-  })
-  yearStart: number;
-
-  @Column({
-    name: 'year_end',
-    type: 'int',
-  })
-  yearEnd: number;
+  @OneToMany(() => CompetitionStagesEntity, (stage) => stage.season)
+  stages: CompetitionStagesEntity[];
 }

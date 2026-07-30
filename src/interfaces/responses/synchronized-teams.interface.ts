@@ -1,12 +1,14 @@
-import { SeasonsEntity } from '../../databases/entities/seasons.entity';
+import { LeaguesEntity } from '../../databases/entities/leagues.entity';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 
-export interface PlayerRosterSource {
+export interface IPlayerRosterSource {
   team: TeamEntity;
-  season: SeasonsEntity;
+  league: LeaguesEntity;
+  championship: ChampionshipsEntity;
 }
 
-export interface SynchronizedTeams {
+export interface ISynchronizedTeams {
   teams: TeamEntity[];
-  rosterSources: PlayerRosterSource[];
+  rosterSources: IPlayerRosterSource[];
 }

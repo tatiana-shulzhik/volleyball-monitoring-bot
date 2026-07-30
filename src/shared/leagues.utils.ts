@@ -7,18 +7,16 @@ import { calculateEntityChanges } from './entity-changes.utils';
 export function calculateLeagueChanges(
   data: CalculateLeagueChangesParams,
 ): LeagueChanges {
-  const { incoming, existing, championshipsByExternalId } = data;
+  const { incoming, existing, stagesByExternalId } = data;
   const resolved = incoming.flatMap((league) => {
-    const championship = championshipsByExternalId.get(
-      league.championshipExternalId,
-    );
+    const stage = stagesByExternalId.get(league.stageExternalId);
 
-    return championship
+    return stage
       ? [
           {
             externalId: league.externalId,
             name: league.name,
-            championship,
+            stage,
           },
         ]
       : [];
@@ -28,7 +26,6 @@ export function calculateLeagueChanges(
     incoming: resolved,
     existing,
     hasChanges: (stored, league) =>
-      stored.name !== league.name ||
-      stored.championship.id !== league.championship.id,
+      stored.name !== league.name || stored.stage.id !== league.stage.id,
   });
 }

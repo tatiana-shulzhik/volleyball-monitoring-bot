@@ -2,11 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { LeaguesEntity } from '../databases/entities/leagues.entity';
-import { PlayerTeamSeasonEntity } from '../databases/entities/player-team-season.entity';
+import { MatchEntity } from '../databases/entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
+import { PlayerStatisticsEntity } from '../databases/entities/player-statistics.entity';
 import { PlayersEntity } from '../databases/entities/players.entity';
 import { SeasonsEntity } from '../databases/entities/seasons.entity';
+import { CompetitionStagesEntity } from '../databases/entities/competition-stages.entity';
 import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
 import { TeamEntity } from '../databases/entities/team.entity';
+import { SynchronizationStateEntity } from '../databases/entities/synchronization-state.entity';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -39,11 +43,15 @@ export class DbConfig implements TypeOrmOptionsFactory {
       entities: [
         SeasonsEntity,
         ChampionshipsEntity,
+        CompetitionStagesEntity,
         LeaguesEntity,
         TeamEntity,
         TeamLeagueEntity,
         PlayersEntity,
-        PlayerTeamSeasonEntity,
+        PlayerTeamLeagueEntity,
+        PlayerStatisticsEntity,
+        MatchEntity,
+        SynchronizationStateEntity,
       ],
       migrations: [],
     };

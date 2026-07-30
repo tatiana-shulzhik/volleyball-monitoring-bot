@@ -1,11 +1,6 @@
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
-import { SeasonsEntity } from './seasons.entity';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { ECompetitionType } from '../../shared/enums';
+import { CompetitionStagesEntity } from './competition-stages.entity';
 
 @Entity({ name: 'championships' })
 export class ChampionshipsEntity {
@@ -18,7 +13,13 @@ export class ChampionshipsEntity {
   @Column({ name: 'external_id', unique: true })
   externalId: number;
 
-  @ManyToOne(() => SeasonsEntity, { nullable: false, onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'season_id' })
-  season: SeasonsEntity;
+  @Column({
+    name: 'competition_type',
+    type: 'varchar',
+    default: ECompetitionType.Club,
+  })
+  competitionType: ECompetitionType;
+
+  @OneToMany(() => CompetitionStagesEntity, (stage) => stage.championship)
+  stages: CompetitionStagesEntity[];
 }

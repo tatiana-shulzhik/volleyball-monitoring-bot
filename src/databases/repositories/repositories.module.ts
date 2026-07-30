@@ -4,11 +4,15 @@ import { ConfigModule } from '../../configs/config.module';
 import { DbConfig } from '../../configs/db.config';
 import { ChampionshipsEntity } from '../entities/championships.entity';
 import { LeaguesEntity } from '../entities/leagues.entity';
-import { PlayerTeamSeasonEntity } from '../entities/player-team-season.entity';
+import { MatchEntity } from '../entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../entities/player-team-league.entity';
+import { PlayerStatisticsEntity } from '../entities/player-statistics.entity';
 import { PlayersEntity } from '../entities/players.entity';
 import { SeasonsEntity } from '../entities/seasons.entity';
+import { CompetitionStagesEntity } from '../entities/competition-stages.entity';
 import { TeamLeagueEntity } from '../entities/team-league.entity';
 import { TeamEntity } from '../entities/team.entity';
+import { SynchronizationStateEntity } from '../entities/synchronization-state.entity';
 
 @Global()
 @Module({
@@ -21,11 +25,15 @@ import { TeamEntity } from '../entities/team.entity';
     TypeOrmModule.forFeature([
       SeasonsEntity,
       ChampionshipsEntity,
+      CompetitionStagesEntity,
       LeaguesEntity,
       TeamEntity,
       TeamLeagueEntity,
       PlayersEntity,
-      PlayerTeamSeasonEntity,
+      PlayerTeamLeagueEntity,
+      PlayerStatisticsEntity,
+      MatchEntity,
+      SynchronizationStateEntity,
     ]),
   ],
   exports: [TypeOrmModule],

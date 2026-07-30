@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
+import { ISeason } from '../../interfaces/requests/seasons.interface';
 import { SeasonsEntity } from '../entities/seasons.entity';
 
 @Injectable()
@@ -12,53 +18,50 @@ export class SeasonsRepository {
     private readonly repository: Repository<SeasonsEntity>,
   ) {}
 
-  public useTransaction<T>(
+  useTransaction<T>(
     manager: EntityManager | undefined,
-    fn: (manager: EntityManager) => Promise<T>,
+    action: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
-    return manager ? fn(manager) : this.dataSource.transaction(fn);
+    return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  async findAll() {
-    return this.repository.find();
-  }
-
-  findCurrent(): Promise<SeasonsEntity[]> {
-    return this.repository.find({
-      select: { id: true, name: true },
-      where: { isCurrent: true },
-      order: { yearStart: 'DESC' },
-    });
-  }
-
-  async insertMany(seasons: Partial<SeasonsEntity>[], manager?: EntityManager) {
+  getWhere(
+    where: FindOptionsWhere<SeasonsEntity>,
+    manager?: EntityManager,
+  ): Promise<SeasonsEntity[]> {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
 
-    return repository.insert(seasons);
+    return repository.find({ where });
   }
 
-  async updateMany(seasons: SeasonsEntity[], manager?: EntityManager) {
-    const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
-    const values = seasons.map(
-      ({ externalId, name, isCurrent, yearStart, yearEnd }) => ({
-        externalId,
-        name,
-        isCurrent,
-        yearStart,
-        yearEnd,
-      }),
-    );
+  findFinished(now: Date): Promise<SeasonsEntity[]> {
+    return this.repository
+      .createQueryBuilder('season')
+      .where(
+        'EXISTS (SELECT 1 FROM competition_stages stage ' +
+          'WHERE stage.season_id = season.id)',
+      )
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM competition_stages stage ' +
+          'WHERE stage.season_id = season.id ' +
+          'AND stage.ends_at >= :now)',
+        { now },
+      )
+      .orderBy('season.name', 'DESC')
+      .getMany();
+  }
 
-    return repository.upsert(values, {
-      conflictPaths: ['externalId'],
+  hasAny(): Promise<boolean> {
+    return this.repository.exists();
+  }
+
+  upsertMany(seasons: ISeason[], manager?: EntityManager) {
+    const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
+
+    return repository.upsert(seasons, {
+      conflictPaths: ['name'],
       skipUpdateIfNoValuesChanged: true,
     });
-  }
-
-  async deleteMany(ids: number[], manager?: EntityManager) {
-    const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
-
-    return repository.delete(ids);
   }
 
   async deleteOutdated(
@@ -69,7 +72,7 @@ export class SeasonsRepository {
     const result = await repository
       .createQueryBuilder()
       .delete()
-      .where('year_end < :beforeYear', { beforeYear })
+      .where('CAST(name AS integer) < :beforeYear', { beforeYear })
       .execute();
 
     return result.affected ?? 0;

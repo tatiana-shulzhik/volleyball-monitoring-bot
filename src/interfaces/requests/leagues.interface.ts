@@ -1,4 +1,4 @@
-import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { EntityChanges } from '../responses/entity-changes.interface';
 import { ICevTeam } from './teams.interface';
@@ -6,7 +6,7 @@ import { ICevTeam } from './teams.interface';
 export interface ICevLeague {
   externalId: number;
   name: string;
-  championshipExternalId: number;
+  stageExternalId: number;
 }
 
 export interface FetchedLeagueCatalog {
@@ -18,7 +18,7 @@ export interface FetchedLeagueCatalog {
 export interface CalculateLeagueChangesParams {
   incoming: ICevLeague[];
   existing: LeaguesEntity[];
-  championshipsByExternalId: Map<number, ChampionshipsEntity>;
+  stagesByExternalId: Map<number, CompetitionStagesEntity>;
 }
 
 export type LeagueChanges = EntityChanges<

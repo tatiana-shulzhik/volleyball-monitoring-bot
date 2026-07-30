@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { In } from 'typeorm';
+import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { SynchronizedLeagues } from '../../interfaces/responses/synchronized-leagues.interface';
@@ -19,29 +20,27 @@ export class LeaguesService {
   ) {}
 
   async synchronize(
-    championships: ChampionshipsEntity[],
+    stages: CompetitionStagesEntity[],
   ): Promise<SynchronizedLeagues> {
-    if (!championships.length) {
+    if (!stages.length) {
       this.logger.warn('No championships found; leagues sync skipped');
       return { leagues: [], teams: [], isComplete: true };
     }
 
     this.logger.log(
-      `Starting leagues synchronization for ${championships.length} championships`,
+      `Starting leagues synchronization for ${stages.length} stages`,
     );
 
-    const fetched = await this.gateway.fetchLeagueCatalog(championships);
-    const existing = await this.repository.findByChampionshipIds(
-      championships.map(({ id }) => id),
-    );
+    const fetched = await this.gateway.fetchLeagueCatalog(stages);
+    const stageIds = stages.map(({ id }) => id);
+    const existing = await this.repository.getWhere({
+      stage: { id: In(stageIds) },
+    });
     const changes = calculateLeagueChanges({
       incoming: fetched.leagues,
       existing,
-      championshipsByExternalId: new Map(
-        championships.map((championship) => [
-          championship.externalId,
-          championship,
-        ]),
+      stagesByExternalId: new Map(
+        stages.map((stage) => [stage.externalId, stage]),
       ),
     });
 
@@ -59,9 +58,9 @@ export class LeaguesService {
     });
 
     return {
-      leagues: await this.repository.findByChampionshipIds(
-        championships.map(({ id }) => id),
-      ),
+      leagues: await this.repository.getWhere({
+        stage: { id: In(stageIds) },
+      }),
       teams: fetched.teams,
       isComplete: fetched.isComplete,
     };

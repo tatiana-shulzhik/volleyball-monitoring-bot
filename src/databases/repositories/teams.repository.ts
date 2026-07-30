@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from 'typeorm';
 import { TeamEntity } from '../entities/team.entity';
 
 @Injectable()
@@ -19,10 +24,13 @@ export class TeamsRepository {
     return manager ? action(manager) : this.dataSource.transaction(action);
   }
 
-  findByExternalIds(externalIds: string[]): Promise<TeamEntity[]> {
-    return this.repository.find({
-      where: { externalId: In(externalIds) },
-    });
+  getWhere(
+    where: FindOptionsWhere<TeamEntity>,
+    manager?: EntityManager,
+  ): Promise<TeamEntity[]> {
+    const repository = manager?.getRepository(TeamEntity) ?? this.repository;
+
+    return repository.find({ where });
   }
 
   insertMany(teams: Partial<TeamEntity>[], manager?: EntityManager) {
@@ -52,7 +60,10 @@ export class TeamsRepository {
       'DELETE FROM teams t WHERE NOT EXISTS ' +
         '(SELECT 1 FROM team_leagues tl WHERE tl.team_id = t.id) ' +
         'AND NOT EXISTS ' +
-        '(SELECT 1 FROM player_team_seasons pts WHERE pts.team_id = t.id) ' +
+        '(SELECT 1 FROM player_team_leagues ptl WHERE ptl.team_id = t.id) ' +
+        'AND NOT EXISTS ' +
+        '(SELECT 1 FROM matches m WHERE m.home_team_id = t.id ' +
+        'OR m.away_team_id = t.id) ' +
         'RETURNING t.id',
     );
 
