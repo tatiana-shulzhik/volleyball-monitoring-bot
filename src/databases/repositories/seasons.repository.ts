@@ -1,15 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import { ECompetitionType } from '../../shared/enums';
+import { ISeason } from '../../interfaces/requests/seasons.interface';
 import { SeasonsEntity } from '../entities/seasons.entity';
-
-export interface SeasonCycle {
-  name: string;
-  yearStart: number;
-  yearEnd: number;
-  competitionType: ECompetitionType;
-}
 
 @Injectable()
 export class SeasonsRepository {
@@ -29,7 +22,7 @@ export class SeasonsRepository {
 
   findAll(): Promise<SeasonsEntity[]> {
     return this.repository.find({
-      order: { yearStart: 'ASC', competitionType: 'ASC' },
+      order: { name: 'ASC' },
     });
   }
 
@@ -46,8 +39,7 @@ export class SeasonsRepository {
           'AND championship.ends_at >= :now)',
         { now },
       )
-      .orderBy('season.yearStart', 'DESC')
-      .addOrderBy('season.competitionType', 'ASC')
+      .orderBy('season.name', 'DESC')
       .getMany();
   }
 
@@ -55,11 +47,11 @@ export class SeasonsRepository {
     return this.repository.exists();
   }
 
-  upsertMany(seasons: SeasonCycle[], manager?: EntityManager) {
+  upsertMany(seasons: ISeason[], manager?: EntityManager) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
 
     return repository.upsert(seasons, {
-      conflictPaths: ['competitionType', 'yearStart', 'yearEnd'],
+      conflictPaths: ['name'],
       skipUpdateIfNoValuesChanged: true,
     });
   }
@@ -72,7 +64,7 @@ export class SeasonsRepository {
     const result = await repository
       .createQueryBuilder()
       .delete()
-      .where('year_end < :beforeYear', { beforeYear })
+      .where('CAST(name AS integer) < :beforeYear', { beforeYear })
       .execute();
 
     return result.affected ?? 0;

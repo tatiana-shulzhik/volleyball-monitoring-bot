@@ -77,6 +77,7 @@ function createPostbackForm(html: string): URLSearchParams {
 export function extractCalendarChampionships(
   html: string,
   competitionType: ECompetitionType,
+  calendarYear: number,
 ): ICevChampionship[] {
   const championships = new Map<number, ICevChampionship>();
   const rowRegex = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
@@ -106,19 +107,15 @@ export function extractCalendarChampionships(
       continue;
     }
 
-    const year = Number(competition[2]);
     const startsAt = parseCevDate(dateRange[1], false);
     const endsAt = parseCevDate(dateRange[2], true);
-    const yearStart =
-      competitionType === ECompetitionType.Club ? year - 1 : year;
     const existing = championships.get(externalId);
 
     championships.set(externalId, {
       externalId,
       name: competition[1].trim(),
       competitionType,
-      yearStart,
-      yearEnd: year,
+      seasonName: String(calendarYear),
       startsAt:
         existing && existing.startsAt < startsAt ? existing.startsAt : startsAt,
       endsAt: existing && existing.endsAt > endsAt ? existing.endsAt : endsAt,

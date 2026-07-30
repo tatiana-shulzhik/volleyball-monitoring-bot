@@ -8,15 +8,14 @@ export interface ICevChampionship {
   name: string;
   startsAt: Date;
   endsAt: Date;
-  yearStart: number;
-  yearEnd: number;
+  seasonName: string;
   competitionType: ECompetitionType;
 }
 
 export interface CalculateChampionshipChangesParams {
   incoming: ICevChampionship[];
   existing: ChampionshipsEntity[];
-  seasonsByCycle: Map<string, SeasonsEntity>;
+  seasonsByName: Map<string, SeasonsEntity>;
 }
 
 export type ChampionshipChanges = EntityChanges<

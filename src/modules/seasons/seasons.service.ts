@@ -1,14 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
-import {
-  SeasonCycle,
-  SeasonsRepository,
-} from '../../databases/repositories/seasons.repository';
+import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { ICevChampionship } from '../../interfaces/requests/championships.interface';
+import { ISeason } from '../../interfaces/requests/seasons.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
-import { ECompetitionType } from '../../shared/enums';
 import { calculateChampionshipChanges } from '../../shared/championships.utils';
 import {
   applyEntityChanges,
@@ -41,17 +38,16 @@ export class SeasonsService {
     this.logger.log(
       `Starting season catalog synchronization from ${earliestSeasonYear}`,
     );
-    const fetched = await this.gateway.fetchSeasonCatalogSince(
-      earliestSeasonYear - 1,
-    );
+    const fetched =
+      await this.gateway.fetchSeasonCatalogSince(earliestSeasonYear);
     const incoming = fetched.championships.filter(
-      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
+      ({ seasonName }) => Number(seasonName) >= earliestSeasonYear,
     );
-    const seasonCycles = this.toSeasonCycles(incoming);
+    const incomingSeasons = this.toSeasons(incoming);
 
-    await this.seasonsRepository.upsertMany(seasonCycles);
+    await this.seasonsRepository.upsertMany(incomingSeasons);
     const seasons = (await this.seasonsRepository.findAll()).filter(
-      ({ yearEnd }) => yearEnd >= earliestSeasonYear,
+      ({ name }) => Number(name) >= earliestSeasonYear,
     );
     const existing = await this.championshipsRepository.findBySeasonIds(
       seasons.map(({ id }) => id),
@@ -59,9 +55,7 @@ export class SeasonsService {
     const changes = calculateChampionshipChanges({
       incoming,
       existing,
-      seasonsByCycle: new Map(
-        seasons.map((season) => [this.cycleKey(season), season]),
-      ),
+      seasonsByName: new Map(seasons.map((season) => [season.name, season])),
     });
 
     await applyEntityChanges({
@@ -82,31 +76,14 @@ export class SeasonsService {
     );
   }
 
-  private toSeasonCycles(championships: ICevChampionship[]): SeasonCycle[] {
+  private toSeasons(championships: ICevChampionship[]): ISeason[] {
     return [
       ...new Map(
-        championships.map((championship) => {
-          const cycle = {
-            name:
-              championship.yearStart === championship.yearEnd
-                ? String(championship.yearEnd)
-                : `${championship.yearStart}/${championship.yearEnd}`,
-            competitionType: championship.competitionType,
-            yearStart: championship.yearStart,
-            yearEnd: championship.yearEnd,
-          };
-
-          return [this.cycleKey(cycle), cycle];
-        }),
+        championships.map(({ seasonName }) => [
+          seasonName,
+          { name: seasonName },
+        ]),
       ).values(),
     ];
-  }
-
-  private cycleKey(cycle: {
-    competitionType: ECompetitionType;
-    yearStart: number;
-    yearEnd: number;
-  }): string {
-    return `${cycle.competitionType}:${cycle.yearStart}:${cycle.yearEnd}`;
   }
 }

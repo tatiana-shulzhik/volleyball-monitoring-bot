@@ -82,10 +82,10 @@ export class MatchesService {
   async synchronizeFrequently(
     stages: CompetitionStagesEntity[],
   ): Promise<void> {
-    const currentYear = new Date().getFullYear();
+    const now = new Date();
     const currentStages = stages.filter(
-      ({ championship: { season } }) =>
-        season.yearStart <= currentYear && season.yearEnd >= currentYear,
+      ({ championship }) =>
+        championship.startsAt <= now && championship.endsAt >= now,
     );
     const completedIds = currentStages.length
       ? await this.matchesRepository.findCompletedStageIds(
@@ -94,9 +94,9 @@ export class MatchesService {
       : [];
     const completed = new Set(completedIds);
     const relevant = stages.filter(
-      ({ id, championship: { season } }) =>
-        season.yearEnd >= currentYear &&
-        (season.yearStart > currentYear || !completed.has(id)),
+      ({ id, championship }) =>
+        championship.endsAt >= now &&
+        (championship.startsAt > now || !completed.has(id)),
     );
 
     this.logger.log(

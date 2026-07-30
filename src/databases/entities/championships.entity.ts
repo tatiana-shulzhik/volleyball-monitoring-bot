@@ -7,6 +7,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { ECompetitionType } from '../../shared/enums';
 import { SeasonsEntity } from './seasons.entity';
 import { CompetitionStagesEntity } from './competition-stages.entity';
 
@@ -26,6 +27,13 @@ export class ChampionshipsEntity {
 
   @Column({ name: 'ends_at', type: 'timestamptz' })
   endsAt: Date;
+
+  @Column({
+    name: 'competition_type',
+    type: 'varchar',
+    default: ECompetitionType.Club,
+  })
+  competitionType: ECompetitionType;
 
   @Index()
   @ManyToOne(() => SeasonsEntity, { nullable: false, onDelete: 'CASCADE' })

@@ -8,9 +8,7 @@ export function calculateChampionshipChanges(
   data: CalculateChampionshipChangesParams,
 ): ChampionshipChanges {
   const resolved = data.incoming.flatMap((championship) => {
-    const season = data.seasonsByCycle.get(
-      `${championship.competitionType}:${championship.yearStart}:${championship.yearEnd}`,
-    );
+    const season = data.seasonsByName.get(championship.seasonName);
 
     return season
       ? [
@@ -19,6 +17,7 @@ export function calculateChampionshipChanges(
             name: championship.name,
             startsAt: championship.startsAt,
             endsAt: championship.endsAt,
+            competitionType: championship.competitionType,
             season,
           },
         ]
@@ -32,6 +31,7 @@ export function calculateChampionshipChanges(
       stored.name !== championship.name ||
       stored.startsAt.getTime() !== championship.startsAt.getTime() ||
       stored.endsAt.getTime() !== championship.endsAt.getTime() ||
+      stored.competitionType !== championship.competitionType ||
       stored.season.id !== championship.season.id,
   });
 }

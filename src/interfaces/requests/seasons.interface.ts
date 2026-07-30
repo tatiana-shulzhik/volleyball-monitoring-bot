@@ -1,11 +1,7 @@
-import { ECompetitionType } from '../../shared/enums';
 import { ICevChampionship } from './championships.interface';
 
-export interface ICevSeason {
+export interface ISeason {
   name: string;
-  yearStart: number;
-  yearEnd: number;
-  competitionType: ECompetitionType;
 }
 
 export interface FetchedSeasonCatalog {

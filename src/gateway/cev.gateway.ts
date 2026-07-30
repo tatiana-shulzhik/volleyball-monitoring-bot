@@ -73,7 +73,11 @@ export class CevGateway {
           (year === selectedYear
             ? Promise.resolve(html)
             : this.fetchCalendarYear(html, year)
-          ).then((yearHtml) => ({ html: yearHtml, competitionType })),
+          ).then((yearHtml) => ({
+            html: yearHtml,
+            competitionType,
+            calendarYear: year,
+          })),
         );
     });
     const results = await Promise.allSettled(requests);
@@ -87,8 +91,24 @@ export class CevGateway {
       for (const championship of extractCalendarChampionships(
         result.value.html,
         result.value.competitionType,
+        result.value.calendarYear,
       )) {
         const existing = championships.get(championship.externalId);
+
+        if (
+          existing &&
+          Number(existing.seasonName) < Number(championship.seasonName)
+        ) {
+          continue;
+        }
+
+        if (
+          existing &&
+          Number(existing.seasonName) > Number(championship.seasonName)
+        ) {
+          championships.set(championship.externalId, championship);
+          continue;
+        }
 
         championships.set(championship.externalId, {
           ...championship,

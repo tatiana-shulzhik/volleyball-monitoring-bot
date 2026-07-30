@@ -76,11 +76,12 @@ export class ChampionshipsRepository {
     const repository =
       manager?.getRepository(ChampionshipsEntity) ?? this.repository;
     const values = championships.map(
-      ({ externalId, name, startsAt, endsAt, season }) => ({
+      ({ externalId, name, startsAt, endsAt, competitionType, season }) => ({
         externalId,
         name,
         startsAt,
         endsAt,
+        competitionType,
         season,
       }),
     );
