@@ -38,7 +38,7 @@ export class PlayerTeamLeaguesRepository {
       relations: {
         player: true,
         team: true,
-        league: { stage: { championship: { season: true } } },
+        league: { stage: { championship: true, season: true } },
       },
     });
   }
@@ -52,7 +52,7 @@ export class PlayerTeamLeaguesRepository {
       relations: {
         player: true,
         team: true,
-        league: { stage: { championship: { season: true } } },
+        league: { stage: { championship: true, season: true } },
       },
     });
   }

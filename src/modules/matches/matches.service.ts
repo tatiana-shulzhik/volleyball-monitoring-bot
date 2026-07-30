@@ -84,8 +84,11 @@ export class MatchesService {
   ): Promise<void> {
     const now = new Date();
     const currentStages = stages.filter(
-      ({ championship }) =>
-        championship.startsAt <= now && championship.endsAt >= now,
+      ({ startsAt, endsAt }) =>
+        startsAt !== null &&
+        endsAt !== null &&
+        startsAt <= now &&
+        endsAt >= now,
     );
     const completedIds = currentStages.length
       ? await this.matchesRepository.findCompletedStageIds(
@@ -94,9 +97,11 @@ export class MatchesService {
       : [];
     const completed = new Set(completedIds);
     const relevant = stages.filter(
-      ({ id, championship }) =>
-        championship.endsAt >= now &&
-        (championship.startsAt > now || !completed.has(id)),
+      ({ id, startsAt, endsAt }) =>
+        startsAt !== null &&
+        endsAt !== null &&
+        endsAt >= now &&
+        (startsAt > now || !completed.has(id)),
     );
 
     this.logger.log(

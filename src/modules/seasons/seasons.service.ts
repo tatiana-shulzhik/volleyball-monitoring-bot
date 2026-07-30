@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { ICevChampionship } from '../../interfaces/requests/championships.interface';
 import { ISeason } from '../../interfaces/requests/seasons.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { calculateChampionshipChanges } from '../../shared/championships.utils';
+import { calculateStageChanges } from '../../shared/competition-stages.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -20,6 +21,7 @@ export class SeasonsService {
     private readonly gateway: CevGateway,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
+    private readonly stagesRepository: CompetitionStagesRepository,
   ) {}
 
   discoverCurrentAndFutureSeasons(): Promise<ChampionshipsEntity[]> {
@@ -40,49 +42,85 @@ export class SeasonsService {
     );
     const fetched =
       await this.gateway.fetchSeasonCatalogSince(earliestSeasonYear);
-    const incoming = fetched.championships.filter(
+    const incomingStages = fetched.stages.filter(
       ({ seasonName }) => Number(seasonName) >= earliestSeasonYear,
     );
-    const incomingSeasons = this.toSeasons(incoming);
+    const championshipExternalIds = new Set(
+      incomingStages.map(
+        ({ championshipExternalId }) => championshipExternalId,
+      ),
+    );
+    const incomingChampionships = fetched.championships.filter(
+      ({ externalId }) => championshipExternalIds.has(externalId),
+    );
+    const incomingSeasons = this.toSeasons(incomingStages);
 
     await this.seasonsRepository.upsertMany(incomingSeasons);
     const seasons = (await this.seasonsRepository.findAll()).filter(
       ({ name }) => Number(name) >= earliestSeasonYear,
     );
-    const existing = await this.championshipsRepository.findBySeasonIds(
-      seasons.map(({ id }) => id),
-    );
-    const changes = calculateChampionshipChanges({
-      incoming,
-      existing,
-      seasonsByName: new Map(seasons.map((season) => [season.name, season])),
+    const existingChampionships =
+      await this.championshipsRepository.findByExternalIds([
+        ...championshipExternalIds,
+      ]);
+    const championshipChanges = calculateChampionshipChanges({
+      incoming: incomingChampionships,
+      existing: existingChampionships,
     });
 
     await applyEntityChanges({
       repository: this.championshipsRepository,
-      changes,
-      allowDeletion: fetched.isComplete,
+      changes: championshipChanges,
+      allowDeletion: false,
     });
     logEntityChanges({
       logger: this.logger,
       entityName: 'Championships',
-      changes,
+      changes: championshipChanges,
       isComplete: fetched.isComplete,
-      allowDeletion: true,
+      allowDeletion: false,
     });
 
-    return this.championshipsRepository.findBySeasonIds(
-      seasons.map(({ id }) => id),
+    const championships = await this.championshipsRepository.findByExternalIds([
+      ...championshipExternalIds,
+    ]);
+    const existingStages = await this.stagesRepository.findByChampionshipIds(
+      championships.map(({ id }) => id),
     );
+    const stageChanges = calculateStageChanges({
+      incoming: incomingStages,
+      existing: existingStages,
+      championshipsByExternalId: new Map(
+        championships.map((championship) => [
+          championship.externalId,
+          championship,
+        ]),
+      ),
+      seasonsByName: new Map(seasons.map((season) => [season.name, season])),
+    });
+
+    await applyEntityChanges({
+      repository: this.stagesRepository,
+      changes: stageChanges,
+      allowDeletion: false,
+    });
+    logEntityChanges({
+      logger: this.logger,
+      entityName: 'Calendar stages',
+      changes: stageChanges,
+      isComplete: fetched.isComplete,
+      allowDeletion: false,
+    });
+
+    return championships;
   }
 
-  private toSeasons(championships: ICevChampionship[]): ISeason[] {
+  private toSeasons(stages: Array<{ seasonName?: string }>): ISeason[] {
     return [
       ...new Map(
-        championships.map(({ seasonName }) => [
-          seasonName,
-          { name: seasonName },
-        ]),
+        stages.flatMap(({ seasonName }) =>
+          seasonName ? [[seasonName, { name: seasonName }] as const] : [],
+        ),
       ).values(),
     ];
   }

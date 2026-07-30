@@ -30,13 +30,13 @@ export class SeasonsRepository {
     return this.repository
       .createQueryBuilder('season')
       .where(
-        'EXISTS (SELECT 1 FROM championships championship ' +
-          'WHERE championship.season_id = season.id)',
+        'EXISTS (SELECT 1 FROM competition_stages stage ' +
+          'WHERE stage.season_id = season.id)',
       )
       .andWhere(
-        'NOT EXISTS (SELECT 1 FROM championships championship ' +
-          'WHERE championship.season_id = season.id ' +
-          'AND championship.ends_at >= :now)',
+        'NOT EXISTS (SELECT 1 FROM competition_stages stage ' +
+          'WHERE stage.season_id = season.id ' +
+          'AND stage.ends_at >= :now)',
         { now },
       )
       .orderBy('season.name', 'DESC')

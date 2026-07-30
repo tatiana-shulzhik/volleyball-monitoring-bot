@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { CompetitionStagesEntity } from '../databases/entities/competition-stages.entity';
-import { FetchedCompetitionStages } from '../interfaces/requests/competition-stages.interface';
+import {
+  FetchedCompetitionStages,
+  ICevCompetitionStage,
+} from '../interfaces/requests/competition-stages.interface';
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import { IFetchedPlayerStatistics } from '../interfaces/requests/player-statistics.interface';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
-import { FetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
+import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
 import { IPlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
@@ -47,7 +50,7 @@ export class CevGateway {
 
   async fetchSeasonCatalogSince(
     earliestYear: number,
-  ): Promise<FetchedSeasonCatalog> {
+  ): Promise<IFetchedSeasonCatalog> {
     const initialHtml = await this.http.get(CEV_CALENDAR_URL);
     const calendarResults = await Promise.allSettled([
       Promise.resolve({
@@ -82,50 +85,41 @@ export class CevGateway {
     });
     const results = await Promise.allSettled(requests);
     const championships = new Map<number, ICevChampionship>();
+    const stages = new Map<string, ICevCompetitionStage>();
 
     for (const result of results) {
       if (result.status === 'rejected') {
         continue;
       }
 
-      for (const championship of extractCalendarChampionships(
+      const extracted = extractCalendarChampionships(
         result.value.html,
         result.value.competitionType,
         result.value.calendarYear,
-      )) {
-        const existing = championships.get(championship.externalId);
+      );
+
+      for (const championship of extracted.championships) {
+        championships.set(championship.externalId, championship);
+      }
+
+      for (const stage of extracted.stages) {
+        const key = `${stage.championshipExternalId}:${stage.externalId}`;
+        const existing = stages.get(key);
 
         if (
           existing &&
-          Number(existing.seasonName) < Number(championship.seasonName)
+          Number(existing.seasonName) < Number(stage.seasonName)
         ) {
           continue;
         }
 
-        if (
-          existing &&
-          Number(existing.seasonName) > Number(championship.seasonName)
-        ) {
-          championships.set(championship.externalId, championship);
-          continue;
-        }
-
-        championships.set(championship.externalId, {
-          ...championship,
-          startsAt:
-            existing && existing.startsAt < championship.startsAt
-              ? existing.startsAt
-              : championship.startsAt,
-          endsAt:
-            existing && existing.endsAt > championship.endsAt
-              ? existing.endsAt
-              : championship.endsAt,
-        });
+        stages.set(key, stage);
       }
     }
 
     return {
       championships: [...championships.values()],
+      stages: [...stages.values()],
       isComplete:
         calendarResults.every((result) => result.status === 'fulfilled') &&
         results.every((result) => result.status === 'fulfilled'),

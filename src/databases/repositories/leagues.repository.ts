@@ -22,7 +22,7 @@ export class LeaguesRepository {
   findByStageIds(stageIds: number[]): Promise<LeaguesEntity[]> {
     return this.repository.find({
       where: { stage: { id: In(stageIds) } },
-      relations: { stage: { championship: { season: true } } },
+      relations: { stage: { championship: true, season: true } },
     });
   }
 
@@ -37,7 +37,7 @@ export class LeaguesRepository {
   findByExternalIds(externalIds: number[]): Promise<LeaguesEntity[]> {
     return this.repository.find({
       where: { externalId: In(externalIds) },
-      relations: { stage: { championship: { season: true } } },
+      relations: { stage: { championship: true, season: true } },
     });
   }
 

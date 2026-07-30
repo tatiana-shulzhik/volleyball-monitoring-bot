@@ -54,8 +54,8 @@ export class TelegramService implements OnApplicationBootstrap {
     });
 
     this.bot.action(TELEGRAM_CALLBACKS.menu.statistics, async (context) => {
-      const championships = await this.championshipsRepository.findActive(
-        new Date(),
+      const championships = await this.championshipsRepository.findBySeasonName(
+        String(new Date().getFullYear()),
       );
 
       await showList(context, {
@@ -119,7 +119,10 @@ export class TelegramService implements OnApplicationBootstrap {
       async (context) => {
         const championshipId = Number(context.match[1]);
         const stages =
-          await this.stagesRepository.findByChampionshipId(championshipId);
+          await this.stagesRepository.findByChampionshipIdAndSeasonName(
+            championshipId,
+            String(new Date().getFullYear()),
+          );
 
         await showList(context, {
           items: stages.map(({ id, name }) => ({
@@ -233,8 +236,10 @@ export class TelegramService implements OnApplicationBootstrap {
       async (context) => {
         const championshipId = Number(context.match[1]);
         const seasonId = Number(context.match[2]);
-        const stages =
-          await this.stagesRepository.findByChampionshipId(championshipId);
+        const stages = await this.stagesRepository.findByChampionshipId(
+          championshipId,
+          seasonId,
+        );
 
         await showList(context, {
           items: stages.map(({ id, name }) => ({

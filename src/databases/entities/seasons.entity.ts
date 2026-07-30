@@ -1,5 +1,5 @@
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { ChampionshipsEntity } from './championships.entity';
+import { CompetitionStagesEntity } from './competition-stages.entity';
 
 @Entity({ name: 'seasons' })
 export class SeasonsEntity {
@@ -9,6 +9,6 @@ export class SeasonsEntity {
   @Column({ unique: true })
   name: string;
 
-  @OneToMany(() => ChampionshipsEntity, (championship) => championship.season)
-  championships: ChampionshipsEntity[];
+  @OneToMany(() => CompetitionStagesEntity, (stage) => stage.season)
+  stages: CompetitionStagesEntity[];
 }

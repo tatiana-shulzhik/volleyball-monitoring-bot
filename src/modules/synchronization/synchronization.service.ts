@@ -132,15 +132,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
 
   private async initializeEmptyCatalog(): Promise<void> {
     try {
-      if (!(await this.seasonsRepository.hasAny())) {
-        this.logger.log(
-          'Empty catalog detected; starting initial synchronization',
-        );
-        await this.runExclusive(() =>
-          this.performStoredCatalogSynchronization(),
-        );
-        this.logger.log('Initial catalog synchronization completed');
-      }
+      this.logger.log('Starting full catalog synchronization');
+      await this.runExclusive(() => this.performStoredCatalogSynchronization());
+      this.logger.log('Full catalog synchronization completed');
 
       await this.runExclusive(() =>
         this.synchronizeIncompletePlayerStatistics(),

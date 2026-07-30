@@ -1,4 +1,5 @@
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
+import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { ECompetitionType } from './enums';
 
 const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
@@ -78,19 +79,20 @@ export function extractCalendarChampionships(
   html: string,
   competitionType: ECompetitionType,
   calendarYear: number,
-): ICevChampionship[] {
+): { championships: ICevChampionship[]; stages: ICevCompetitionStage[] } {
   const championships = new Map<number, ICevChampionship>();
+  const stages = new Map<string, ICevCompetitionStage>();
   const rowRegex = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
   const linkRegex =
-    /<a\b(?=[^>]*href=['"][^'"]*competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=\d+[^'"]*['"])[^>]*>([\s\S]*?)<\/a>/gi;
+    /<a\b(?=[^>]*href=['"][^'"]*competition\.aspx\?ID=(\d+)(?:&amp;|&)PID=(\d+)[^'"]*['"])[^>]*>([\s\S]*?)<\/a>/gi;
 
   for (const row of html.matchAll(rowRegex)) {
     const links = [...row[1].matchAll(linkRegex)];
-    const dateRange = cleanText(links[0]?.[2] ?? '').match(
+    const dateRange = cleanText(links[0]?.[3] ?? '').match(
       /^(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})$/,
     );
     const match = links.find((link) =>
-      /\b20\d{2}\s*\|/.test(cleanText(link[2])),
+      /\b20\d{2}\s*\|/.test(cleanText(link[3])),
     );
 
     if (!match || !dateRange) {
@@ -98,31 +100,46 @@ export function extractCalendarChampionships(
     }
 
     const externalId = Number(match[1]);
-    const text = cleanText(match[2]);
+    const stageExternalId = Number(match[2]);
+    const text = cleanText(match[3]);
     const competition = text.match(
-      /^(.*?\b(20\d{2})\s*\|\s*(?:Men|Women))(?:\s*-\s*.*)?$/i,
+      /^(.*?\b(20\d{2})\s*\|\s*(?:Men|Women))(?:\s*-\s*(.*))?$/i,
     );
 
-    if (!competition) {
+    if (!competition || stageExternalId < 0) {
       continue;
     }
 
     const startsAt = parseCevDate(dateRange[1], false);
     const endsAt = parseCevDate(dateRange[2], true);
-    const existing = championships.get(externalId);
+    const stageKey = `${externalId}:${stageExternalId}`;
+    const existingStage = stages.get(stageKey);
 
     championships.set(externalId, {
       externalId,
       name: competition[1].trim(),
       competitionType,
+    });
+    stages.set(stageKey, {
+      externalId: stageExternalId,
+      name: competition[3]?.trim() || competition[1].trim(),
+      championshipExternalId: externalId,
       seasonName: String(calendarYear),
       startsAt:
-        existing && existing.startsAt < startsAt ? existing.startsAt : startsAt,
-      endsAt: existing && existing.endsAt > endsAt ? existing.endsAt : endsAt,
+        existingStage && existingStage.startsAt! < startsAt
+          ? existingStage.startsAt
+          : startsAt,
+      endsAt:
+        existingStage && existingStage.endsAt! > endsAt
+          ? existingStage.endsAt
+          : endsAt,
     });
   }
 
-  return [...championships.values()];
+  return {
+    championships: [...championships.values()],
+    stages: [...stages.values()],
+  };
 }
 
 function parseCevDate(value: string, endOfDay: boolean): Date {
