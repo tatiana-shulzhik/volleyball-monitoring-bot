@@ -13,6 +13,7 @@ import { SeasonsRepository } from '../../databases/repositories/seasons.reposito
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
+import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import {
   INITIAL_SYNCHRONIZATION_KEY,
   MOSCOW_TIME_ZONE,
@@ -57,7 +58,13 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async synchronizeCurrentCatalogByCron(): Promise<void> {
-    await this.runExclusive(() => this.synchronizeCatalog(), false);
+    await this.runExclusive(
+      async () =>
+        this.synchronizeCatalog(
+          await this.seasonsService.discoverCurrentAndFutureSeasons(),
+        ),
+      false,
+    );
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM, {
@@ -126,7 +133,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
 
       this.logger.log('Starting full catalog synchronization');
       await this.runExclusive(async () => {
-        await this.synchronizeCatalog();
+        await this.synchronizeCatalog(
+          await this.seasonsService.synchronizeStoredRange(),
+        );
         await this.performMatchesSynchronization(false);
       });
       this.logger.log('Full catalog synchronization completed');
@@ -145,8 +154,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
     }
   }
 
-  private async synchronizeCatalog(): Promise<void> {
-    const seasonCatalog = await this.seasonsService.synchronizeStoredRange();
+  private async synchronizeCatalog(
+    seasonCatalog: SynchronizedSeasonCatalog,
+  ): Promise<void> {
     const stages = await this.championshipsService.synchronize(seasonCatalog);
     const leagueCatalog = await this.leaguesService.synchronize(stages);
     const teams = await this.teamsService.synchronize(leagueCatalog);
