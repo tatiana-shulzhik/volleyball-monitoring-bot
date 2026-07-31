@@ -31,6 +31,8 @@ export function calculateMatchChanges(
   return calculateEntityChanges({
     incoming: resolved,
     existing,
+    keyOfExisting: ({ externalId }) => externalId,
+    keyOfIncoming: ({ externalId }) => externalId,
     hasChanges: (stored, match) =>
       stored.league.id !== match.league.id ||
       stored.homeTeam.id !== match.homeTeam.id ||

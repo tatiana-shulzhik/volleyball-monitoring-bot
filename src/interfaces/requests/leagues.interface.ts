@@ -6,6 +6,7 @@ import { ICevTeam } from './teams.interface';
 export interface ICevLeague {
   externalId: number;
   name: string;
+  championshipExternalId: number;
   stageExternalId: number;
 }
 
@@ -18,7 +19,7 @@ export interface FetchedLeagueCatalog {
 export interface CalculateLeagueChangesParams {
   incoming: ICevLeague[];
   existing: LeaguesEntity[];
-  stagesByExternalId: Map<number, CompetitionStagesEntity>;
+  stagesByKey: Map<string, CompetitionStagesEntity>;
 }
 
 export type LeagueChanges = EntityChanges<

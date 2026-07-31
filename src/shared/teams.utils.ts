@@ -23,6 +23,8 @@ export function calculateTeamChanges(
   return calculateEntityChanges({
     incoming: uniqueTeams,
     existing,
+    keyOfExisting: ({ externalId }) => externalId,
+    keyOfIncoming: ({ externalId }) => externalId,
     hasChanges: (stored, team) => stored.name !== team.name,
   });
 }

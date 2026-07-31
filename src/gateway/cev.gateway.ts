@@ -37,6 +37,7 @@ import {
   getCalendarMetadata,
 } from '../shared/cev-calendar.utils';
 import { ECompetitionType } from '../shared/enums';
+import { createCompetitionStageKey } from '../shared/competition-stages.utils';
 import { parseSeasonEndYear } from '../shared/season.utils';
 import {
   CEV_HTTP_CONCURRENCY,
@@ -116,7 +117,10 @@ export class CevGateway {
       }
 
       for (const stage of extracted.stages) {
-        const key = `${stage.championshipExternalId}:${stage.externalId}`;
+        const key = createCompetitionStageKey(
+          stage.championshipExternalId,
+          stage.externalId,
+        );
         const existing = stages.get(key);
 
         if (
@@ -170,7 +174,11 @@ export class CevGateway {
         const html = await this.http.get(
           createCompetitionUrl(stage.championship.externalId, stage.externalId),
         );
-        const leagues = extractLeagues(html, stage.externalId);
+        const leagues = extractLeagues(
+          html,
+          stage.externalId,
+          stage.championship.externalId,
+        );
 
         return {
           leagues,

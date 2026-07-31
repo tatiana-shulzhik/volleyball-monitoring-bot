@@ -7,6 +7,7 @@ import { MatchesRepository } from '../../databases/repositories/matches.reposito
 import { CevGateway } from '../../gateway/cev.gateway';
 import { PlayerStatisticsEntity } from '../../databases/entities/player-statistics.entity';
 import { IPlayerStatisticsSynchronizationResult } from '../../interfaces/responses/player-statistics.interface';
+import { createCompetitionStageKey } from '../../shared/competition-stages.utils';
 import {
   createPlayerRelationKey,
   uniquePlayerStatistics,
@@ -51,15 +52,20 @@ export class PlayerStatisticsService {
     const incompleteAttackStageIds = new Set<number>();
     const stagesByExternalKey = new Map(
       stages.map((stage) => [
-        `${stage.championship.externalId}:${stage.externalId}`,
+        createCompetitionStageKey(
+          stage.championship.externalId,
+          stage.externalId,
+        ),
         stage,
       ]),
     );
     const relationsByPlayer = new Map(
       relations.map((relation) => [
         createPlayerRelationKey(
-          `${relation.league.stage.championship.externalId}:` +
+          createCompetitionStageKey(
+            relation.league.stage.championship.externalId,
             relation.league.stage.externalId,
+          ),
           relation.team.name,
           relation.player.fullName,
         ),
@@ -101,9 +107,10 @@ export class PlayerStatisticsService {
         continue;
       }
 
-      const sourceKey =
-        `${match.league.stage.championship.externalId}:` +
-        match.league.stage.externalId;
+      const sourceKey = createCompetitionStageKey(
+        match.league.stage.championship.externalId,
+        match.league.stage.externalId,
+      );
 
       for (const [team, players] of [
         [match.homeTeam, result.value.home],
@@ -139,9 +146,10 @@ export class PlayerStatisticsService {
       }
 
       synchronizedStageExternalIds.push(result.value.stageExternalId);
-      const sourceKey =
-        `${result.value.championshipExternalId}:` +
-        result.value.stageExternalId;
+      const sourceKey = createCompetitionStageKey(
+        result.value.championshipExternalId,
+        result.value.stageExternalId,
+      );
       const stage = stagesByExternalKey.get(sourceKey);
 
       if (!stage) {

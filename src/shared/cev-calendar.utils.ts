@@ -1,6 +1,7 @@
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { createPostbackForm } from './aspnet-form.utils';
+import { createCompetitionStageKey } from './competition-stages.utils';
 import { ECompetitionType } from './enums';
 import { getCompetitionSeasonName } from './season.utils';
 
@@ -102,7 +103,7 @@ export function extractCalendarChampionships(
 
     const startsAt = parseCevDate(dateRange[1], false);
     const endsAt = parseCevDate(dateRange[2], true);
-    const stageKey = `${externalId}:${stageExternalId}`;
+    const stageKey = createCompetitionStageKey(externalId, stageExternalId);
     const existingStage = stages.get(stageKey);
 
     championships.set(externalId, {

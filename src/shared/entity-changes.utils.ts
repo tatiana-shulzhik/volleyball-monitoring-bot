@@ -4,21 +4,22 @@ import {
 } from '../interfaces/responses/entity-changes.interface';
 
 export function calculateEntityChanges<
-  TEntity extends { id: number; externalId: string | number },
-  TIncoming extends { externalId: string | number },
+  TEntity extends { id: number },
+  TIncoming,
+  TKey,
 >(
-  data: CalculateEntityChangesParams<TEntity, TIncoming>,
+  data: CalculateEntityChangesParams<TEntity, TIncoming, TKey>,
 ): EntityChanges<TEntity, TIncoming> {
-  const { incoming, existing, hasChanges } = data;
-  const incomingIds = new Set(incoming.map(({ externalId }) => externalId));
-  const existingByExternalId = new Map(
-    existing.map((entity) => [entity.externalId, entity]),
+  const { incoming, existing, keyOfExisting, keyOfIncoming, hasChanges } = data;
+  const incomingKeys = new Set(incoming.map(keyOfIncoming));
+  const existingByKey = new Map(
+    existing.map((entity) => [keyOfExisting(entity), entity]),
   );
   const missing: TIncoming[] = [];
   const changed: TEntity[] = [];
 
   for (const item of incoming) {
-    const stored = existingByExternalId.get(item.externalId);
+    const stored = existingByKey.get(keyOfIncoming(item));
 
     if (!stored) {
       missing.push(item);
@@ -28,7 +29,7 @@ export function calculateEntityChanges<
   }
 
   const obsoleteIds = existing
-    .filter(({ externalId }) => !incomingIds.has(externalId))
+    .filter((entity) => !incomingKeys.has(keyOfExisting(entity)))
     .map(({ id }) => id);
 
   return { missing, changed, obsoleteIds };

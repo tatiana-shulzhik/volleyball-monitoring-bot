@@ -5,7 +5,10 @@ import { CompetitionStagesRepository } from '../../databases/repositories/compet
 import { CevGateway } from '../../gateway/cev.gateway';
 import { ICevCompetitionStage } from '../../interfaces/requests/competition-stages.interface';
 import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
-import { calculateStageChanges } from '../../shared/competition-stages.utils';
+import {
+  calculateStageChanges,
+  createCompetitionStageKey,
+} from '../../shared/competition-stages.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -75,10 +78,21 @@ export class ChampionshipsService {
     isComplete: boolean,
   ): ICevCompetitionStage[] {
     const calendarByKey = new Map(
-      calendarStages.map((stage) => [this.getStageKey(stage), stage]),
+      calendarStages.map((stage) => [
+        createCompetitionStageKey(
+          stage.championshipExternalId,
+          stage.externalId,
+        ),
+        stage,
+      ]),
     );
     const enrichedDetailedStages = detailedStages.map((stage) => {
-      const calendarStage = calendarByKey.get(this.getStageKey(stage));
+      const calendarStage = calendarByKey.get(
+        createCompetitionStageKey(
+          stage.championshipExternalId,
+          stage.externalId,
+        ),
+      );
 
       return {
         ...stage,
@@ -95,16 +109,13 @@ export class ChampionshipsService {
     return [
       ...new Map(
         [...calendarStages, ...enrichedDetailedStages].map((stage) => [
-          this.getStageKey(stage),
+          createCompetitionStageKey(
+            stage.championshipExternalId,
+            stage.externalId,
+          ),
           stage,
         ]),
       ).values(),
     ];
-  }
-
-  private getStageKey(
-    stage: Pick<ICevCompetitionStage, 'externalId' | 'championshipExternalId'>,
-  ): string {
-    return `${stage.championshipExternalId}:${stage.externalId}`;
   }
 }
