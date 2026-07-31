@@ -49,17 +49,32 @@ export function createTeamStatistics(
     return null;
   }
 
-  const statisticsByPlayerId = statistics.reduce((result, item) => {
-    const stored = result.get(item.player.id) ?? {
-      points: 0,
-      setsPlayed: 0,
-    };
+  const statisticsByPlayerId = statistics.reduce(
+    (result, item) => {
+      const stored = result.get(item.player.id) ?? {
+        points: 0,
+        setsPlayed: 0,
+        attackAttempts: 0,
+        successfulAttacks: 0,
+      };
 
-    stored.points += item.points;
-    stored.setsPlayed += item.setsPlayed;
-    result.set(item.player.id, stored);
-    return result;
-  }, new Map<number, { points: number; setsPlayed: number }>());
+      stored.points += item.points;
+      stored.setsPlayed += item.setsPlayed;
+      stored.attackAttempts += item.attackAttempts;
+      stored.successfulAttacks += item.successfulAttacks;
+      result.set(item.player.id, stored);
+      return result;
+    },
+    new Map<
+      number,
+      {
+        points: number;
+        setsPlayed: number;
+        attackAttempts: number;
+        successfulAttacks: number;
+      }
+    >(),
+  );
   const players = relations
     .map((relation) => {
       const playerStatistics = statisticsByPlayerId.get(relation.player.id);
@@ -70,6 +85,8 @@ export function createTeamStatistics(
         position: relation.position,
         points: playerStatistics?.points ?? null,
         setsPlayed: playerStatistics?.setsPlayed ?? null,
+        attackAttempts: playerStatistics?.attackAttempts ?? null,
+        successfulAttacks: playerStatistics?.successfulAttacks ?? null,
       };
     })
     .sort(
@@ -95,18 +112,26 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
       rating !== null && player.points !== null && player.setsPlayed !== null
         ? `${rating.toFixed(2)} (${player.points}/${player.setsPlayed})`
         : '—';
+    const attacks =
+      player.attackAttempts !== null &&
+      player.successfulAttacks !== null &&
+      player.attackAttempts > 0
+        ? `${player.successfulAttacks}/${player.attackAttempts} ` +
+          `(${((player.successfulAttacks / player.attackAttempts) * 100).toFixed(0)}%)`
+        : '—';
 
     return [
       String(number).padStart(2),
       truncate(player.fullName, 22).padEnd(22),
       truncate(position, 3).padEnd(3),
-      statistics,
+      statistics.padEnd(18),
+      attacks,
     ].join(' ');
   });
 
   const table = [
-    ' № Игрок                  Поз Рейтинг (очки/сеты)',
-    '──────────────────────────────────────────────────────',
+    ' № Игрок                  Поз Рейтинг (очки/сеты) Атака (успешные/попытки)',
+    '──────────────────────────────────────────────────────────────────────────',
     ...rows,
   ].join('\n');
 

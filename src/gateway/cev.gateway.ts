@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChampionshipsEntity } from '../databases/entities/championships.entity';
 import { CompetitionStagesEntity } from '../databases/entities/competition-stages.entity';
+import { MatchEntity } from '../databases/entities/match.entity';
 import {
   FetchedCompetitionStages,
   ICevCompetitionStage,
@@ -8,7 +9,10 @@ import {
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
-import { IFetchedPlayerStatistics } from '../interfaces/requests/player-statistics.interface';
+import {
+  IFetchedMatchAttackStatistics,
+  IFetchedPlayerStatistics,
+} from '../interfaces/requests/player-statistics.interface';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
 import { IPlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
@@ -16,7 +20,10 @@ import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
 import { extractPlayers } from '../shared/cev-players.utils';
-import { extractPlayerStatistics } from '../shared/cev-player-statistics.utils';
+import {
+  extractPlayerAttackStatistics,
+  extractPlayerStatistics,
+} from '../shared/cev-player-statistics.utils';
 import {
   createStatisticsPhaseForm,
   getStatisticsPhaseIds,
@@ -35,6 +42,7 @@ import {
   CEV_CALENDAR_URL,
   createCompetitionUrl,
   createMatchesUrl,
+  createMatchStatisticsUrl,
   createPlayerStatisticsUrl,
   createTeamUrl,
 } from '../shared/consts/constants';
@@ -296,6 +304,26 @@ export class CevGateway {
           championshipExternalId,
           stageExternalId: stage.externalId,
           statistics: extractPlayerStatistics(phaseHtml),
+        };
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+  }
+
+  async fetchMatchAttackStatistics(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchAttackStatistics>[]> {
+    return this.mapSettled({
+      items: matches,
+      mapper: async (match) => {
+        const html = await this.http.get(
+          createMatchStatisticsUrl(match.externalId),
+        );
+
+        return {
+          matchExternalId: match.externalId,
+          home: extractPlayerAttackStatistics(html, 'casa'),
+          away: extractPlayerAttackStatistics(html, 'ospiti'),
         };
       },
       concurrency: CEV_HTTP_CONCURRENCY,

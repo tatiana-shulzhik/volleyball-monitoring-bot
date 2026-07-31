@@ -1,4 +1,7 @@
-import { ICevPlayerStatistics } from '../interfaces/requests/player-statistics.interface';
+import {
+  ICevPlayerAttackStatistics,
+  ICevPlayerStatistics,
+} from '../interfaces/requests/player-statistics.interface';
 import { createPostbackForm } from './aspnet-form.utils';
 
 const PHASE_CONTROL = 'ctl00$Content_Left$DDL_Phases';
@@ -67,9 +70,76 @@ export function extractPlayerStatistics(html: string): ICevPlayerStatistics[] {
   return result;
 }
 
+export function extractPlayerAttackStatistics(
+  html: string,
+  side: 'casa' | 'ospiti',
+): ICevPlayerAttackStatistics[] {
+  const values = new Map<
+    number,
+    Partial<ICevPlayerAttackStatistics> & { successfulPercentage?: number }
+  >();
+  const field =
+    /id=["']GV_elenco_(casa|ospiti|fuori)_L_(Nome|SpikeTot|SpikePos0?)_(\d+)["'][^>]*>([\s\S]*?)</gi;
+
+  for (const match of html.matchAll(field)) {
+    const sourceSide =
+      match[1].toLowerCase() === 'fuori' ? 'ospiti' : match[1].toLowerCase();
+
+    if (sourceSide !== side) {
+      continue;
+    }
+
+    const index = Number(match[3]);
+    const row = values.get(index) ?? {};
+    const value = cleanText(match[4]);
+
+    if (match[2] === 'Nome') {
+      row.playerName = value;
+    } else if (match[2] === 'SpikeTot') {
+      row.attempts = parseInteger(value) ?? 0;
+    } else if (match[2] === 'SpikePos0') {
+      const successful = parseInteger(value);
+
+      if (successful !== null) {
+        row.successful = successful;
+      }
+    } else {
+      const successfulPercentage = parseInteger(value);
+
+      if (successfulPercentage !== null) {
+        row.successfulPercentage = successfulPercentage;
+      }
+    }
+
+    values.set(index, row);
+  }
+
+  return [...values.values()].flatMap((row) => {
+    if (!row.playerName || row.attempts === undefined) {
+      return [];
+    }
+
+    const successful =
+      row.successful ??
+      Math.round((row.attempts * (row.successfulPercentage ?? 0)) / 100);
+    return [
+      {
+        playerName: row.playerName,
+        attempts: row.attempts,
+        successful,
+      },
+    ];
+  });
+}
+
 function parseNumber(value: string | undefined): number | null {
   const parsed = Number(value?.replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseInteger(value: string | undefined): number | null {
+  const match = value?.match(/\d+/);
+  return match ? Number(match[0]) : null;
 }
 
 function cleanText(value: string): string {

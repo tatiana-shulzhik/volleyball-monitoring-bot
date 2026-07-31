@@ -12,3 +12,15 @@ export interface IFetchedPlayerStatistics {
   stageExternalId: number;
   statistics: ICevPlayerStatistics[];
 }
+
+export interface ICevPlayerAttackStatistics {
+  playerName: string;
+  attempts: number;
+  successful: number;
+}
+
+export interface IFetchedMatchAttackStatistics {
+  matchExternalId: string;
+  home: ICevPlayerAttackStatistics[];
+  away: ICevPlayerAttackStatistics[];
+}
