@@ -40,6 +40,12 @@ export class PlayerStatisticsEntity {
   @Column({ name: 'sets_played', type: 'smallint' })
   setsPlayed: number;
 
+  @Column({ name: 'attack_attempts', type: 'integer', default: 0 })
+  attackAttempts: number;
+
+  @Column({ name: 'successful_attacks', type: 'integer', default: 0 })
+  successfulAttacks: number;
+
   @Column({
     name: 'source_updated_at',
     type: 'timestamptz',

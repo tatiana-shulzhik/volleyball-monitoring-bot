@@ -5,6 +5,7 @@ import {
   DataSource,
   EntityManager,
   FindOptionsWhere,
+  In,
   IsNull,
   Repository,
 } from 'typeorm';
@@ -102,5 +103,19 @@ export class MatchesRepository {
       .getRawMany();
 
     return rows.map(({ championship_id }) => Number(championship_id));
+  }
+
+  findFinishedByStageIds(stageIds: number[]): Promise<MatchEntity[]> {
+    return this.repository.find({
+      where: {
+        status: EMatchStatus.Finished,
+        league: { stage: { id: In(stageIds) } },
+      },
+      relations: {
+        league: { stage: { championship: true } },
+        homeTeam: true,
+        awayTeam: true,
+      },
+    });
   }
 }

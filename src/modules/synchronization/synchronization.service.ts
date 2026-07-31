@@ -112,8 +112,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
   }
 
   private async synchronizeCurrentCatalog(): Promise<void> {
-    const championships =
-      await this.seasonsService.discoverCurrentAndFutureSeasons();
+    const championships = await this.seasonsService.synchronizeStoredRange();
     const stages = await this.championshipsService.synchronize(championships);
     const leagueCatalog = await this.leaguesService.synchronize(stages);
     const synchronizedTeams =

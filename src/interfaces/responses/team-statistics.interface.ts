@@ -4,6 +4,8 @@ export interface ITeamPlayerStatistics {
   position: string | null;
   points: number | null;
   setsPlayed: number | null;
+  attackAttempts: number | null;
+  successfulAttacks: number | null;
 }
 
 export interface ITeamStatistics {
