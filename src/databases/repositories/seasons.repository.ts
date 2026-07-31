@@ -7,6 +7,7 @@ import {
   Repository,
 } from 'typeorm';
 import { ISeason } from '../../interfaces/requests/seasons.interface';
+import { ECompetitionType } from '../../shared/enums';
 import { SeasonsEntity } from '../entities/seasons.entity';
 
 @Injectable()
@@ -34,18 +35,28 @@ export class SeasonsRepository {
     return repository.find({ where });
   }
 
-  findFinished(now: Date): Promise<SeasonsEntity[]> {
+  findFinished(
+    now: Date,
+    competitionType: ECompetitionType,
+  ): Promise<SeasonsEntity[]> {
     return this.repository
       .createQueryBuilder('season')
       .where(
         'EXISTS (SELECT 1 FROM competition_stages stage ' +
-          'WHERE stage.season_id = season.id)',
+          'INNER JOIN championships championship ' +
+          'ON championship.id = stage.championship_id ' +
+          'WHERE stage.season_id = season.id ' +
+          'AND championship.competition_type = :competitionType)',
+        { competitionType },
       )
       .andWhere(
         'NOT EXISTS (SELECT 1 FROM competition_stages stage ' +
+          'INNER JOIN championships championship ' +
+          'ON championship.id = stage.championship_id ' +
           'WHERE stage.season_id = season.id ' +
+          'AND championship.competition_type = :competitionType ' +
           'AND stage.ends_at >= :now)',
-        { now },
+        { now, competitionType },
       )
       .orderBy('season.name', 'DESC')
       .getMany();
