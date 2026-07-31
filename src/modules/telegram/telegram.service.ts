@@ -16,7 +16,11 @@ import {
   TELEGRAM_CALLBACKS,
 } from './telegram-callbacks';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
-import { MAIN_MENU, showList } from './telegram-menu.utils';
+import {
+  formatChampionshipButton,
+  MAIN_MENU,
+  showList,
+} from './telegram-menu.utils';
 
 @Injectable()
 export class TelegramService implements OnApplicationBootstrap {
@@ -82,7 +86,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
       await showList(context, {
         items: championships.map(({ id, name }) => ({
-          text: name,
+          text: formatChampionshipButton(name),
           callbackData: TELEGRAM_CALLBACKS.statistics.championship(id),
         })),
         message: TELEGRAM_MESSAGES.championships.select,
@@ -128,7 +132,7 @@ export class TelegramService implements OnApplicationBootstrap {
 
         await showList(context, {
           items: championships.map(({ id, name }) => ({
-            text: name,
+            text: formatChampionshipButton(name),
             callbackData: TELEGRAM_CALLBACKS.retroStatistics.championship(
               id,
               seasonId,

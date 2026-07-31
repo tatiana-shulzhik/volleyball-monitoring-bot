@@ -122,28 +122,28 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
 
     return (
       '<tr>' +
-      `<td align="right">${number}</td>` +
+      `<td align="center">${number}</td>` +
       `<td>${escapeHtml(player.fullName)}</td>` +
+      `<td align="center">${statistics}</td>` +
       `<td align="center">${position}</td>` +
-      `<td align="right">${statistics}</td>` +
-      `<td align="right">${attacks}</td>` +
+      `<td align="center">${attacks}</td>` +
       '</tr>'
     );
   });
 
   return [
-    `<h3>🏐 ${escapeHtml(data.teamName)}</h3>`,
+    `<p><b>🏐 ${escapeHtml(data.teamName)}</b></p>`,
     `<p>🏆 ${escapeHtml(data.leagueName)}</p>`,
-    '<table bordered striped>',
+    '<small><table bordered striped>',
     '<tr>' +
-      '<th>№</th>' +
-      '<th>Игрок</th>' +
-      '<th>Поз</th>' +
-      '<th>Рейтинг<br>(очки/сеты)</th>' +
-      '<th>Атака<br>(успешные/попытки)</th>' +
+      '<th align="center">№</th>' +
+      '<th align="center">Игрок</th>' +
+      '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
+      '<th align="center">Поз</th>' +
+      '<th align="center">Атака<br>(успешные/попытки)</th>' +
       '</tr>',
     ...rows,
-    '</table>',
+    '</table></small>',
   ].join('');
 }
 
