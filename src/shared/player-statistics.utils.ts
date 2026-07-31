@@ -120,26 +120,31 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
           `(${((player.successfulAttacks / player.attackAttempts) * 100).toFixed(0)}%)`
         : '—';
 
-    return [
-      String(number).padStart(2),
-      truncate(player.fullName, 22).padEnd(22),
-      truncate(position, 3).padEnd(3),
-      statistics.padEnd(18),
-      attacks,
-    ].join(' ');
+    return (
+      '<tr>' +
+      `<td align="right">${number}</td>` +
+      `<td>${escapeHtml(player.fullName)}</td>` +
+      `<td align="center">${position}</td>` +
+      `<td align="right">${statistics}</td>` +
+      `<td align="right">${attacks}</td>` +
+      '</tr>'
+    );
   });
 
-  const table = [
-    ' № Игрок                  Поз Рейтинг (очки/сеты) Атака (успешные/попытки)',
-    '──────────────────────────────────────────────────────────────────────────',
-    ...rows,
-  ].join('\n');
-
   return [
-    `<b>🏐 ${escapeHtml(data.teamName)}</b>`,
-    `🏆 ${escapeHtml(data.leagueName)}`,
-    `<pre>${escapeHtml(table)}</pre>`,
-  ].join('\n\n');
+    `<h3>🏐 ${escapeHtml(data.teamName)}</h3>`,
+    `<p>🏆 ${escapeHtml(data.leagueName)}</p>`,
+    '<table bordered striped>',
+    '<tr>' +
+      '<th>№</th>' +
+      '<th>Игрок</th>' +
+      '<th>Поз</th>' +
+      '<th>Рейтинг<br>(очки/сеты)</th>' +
+      '<th>Атака<br>(успешные/попытки)</th>' +
+      '</tr>',
+    ...rows,
+    '</table>',
+  ].join('');
 }
 
 function formatPlayerPosition(position: string | null): string {
@@ -164,14 +169,4 @@ function escapeHtml(value: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
-}
-
-function truncate(value: string, maxLength: number): string {
-  const characters = [...value];
-
-  if (characters.length <= maxLength) {
-    return value;
-  }
-
-  return `${characters.slice(0, maxLength - 1).join('')}…`;
 }

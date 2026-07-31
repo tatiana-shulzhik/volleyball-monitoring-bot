@@ -291,34 +291,55 @@ export class TelegramService implements OnApplicationBootstrap {
           leagueId,
         );
 
+        const keyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              TELEGRAM_MESSAGES.teams.back,
+              seasonId
+                ? TELEGRAM_CALLBACKS.retroStatistics.league(
+                    leagueId,
+                    stageId,
+                    championshipId,
+                    seasonId,
+                  )
+                : TELEGRAM_CALLBACKS.statistics.league(
+                    leagueId,
+                    stageId,
+                    championshipId,
+                  ),
+            ),
+          ],
+        ]);
+
         await context.answerCbQuery();
-        await context.editMessageText(
-          statistics
-            ? formatTeamStatistics(statistics)
-            : TELEGRAM_MESSAGES.teams.statisticsEmpty,
-          {
-            parse_mode: 'HTML',
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  TELEGRAM_MESSAGES.teams.back,
-                  seasonId
-                    ? TELEGRAM_CALLBACKS.retroStatistics.league(
-                        leagueId,
-                        stageId,
-                        championshipId,
-                        seasonId,
-                      )
-                    : TELEGRAM_CALLBACKS.statistics.league(
-                        leagueId,
-                        stageId,
-                        championshipId,
-                      ),
-                ),
-              ],
-            ]),
-          },
-        );
+
+        if (!statistics) {
+          await context.editMessageText(
+            TELEGRAM_MESSAGES.teams.statisticsEmpty,
+            keyboard,
+          );
+          return;
+        }
+
+        const message = context.callbackQuery.message;
+
+        if (!message) {
+          return;
+        }
+
+        const editRichMessage = context.telegram.callApi.bind(
+          context.telegram,
+        ) as unknown as (
+          method: string,
+          payload: Record<string, unknown>,
+        ) => Promise<unknown>;
+
+        await editRichMessage('editMessageText', {
+          chat_id: message.chat.id,
+          message_id: message.message_id,
+          rich_message: { html: formatTeamStatistics(statistics) },
+          reply_markup: keyboard.reply_markup,
+        });
       },
     );
 
