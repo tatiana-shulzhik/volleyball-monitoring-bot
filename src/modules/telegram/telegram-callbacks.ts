@@ -8,6 +8,7 @@ export const TELEGRAM_CALLBACKS = {
     back: 'menu:back',
   },
   statistics: {
+    season: 'statistics:season',
     championship: (championshipId: number) =>
       `statistics:championship:${championshipId}`,
     stage: (stageId: number, championshipId: number) =>
