@@ -1,14 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
-import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
-import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { ISeason } from '../../interfaces/requests/seasons.interface';
+import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { calculateChampionshipChanges } from '../../shared/championships.utils';
-import { calculateStageChanges } from '../../shared/competition-stages.utils';
 import { parseSeasonEndYear } from '../../shared/season.utils';
 import {
   applyEntityChanges,
@@ -23,14 +21,13 @@ export class SeasonsService {
     private readonly gateway: CevGateway,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
-    private readonly stagesRepository: CompetitionStagesRepository,
   ) {}
 
-  discoverCurrentAndFutureSeasons(): Promise<ChampionshipsEntity[]> {
+  discoverCurrentAndFutureSeasons(): Promise<SynchronizedSeasonCatalog> {
     return this.synchronizeFrom(new Date().getFullYear());
   }
 
-  synchronizeStoredRange(): Promise<ChampionshipsEntity[]> {
+  synchronizeStoredRange(): Promise<SynchronizedSeasonCatalog> {
     return this.synchronizeFrom(
       new Date().getFullYear() - PREVIOUS_YEARS_COUNT,
     );
@@ -38,7 +35,7 @@ export class SeasonsService {
 
   private async synchronizeFrom(
     earliestSeasonYear: number,
-  ): Promise<ChampionshipsEntity[]> {
+  ): Promise<SynchronizedSeasonCatalog> {
     this.logger.log(
       `Starting season catalog synchronization from ${earliestSeasonYear}`,
     );
@@ -87,35 +84,8 @@ export class SeasonsService {
     const championships = await this.championshipsRepository.getWhere({
       externalId: In([...championshipExternalIds]),
     });
-    const existingStages = await this.stagesRepository.getWhere({
-      championship: { id: In(championships.map(({ id }) => id)) },
-    });
-    const stageChanges = calculateStageChanges({
-      incoming: incomingStages,
-      existing: existingStages,
-      championshipsByExternalId: new Map(
-        championships.map((championship) => [
-          championship.externalId,
-          championship,
-        ]),
-      ),
-      seasonsByName: new Map(seasons.map((season) => [season.name, season])),
-    });
 
-    await applyEntityChanges({
-      repository: this.stagesRepository,
-      changes: stageChanges,
-      allowDeletion: false,
-    });
-    logEntityChanges({
-      logger: this.logger,
-      entityName: 'Calendar stages',
-      changes: stageChanges,
-      isComplete: fetched.isComplete,
-      allowDeletion: false,
-    });
-
-    return championships;
+    return { championships, calendarStages: incomingStages, seasons };
   }
 
   private toSeasons(stages: Array<{ seasonName?: string }>): ISeason[] {

@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
-import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
+import { ICevCompetitionStage } from '../../interfaces/requests/competition-stages.interface';
+import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import { calculateStageChanges } from '../../shared/competition-stages.utils';
 import {
   applyEntityChanges,
@@ -20,19 +21,26 @@ export class ChampionshipsService {
   ) {}
 
   async synchronize(
-    championships: ChampionshipsEntity[],
+    catalog: SynchronizedSeasonCatalog,
   ): Promise<CompetitionStagesEntity[]> {
+    const { championships, calendarStages, seasons } = catalog;
+
     if (!championships.length) {
       this.logger.warn('No championships found; stage sync skipped');
       return [];
     }
 
     const fetched = await this.gateway.fetchCompetitionStages(championships);
+    const incoming = this.mergeStages(
+      calendarStages,
+      fetched.stages,
+      fetched.isComplete,
+    );
     const existing = await this.repository.getWhere({
       championship: { id: In(championships.map(({ id }) => id)) },
     });
     const changes = calculateStageChanges({
-      incoming: fetched.stages,
+      incoming,
       existing,
       championshipsByExternalId: new Map(
         championships.map((championship) => [
@@ -40,6 +48,7 @@ export class ChampionshipsService {
           championship,
         ]),
       ),
+      seasonsByName: new Map(seasons.map((season) => [season.name, season])),
     });
 
     await applyEntityChanges({
@@ -58,5 +67,44 @@ export class ChampionshipsService {
     return this.repository.getWhere({
       championship: { id: In(championships.map(({ id }) => id)) },
     });
+  }
+
+  private mergeStages(
+    calendarStages: ICevCompetitionStage[],
+    detailedStages: ICevCompetitionStage[],
+    isComplete: boolean,
+  ): ICevCompetitionStage[] {
+    const calendarByKey = new Map(
+      calendarStages.map((stage) => [this.getStageKey(stage), stage]),
+    );
+    const enrichedDetailedStages = detailedStages.map((stage) => {
+      const calendarStage = calendarByKey.get(this.getStageKey(stage));
+
+      return {
+        ...stage,
+        startsAt: stage.startsAt ?? calendarStage?.startsAt,
+        endsAt: stage.endsAt ?? calendarStage?.endsAt,
+        seasonName: stage.seasonName ?? calendarStage?.seasonName,
+      };
+    });
+
+    if (isComplete) {
+      return enrichedDetailedStages;
+    }
+
+    return [
+      ...new Map(
+        [...calendarStages, ...enrichedDetailedStages].map((stage) => [
+          this.getStageKey(stage),
+          stage,
+        ]),
+      ).values(),
+    ];
+  }
+
+  private getStageKey(
+    stage: Pick<ICevCompetitionStage, 'externalId' | 'championshipExternalId'>,
+  ): string {
+    return `${stage.championshipExternalId}:${stage.externalId}`;
   }
 }
