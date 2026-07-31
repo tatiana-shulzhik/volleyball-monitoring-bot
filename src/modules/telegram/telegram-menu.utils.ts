@@ -24,10 +24,7 @@ export const MAIN_MENU = Markup.inlineKeyboard([
 export function formatChampionshipButton(name: string): string {
   return name
     .trim()
-    .replace(
-      /\bCEV(?:\s+[A-Z0-9]+){0,2}\s+(Champions League) Volley\b/gi,
-      '$1',
-    )
+    .replace(/\bCEV(?:\s+[A-Z0-9]+){0,2}\s+(Champions League) Volley\b/gi, '$1')
     .replace(
       /\bCEV (U\d+) Volleyball European Championship\b/gi,
       '$1 European Champ.',

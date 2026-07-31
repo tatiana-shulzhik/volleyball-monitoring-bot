@@ -4,7 +4,9 @@ import { LeaguesModule } from '../leagues/leagues.module';
 import { SeasonsModule } from '../seasons/seasons.module';
 import { TeamsModule } from '../teams/teams.module';
 import { PlayersModule } from '../players/players.module';
+import { TelegramStatisticsQueryService } from './telegram-statistics-query.service';
 import { TelegramService } from './telegram.service';
+import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 
 @Module({
   imports: [
@@ -14,6 +16,10 @@ import { TelegramService } from './telegram.service';
     TeamsModule,
     PlayersModule,
   ],
-  providers: [TelegramService],
+  providers: [
+    TelegramService,
+    TelegramStatisticsHandlers,
+    TelegramStatisticsQueryService,
+  ],
 })
 export class TelegramModule {}
