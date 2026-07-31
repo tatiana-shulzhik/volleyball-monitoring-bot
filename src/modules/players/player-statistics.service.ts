@@ -135,10 +135,16 @@ export class PlayerStatisticsService {
     }
     const rows: Partial<PlayerStatisticsEntity>[] = [];
     const synchronizedRelationKeys = new Set<string>();
+    const failedStatisticsStageIds = new Set<number>();
     const synchronizedStageExternalIds: number[] = [];
 
-    for (const result of fetched) {
+    for (const [index, result] of fetched.entries()) {
       if (result.status === 'rejected') {
+        const failedStage = stages[index];
+
+        if (failedStage) {
+          failedStatisticsStageIds.add(failedStage.id);
+        }
         this.logger.warn(
           `Player statistics request failed: ${String(result.reason)}`,
         );
@@ -201,6 +207,10 @@ export class PlayerStatisticsService {
       const relation = relationsByPlayer.get(relationKey);
 
       if (!relation) {
+        continue;
+      }
+
+      if (failedStatisticsStageIds.has(relation.league.stage.id)) {
         continue;
       }
 
