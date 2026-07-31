@@ -83,7 +83,12 @@ export class SeasonsRepository {
     const result = await repository
       .createQueryBuilder()
       .delete()
-      .where('CAST(name AS integer) < :beforeYear', { beforeYear })
+      .where(
+        "CAST(SPLIT_PART(name, '/', 1) AS integer) + " +
+          "CASE WHEN POSITION('/' IN name) > 0 THEN 1 ELSE 0 END " +
+          '< :beforeYear',
+        { beforeYear },
+      )
       .execute();
 
     return result.affected ?? 0;

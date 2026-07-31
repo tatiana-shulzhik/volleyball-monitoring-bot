@@ -37,6 +37,7 @@ import {
   getCalendarMetadata,
 } from '../shared/cev-calendar.utils';
 import { ECompetitionType } from '../shared/enums';
+import { parseSeasonEndYear } from '../shared/season.utils';
 import {
   CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
@@ -120,7 +121,8 @@ export class CevGateway {
 
         if (
           existing &&
-          Number(existing.seasonName) < Number(stage.seasonName)
+          (parseSeasonEndYear(existing.seasonName) ?? 0) <
+            (parseSeasonEndYear(stage.seasonName) ?? 0)
         ) {
           continue;
         }

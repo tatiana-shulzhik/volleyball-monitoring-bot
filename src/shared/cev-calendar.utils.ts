@@ -2,6 +2,7 @@ import { ICevChampionship } from '../interfaces/requests/championships.interface
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { createPostbackForm } from './aspnet-form.utils';
 import { ECompetitionType } from './enums';
+import { getCompetitionSeasonName } from './season.utils';
 
 const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
 const PERIOD_CLIENT_STATE = 'ctl00_Content_Left_RCB_Period_ClientState';
@@ -113,7 +114,7 @@ export function extractCalendarChampionships(
       externalId: stageExternalId,
       name: competition[3]?.trim() || competition[1].trim(),
       championshipExternalId: externalId,
-      seasonName: String(calendarYear),
+      seasonName: getCompetitionSeasonName(competitionType, calendarYear),
       startsAt:
         existingStage && existingStage.startsAt! < startsAt
           ? existingStage.startsAt

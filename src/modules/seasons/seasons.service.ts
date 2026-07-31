@@ -9,6 +9,7 @@ import { ISeason } from '../../interfaces/requests/seasons.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { calculateChampionshipChanges } from '../../shared/championships.utils';
 import { calculateStageChanges } from '../../shared/competition-stages.utils';
+import { parseSeasonEndYear } from '../../shared/season.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
@@ -44,7 +45,9 @@ export class SeasonsService {
     const fetched =
       await this.gateway.fetchSeasonCatalogSince(earliestSeasonYear);
     const incomingStages = fetched.stages.filter(
-      ({ seasonName }) => Number(seasonName) >= earliestSeasonYear,
+      ({ seasonName }) =>
+        seasonName !== undefined &&
+        (parseSeasonEndYear(seasonName) ?? 0) >= earliestSeasonYear,
     );
     const championshipExternalIds = new Set(
       incomingStages.map(
@@ -58,7 +61,7 @@ export class SeasonsService {
 
     await this.seasonsRepository.upsertMany(incomingSeasons);
     const seasons = (await this.seasonsRepository.getWhere({})).filter(
-      ({ name }) => Number(name) >= earliestSeasonYear,
+      ({ name }) => (parseSeasonEndYear(name) ?? 0) >= earliestSeasonYear,
     );
     const existingChampionships = await this.championshipsRepository.getWhere({
       externalId: In([...championshipExternalIds]),

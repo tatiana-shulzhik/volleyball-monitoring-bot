@@ -12,6 +12,7 @@ import { formatTeamStatistics } from '../../shared/player-statistics.utils';
 import { getErrorMessage } from '../../shared/error.utils';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ECompetitionType } from '../../shared/enums';
+import { getSeasonName } from '../../shared/season.utils';
 import {
   parseCompetitionType,
   TELEGRAM_CALLBACK_PATTERNS,
@@ -82,8 +83,9 @@ export class TelegramService implements OnApplicationBootstrap {
       TELEGRAM_CALLBACK_PATTERNS.statistics.competitionType,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
+        const currentSeasonName = this.getCurrentSeasonName(competitionType);
         const seasons = await this.seasonsRepository.getWhere({
-          name: String(new Date().getFullYear()),
+          name: currentSeasonName,
           stages: { championship: { competitionType } },
         });
 
@@ -104,10 +106,11 @@ export class TelegramService implements OnApplicationBootstrap {
       TELEGRAM_CALLBACK_PATTERNS.statistics.season,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
+        const currentSeasonName = this.getCurrentSeasonName(competitionType);
         const championships = await this.championshipsRepository.getWhere({
           competitionType,
           stages: {
-            season: { name: String(new Date().getFullYear()) },
+            season: { name: currentSeasonName },
           },
         });
         championships.sort((left, right) =>
@@ -224,7 +227,7 @@ export class TelegramService implements OnApplicationBootstrap {
           championship: { id: championshipId },
           season: seasonId
             ? { id: seasonId }
-            : { name: String(new Date().getFullYear()) },
+            : { name: this.getCurrentSeasonName(competitionType) },
         });
         stages.sort((left, right) => left.name.localeCompare(right.name));
 
@@ -466,5 +469,11 @@ export class TelegramService implements OnApplicationBootstrap {
           });
       }
     });
+  }
+
+  private getCurrentSeasonName(competitionType: ECompetitionType): string {
+    return competitionType === ECompetitionType.Club
+      ? getSeasonName(new Date())
+      : String(new Date().getFullYear());
   }
 }
