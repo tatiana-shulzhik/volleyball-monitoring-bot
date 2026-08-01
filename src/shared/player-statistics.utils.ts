@@ -49,9 +49,16 @@ export function createTeamStatistics(
     return null;
   }
 
-  const statisticsByPlayerId = statistics.reduce(
+  const statisticsByPlayerAndSeason = statistics.reduce(
     (result, item) => {
-      const stored = result.get(item.player.id) ?? {
+      const seasonId = item.stage.season?.id;
+
+      if (!seasonId) {
+        return result;
+      }
+
+      const key = createStatisticsKey(item.player.id, seasonId, item.team.id);
+      const stored = result.get(key) ?? {
         points: 0,
         setsPlayed: 0,
         attackAttempts: 0,
@@ -62,11 +69,11 @@ export function createTeamStatistics(
       stored.setsPlayed += item.setsPlayed;
       stored.attackAttempts += item.attackAttempts;
       stored.successfulAttacks += item.successfulAttacks;
-      result.set(item.player.id, stored);
+      result.set(key, stored);
       return result;
     },
     new Map<
-      number,
+      string,
       {
         points: number;
         setsPlayed: number;
@@ -75,12 +82,40 @@ export function createTeamStatistics(
       }
     >(),
   );
-  const players = relations
-    .map((relation) => {
-      const playerStatistics = statisticsByPlayerId.get(relation.player.id);
+  const uniqueRelations = new Map(
+    relations.flatMap((relation) => {
+      const seasonId = relation.league.stage.season?.id;
+
+      return seasonId
+        ? [
+            [
+              createStatisticsKey(
+                relation.player.id,
+                seasonId,
+                relation.team.id,
+              ),
+              relation,
+            ] as const,
+          ]
+        : [];
+    }),
+  );
+  const players = [...uniqueRelations.values()]
+    .flatMap((relation) => {
+      const season = relation.league.stage.season;
+
+      if (!season) {
+        return [];
+      }
+
+      const playerStatistics = statisticsByPlayerAndSeason.get(
+        createStatisticsKey(relation.player.id, season.id, relation.team.id),
+      );
 
       return {
         fullName: relation.player.fullName,
+        seasonName: season.name,
+        teamName: relation.team.name,
         birthYear: relation.player.birthYear,
         shirtNumber: relation.shirtNumber,
         position: relation.position,
@@ -92,13 +127,23 @@ export function createTeamStatistics(
     })
     .sort(
       (left, right) =>
+        left.fullName.localeCompare(right.fullName) ||
+        right.seasonName.localeCompare(left.seasonName) ||
+        left.teamName.localeCompare(right.teamName),
+    );
+
+  if (new Set(players.map(({ seasonName }) => seasonName)).size === 1) {
+    players.sort(
+      (left, right) =>
         (calculatePlayerRating(right.points, right.setsPlayed) ?? -1) -
           (calculatePlayerRating(left.points, left.setsPlayed) ?? -1) ||
         left.fullName.localeCompare(right.fullName),
     );
+  }
 
   return {
     seasonName: relations[0].league.stage.season?.name ?? '—',
+    teamSeasonName: relations[0].league.stage.season?.name ?? '—',
     country: relations[0].team.country,
     championshipName: relations[0].league.stage.championship.name,
     teamName: relations[0].team.name,
@@ -108,40 +153,88 @@ export function createTeamStatistics(
 }
 
 export function formatTeamStatistics(data: ITeamStatistics): string {
-  const rows = data.players.map((player) => {
-    const number = player.shirtNumber ?? '—';
-    const position = formatPlayerPosition(player.position);
-    const rating = calculatePlayerRating(player.points, player.setsPlayed);
-    const statistics =
-      rating !== null && player.points !== null && player.setsPlayed !== null
-        ? `${rating.toFixed(2)} (${player.points}/${player.setsPlayed})`
-        : '—';
-    const attacks =
-      player.attackAttempts !== null &&
-      player.successfulAttacks !== null &&
-      player.attackAttempts > 0
-        ? `${player.successfulAttacks}/${player.attackAttempts} ` +
-          `(${((player.successfulAttacks / player.attackAttempts) * 100).toFixed(0)}%)`
-        : '—';
-
-    return (
-      '<tr>' +
-      `<td align="center">${number}</td>` +
-      `<td>${escapeHtml(player.fullName)}</td>` +
-      `<td align="center">${statistics}</td>` +
-      `<td align="center">${position}</td>` +
-      `<td align="center">${attacks}</td>` +
-      `<td align="center">${player.birthYear ?? '—'}</td>` +
-      '</tr>'
-    );
-  });
+  const seasons = [
+    ...new Set(data.players.map(({ seasonName }) => seasonName)),
+  ];
+  const statistics =
+    seasons.length > 1
+      ? formatRetroPlayers(data.players)
+      : formatPlayersTable(data.players);
+  const teamSeason =
+    data.teamSeasonName === data.seasonName
+      ? ''
+      : ` (${escapeHtml(data.teamSeasonName)})`;
 
   return [
     '<p><b>📊 Статистика команды</b></p>',
     `<p>📅 ${escapeHtml(data.seasonName)}</p>`,
     `<p>🌍 ${data.country ? escapeHtml(data.country) : '—'}</p>`,
     `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
-    `<p>👥 ${escapeHtml(data.teamName)}</p>`,
+    `<p>👥 ${escapeHtml(data.teamName)}${teamSeason}</p>`,
+    statistics,
+  ].join('');
+}
+
+function formatRetroPlayers(players: ITeamStatistics['players']): string {
+  const playersByName = players.reduce((groups, player) => {
+    const stored = groups.get(player.fullName) ?? [];
+    stored.push(player);
+    groups.set(player.fullName, stored);
+    return groups;
+  }, new Map<string, ITeamStatistics['players']>());
+
+  return [...playersByName.values()]
+    .map((seasons) => {
+      const rows = seasons.map(
+        (season) =>
+          '<tr>' +
+          `<td>${escapeHtml(season.seasonName)}</td>` +
+          `<td>${escapeHtml(season.teamName)}</td>` +
+          `<td align="center">${season.shirtNumber ?? '—'}</td>` +
+          `<td align="center">${formatPlayerRating(season)}</td>` +
+          `<td align="center">${formatPlayerPosition(season.position)}</td>` +
+          `<td align="center">${formatPlayerAttacks(season)}</td>` +
+          '</tr>',
+      );
+
+      return [
+        '<br>',
+        `<p>👤 <b>${escapeHtml(seasons[0].fullName)}</b> · `,
+        `${seasons[0].birthYear ?? '—'} г.р.</p>`,
+        '<small><table bordered striped>',
+        '<tr>' +
+          '<th>Сезон</th>' +
+          '<th>Команда</th>' +
+          '<th>№<br>игрока</th>' +
+          '<th>Рейтинг<br>(очки/сеты)</th>' +
+          '<th>Поз</th>' +
+          '<th>Атака<br>(успешные/попытки)</th>' +
+          '</tr>',
+        ...rows,
+        '</table></small>',
+      ].join('');
+    })
+    .join('');
+}
+
+function formatPlayersTable(players: ITeamStatistics['players']): string {
+  const rows = players.map((player) => {
+    const number = player.shirtNumber ?? '—';
+    const position = formatPlayerPosition(player.position);
+
+    return (
+      '<tr>' +
+      `<td align="center">${number}</td>` +
+      `<td>${escapeHtml(player.fullName)}</td>` +
+      `<td align="center">${formatPlayerRating(player)}</td>` +
+      `<td align="center">${position}</td>` +
+      `<td align="center">${formatPlayerAttacks(player)}</td>` +
+      `<td align="center">${player.birthYear ?? '—'}</td>` +
+      '</tr>'
+    );
+  });
+
+  return [
     '<small><table bordered striped>',
     '<tr>' +
       '<th align="center">№</th>' +
@@ -154,6 +247,27 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
     ...rows,
     '</table></small>',
   ].join('');
+}
+
+function formatPlayerRating(
+  player: ITeamStatistics['players'][number],
+): string {
+  const rating = calculatePlayerRating(player.points, player.setsPlayed);
+
+  return rating !== null && player.points !== null && player.setsPlayed !== null
+    ? `${rating.toFixed(2)} (${player.points}/${player.setsPlayed})`
+    : '—';
+}
+
+function formatPlayerAttacks(
+  player: ITeamStatistics['players'][number],
+): string {
+  return player.attackAttempts !== null &&
+    player.successfulAttacks !== null &&
+    player.attackAttempts > 0
+    ? `${player.successfulAttacks}/${player.attackAttempts} ` +
+        `(${((player.successfulAttacks / player.attackAttempts) * 100).toFixed(0)}%)`
+    : '—';
 }
 
 function formatPlayerPosition(position: string | null): string {
@@ -171,6 +285,14 @@ function formatPlayerPosition(position: string | null): string {
   };
 
   return positionLabels[normalizedPosition] ?? escapeHtml(position);
+}
+
+function createStatisticsKey(
+  playerId: number,
+  seasonId: number,
+  teamId: number,
+): string {
+  return `${playerId}:${seasonId}:${teamId}`;
 }
 
 function escapeHtml(value: string): string {

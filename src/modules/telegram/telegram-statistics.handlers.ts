@@ -214,61 +214,10 @@ export class TelegramStatisticsHandlers {
         const competitionType = parseCompetitionType(
           context.match[isRetro ? 4 : 3],
         );
-        const leagues = await this.queries.findLeagues(stageId);
+        const teams = await this.queries.findTeamsForStage(stageId);
 
         await showList(context, {
-          items: leagues.map(({ id, name }) => ({
-            text: name,
-            callbackData: seasonId
-              ? TELEGRAM_CALLBACKS.retroStatistics.league(
-                  id,
-                  stageId,
-                  championshipId,
-                  seasonId,
-                  competitionType,
-                )
-              : TELEGRAM_CALLBACKS.statistics.league(
-                  id,
-                  stageId,
-                  championshipId,
-                  competitionType,
-                ),
-          })),
-          message: TELEGRAM_MESSAGES.leagues.select,
-          emptyMessage: TELEGRAM_MESSAGES.leagues.empty,
-          backText: '⬅️ К этапам',
-          backCallbackData: seasonId
-            ? TELEGRAM_CALLBACKS.retroStatistics.championship(
-                championshipId,
-                seasonId,
-                competitionType,
-              )
-            : TELEGRAM_CALLBACKS.statistics.championship(
-                championshipId,
-                competitionType,
-              ),
-        });
-      },
-    );
-
-    bot.action(
-      [
-        TELEGRAM_CALLBACK_PATTERNS.statistics.league,
-        TELEGRAM_CALLBACK_PATTERNS.retroStatistics.league,
-      ],
-      async (context) => {
-        const isRetro = context.match[0].startsWith('retro-statistics:');
-        const leagueId = Number(context.match[1]);
-        const stageId = Number(context.match[2]);
-        const championshipId = Number(context.match[3]);
-        const seasonId = isRetro ? Number(context.match[4]) : undefined;
-        const competitionType = parseCompetitionType(
-          context.match[isRetro ? 5 : 4],
-        );
-        const teams = await this.queries.findTeams(leagueId);
-
-        await showList(context, {
-          items: teams.map((team) => ({
+          items: teams.map(({ team, leagueId }) => ({
             text: team.name,
             callbackData: seasonId
               ? TELEGRAM_CALLBACKS.retroStatistics.team(
@@ -289,16 +238,14 @@ export class TelegramStatisticsHandlers {
           })),
           message: TELEGRAM_MESSAGES.teams.select,
           emptyMessage: TELEGRAM_MESSAGES.teams.empty,
-          backText: '⬅️ К лигам',
+          backText: '⬅️ К этапам',
           backCallbackData: seasonId
-            ? TELEGRAM_CALLBACKS.retroStatistics.stage(
-                stageId,
+            ? TELEGRAM_CALLBACKS.retroStatistics.championship(
                 championshipId,
                 seasonId,
                 competitionType,
               )
-            : TELEGRAM_CALLBACKS.statistics.stage(
-                stageId,
+            : TELEGRAM_CALLBACKS.statistics.championship(
                 championshipId,
                 competitionType,
               ),
@@ -363,15 +310,13 @@ export class TelegramStatisticsHandlers {
             Markup.button.callback(
               TELEGRAM_MESSAGES.teams.back,
               seasonId
-                ? TELEGRAM_CALLBACKS.retroStatistics.league(
-                    leagueId,
+                ? TELEGRAM_CALLBACKS.retroStatistics.stage(
                     stageId,
                     championshipId,
                     seasonId,
                     competitionType,
                   )
-                : TELEGRAM_CALLBACKS.statistics.league(
-                    leagueId,
+                : TELEGRAM_CALLBACKS.statistics.stage(
                     stageId,
                     championshipId,
                     competitionType,

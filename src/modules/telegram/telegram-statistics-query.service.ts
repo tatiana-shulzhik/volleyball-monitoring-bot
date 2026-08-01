@@ -2,12 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { LessThan } from 'typeorm';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
-import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { SeasonsEntity } from '../../databases/entities/seasons.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
-import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
@@ -19,7 +17,6 @@ export class TelegramStatisticsQueryService {
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
     private readonly stagesRepository: CompetitionStagesRepository,
-    private readonly leaguesRepository: LeaguesRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
   ) {}
 
@@ -88,22 +85,23 @@ export class TelegramStatisticsQueryService {
     return stages.sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  async findLeagues(stageId: number): Promise<LeaguesEntity[]> {
-    const leagues = await this.leaguesRepository.getWhere({
-      stage: { id: stageId },
-    });
-
-    return leagues.sort((left, right) => left.name.localeCompare(right.name));
-  }
-
-  async findTeams(leagueId: number): Promise<TeamEntity[]> {
+  async findTeamsForStage(
+    stageId: number,
+  ): Promise<{ team: TeamEntity; leagueId: number }[]> {
     const relations = await this.teamLeaguesRepository.getWhere({
-      league: { id: leagueId },
+      league: { stage: { id: stageId } },
     });
 
-    return relations
-      .map(({ team }) => team)
-      .sort((left, right) => left.name.localeCompare(right.name));
+    const uniqueTeams = new Map(
+      relations.map(({ team, league }) => [
+        team.name.trim().toLowerCase(),
+        { team, leagueId: league.id },
+      ]),
+    );
+
+    return [...uniqueTeams.values()].sort((left, right) =>
+      left.team.name.localeCompare(right.team.name),
+    );
   }
 
   private findCurrentSeason(

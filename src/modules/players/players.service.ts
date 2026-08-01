@@ -52,15 +52,25 @@ export class PlayersService {
     }
 
     const isAggregate = Boolean(aggregateSeasons?.length);
-    const aggregateTeams = isAggregate
-      ? await this.teamsRepository.getWhere({ name: team.name })
-      : [team];
+    const displayedRelations = isAggregate
+      ? await this.relationsRepository.getWhere({
+          player: { id: In(relations.map(({ player }) => player.id)) },
+          league: {
+            stage: {
+              season: { id: In(aggregateSeasons!.map(({ id }) => id)) },
+              championship: {
+                competitionType: league.stage.championship.competitionType,
+              },
+            },
+          },
+        })
+      : relations;
 
     const statistics = await this.statisticsRepository.getWhere({
-      player: { id: In(relations.map(({ player }) => player.id)) },
-      team: {
-        id: isAggregate ? In(aggregateTeams.map(({ id }) => id)) : team.id,
+      player: {
+        id: In(displayedRelations.map(({ player }) => player.id)),
       },
+      ...(isAggregate ? {} : { team: { id: team.id } }),
       stage: {
         season: {
           id: isAggregate
@@ -76,11 +86,14 @@ export class PlayersService {
           : {}),
       },
     });
-    const result = createTeamStatistics(relations, statistics);
+    const result = createTeamStatistics(displayedRelations, statistics);
 
     if (result && aggregateSeasons?.length) {
       const chronological = [...aggregateSeasons].reverse();
       result.seasonName = `${chronological[0].name}–${chronological.at(-1)!.name}`;
+      result.teamSeasonName = league.stage.season?.name ?? '—';
+      result.teamName = team.name;
+      result.country = team.country;
       result.championshipName = 'Все чемпионаты';
     }
 
