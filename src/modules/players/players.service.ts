@@ -51,15 +51,29 @@ export class PlayersService {
       return null;
     }
 
+    const isAggregate = Boolean(aggregateSeasons?.length);
+    const aggregateTeams = isAggregate
+      ? await this.teamsRepository.getWhere({ name: team.name })
+      : [team];
+
     const statistics = await this.statisticsRepository.getWhere({
       player: { id: In(relations.map(({ player }) => player.id)) },
-      team: { id: team.id },
+      team: {
+        id: isAggregate ? In(aggregateTeams.map(({ id }) => id)) : team.id,
+      },
       stage: {
         season: {
-          id: aggregateSeasons?.length
-            ? In(aggregateSeasons.map(({ id }) => id))
+          id: isAggregate
+            ? In(aggregateSeasons!.map(({ id }) => id))
             : seasonId,
         },
+        ...(isAggregate
+          ? {
+              championship: {
+                competitionType: league.stage.championship.competitionType,
+              },
+            }
+          : {}),
       },
     });
     const result = createTeamStatistics(relations, statistics);
