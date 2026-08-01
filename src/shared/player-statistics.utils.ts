@@ -57,7 +57,7 @@ export function createTeamStatistics(
         return result;
       }
 
-      const key = createStatisticsKey(item.player.id, seasonId, item.team.id);
+      const key = createStatisticsKey(item.player.id, seasonId, item.team.name);
       const stored = result.get(key) ?? {
         points: 0,
         setsPlayed: 0,
@@ -92,7 +92,7 @@ export function createTeamStatistics(
               createStatisticsKey(
                 relation.player.id,
                 seasonId,
-                relation.team.id,
+                relation.team.name,
               ),
               relation,
             ] as const,
@@ -109,7 +109,7 @@ export function createTeamStatistics(
       }
 
       const playerStatistics = statisticsByPlayerAndSeason.get(
-        createStatisticsKey(relation.player.id, season.id, relation.team.id),
+        createStatisticsKey(relation.player.id, season.id, relation.team.name),
       );
 
       return {
@@ -297,9 +297,9 @@ function formatPlayerPosition(position: string | null): string {
 function createStatisticsKey(
   playerId: number,
   seasonId: number,
-  teamId: number,
+  teamName: string,
 ): string {
-  return `${playerId}:${seasonId}:${teamId}`;
+  return `${playerId}:${seasonId}:${normalizeName(teamName)}`;
 }
 
 function escapeHtml(value: string): string {

@@ -7,6 +7,7 @@ import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
+import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { createTeamStatistics } from '../../shared/player-statistics.utils';
 import {
   calculatePlayerChanges,
@@ -49,6 +50,16 @@ export class PlayersService {
 
     if (!seasonId) {
       return null;
+    }
+
+    if (
+      aggregateSeasons?.length &&
+      !aggregateSeasons.some(({ id }) => id === seasonId)
+    ) {
+      aggregateSeasons = [league.stage.season!, ...aggregateSeasons].slice(
+        0,
+        PREVIOUS_YEARS_COUNT,
+      );
     }
 
     const isAggregate = Boolean(aggregateSeasons?.length);

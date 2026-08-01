@@ -41,6 +41,18 @@ export class TelegramStatisticsQueryService {
       .slice(0, PREVIOUS_YEARS_COUNT);
   }
 
+  async findRecentSeasons(
+    competitionType: ECompetitionType,
+  ): Promise<SeasonsEntity[]> {
+    const seasons = await this.seasonsRepository.getWhere({
+      stages: { championship: { competitionType } },
+    });
+
+    return seasons
+      .sort((left, right) => right.name.localeCompare(left.name))
+      .slice(0, PREVIOUS_YEARS_COUNT);
+  }
+
   async findChampionships(
     competitionType: ECompetitionType,
     seasonId?: number,
