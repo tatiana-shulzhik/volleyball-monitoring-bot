@@ -1,3 +1,10 @@
+import { ECompetitionType } from '../../shared/enums';
+
+export const COMPETITION_TYPE_BUTTONS: Record<ECompetitionType, string> = {
+  [ECompetitionType.Club]: '🏐 Клубные',
+  [ECompetitionType.NationalTeam]: '🌍 Сборные',
+};
+
 export const MENU_BUTTONS = [
   '📊 Статистика',
   '🗓 Ретро статистика',
@@ -8,6 +15,9 @@ export const MENU_BUTTONS = [
 
 export const TELEGRAM_MESSAGES = {
   menu: 'Выберите раздел:',
+  competitionTypes: {
+    select: 'Выберите вид соревнований:',
+  },
   seasons: {
     select: 'Выберите сезон:',
     empty: 'Актуальный сезон не найден.',

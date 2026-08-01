@@ -49,6 +49,16 @@ export class TeamsRepository {
     });
   }
 
+  async updateCountries(
+    updates: Array<{ externalId: string; country: string }>,
+  ): Promise<void> {
+    await Promise.all(
+      updates.map(({ externalId, country }) =>
+        this.repository.update({ externalId }, { country }),
+      ),
+    );
+  }
+
   deleteMany(ids: number[], manager?: EntityManager) {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
 

@@ -19,7 +19,10 @@ import { IPlayerRosterSource } from '../interfaces/responses/synchronized-teams.
 import { extractChampionships } from '../shared/cev-championships.utils';
 import { extractLeagues } from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
-import { extractPlayers } from '../shared/cev-players.utils';
+import {
+  extractPlayers,
+  extractTeamCountry,
+} from '../shared/cev-players.utils';
 import {
   extractPlayerAttackStatistics,
   extractPlayerStatistics,
@@ -37,6 +40,8 @@ import {
   getCalendarMetadata,
 } from '../shared/cev-calendar.utils';
 import { ECompetitionType } from '../shared/enums';
+import { createCompetitionStageKey } from '../shared/competition-stages.utils';
+import { parseSeasonEndYear } from '../shared/season.utils';
 import {
   CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
@@ -115,12 +120,16 @@ export class CevGateway {
       }
 
       for (const stage of extracted.stages) {
-        const key = `${stage.championshipExternalId}:${stage.externalId}`;
+        const key = createCompetitionStageKey(
+          stage.championshipExternalId,
+          stage.externalId,
+        );
         const existing = stages.get(key);
 
         if (
           existing &&
-          Number(existing.seasonName) < Number(stage.seasonName)
+          (parseSeasonEndYear(existing.seasonName) ?? 0) >=
+            (parseSeasonEndYear(stage.seasonName) ?? 0)
         ) {
           continue;
         }
@@ -168,7 +177,11 @@ export class CevGateway {
         const html = await this.http.get(
           createCompetitionUrl(stage.championship.externalId, stage.externalId),
         );
-        const leagues = extractLeagues(html, stage.externalId);
+        const leagues = extractLeagues(
+          html,
+          stage.externalId,
+          stage.championship.externalId,
+        );
 
         return {
           leagues,
@@ -206,20 +219,24 @@ export class CevGateway {
       items: sourceGroups,
       mapper: async (group) => {
         const { team, league, championship } = group[0];
+        const html = await this.http.get(
+          createTeamUrl(team.externalId, championship.externalId),
+        );
         const roster = extractPlayers({
-          html: await this.http.get(
-            createTeamUrl(team.externalId, championship.externalId),
-          ),
+          html,
           teamExternalId: team.externalId,
           leagueExternalId: league.externalId,
         });
 
-        return group.flatMap((source) =>
-          roster.map((player) => ({
-            ...player,
-            leagueExternalId: source.league.externalId,
-          })),
-        );
+        return {
+          players: group.flatMap((source) =>
+            roster.map((player) => ({
+              ...player,
+              leagueExternalId: source.league.externalId,
+            })),
+          ),
+          country: extractTeamCountry(html),
+        };
       },
       concurrency: CEV_HTTP_CONCURRENCY,
     });
@@ -240,7 +257,17 @@ export class CevGateway {
 
     return {
       players: results.flatMap((result) =>
-        result.status === 'fulfilled' ? result.value : [],
+        result.status === 'fulfilled' ? result.value.players : [],
+      ),
+      teamCountries: results.flatMap((result, index) =>
+        result.status === 'fulfilled' && result.value.country
+          ? [
+              {
+                teamExternalId: sourceGroups[index][0].team.externalId,
+                country: result.value.country,
+              },
+            ]
+          : [],
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };

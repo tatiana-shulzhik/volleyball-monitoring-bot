@@ -1,7 +1,9 @@
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { createPostbackForm } from './aspnet-form.utils';
+import { createCompetitionStageKey } from './competition-stages.utils';
 import { ECompetitionType } from './enums';
+import { getCompetitionSeasonName } from './season.utils';
 
 const PERIOD_CONTROL = 'ctl00$Content_Left$RCB_Period';
 const PERIOD_CLIENT_STATE = 'ctl00_Content_Left_RCB_Period_ClientState';
@@ -101,7 +103,12 @@ export function extractCalendarChampionships(
 
     const startsAt = parseCevDate(dateRange[1], false);
     const endsAt = parseCevDate(dateRange[2], true);
-    const stageKey = `${externalId}:${stageExternalId}`;
+    const competitionYear = Number(competition[2]);
+    const seasonReferenceYear =
+      competitionType === ECompetitionType.Club
+        ? competitionYear
+        : calendarYear;
+    const stageKey = createCompetitionStageKey(externalId, stageExternalId);
     const existingStage = stages.get(stageKey);
 
     championships.set(externalId, {
@@ -113,7 +120,10 @@ export function extractCalendarChampionships(
       externalId: stageExternalId,
       name: competition[3]?.trim() || competition[1].trim(),
       championshipExternalId: externalId,
-      seasonName: String(calendarYear),
+      seasonName: getCompetitionSeasonName(
+        competitionType,
+        seasonReferenceYear,
+      ),
       startsAt:
         existingStage && existingStage.startsAt! < startsAt
           ? existingStage.startsAt

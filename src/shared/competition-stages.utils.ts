@@ -7,8 +7,14 @@ import { calculateEntityChanges } from './entity-changes.utils';
 export function calculateStageChanges(
   data: ICalculateStageChangesParams,
 ): StageChanges {
-  const existingByExternalId = new Map(
-    data.existing.map((stage) => [stage.externalId, stage]),
+  const existingByKey = new Map(
+    data.existing.map((stage) => [
+      createCompetitionStageKey(
+        stage.championship.externalId,
+        stage.externalId,
+      ),
+      stage,
+    ]),
   );
   const resolved = data.incoming.flatMap((stage) => {
     const championship = data.championshipsByExternalId.get(
@@ -17,7 +23,9 @@ export function calculateStageChanges(
     const season = stage.seasonName
       ? data.seasonsByName?.get(stage.seasonName)
       : undefined;
-    const stored = existingByExternalId.get(stage.externalId);
+    const stored = existingByKey.get(
+      createCompetitionStageKey(stage.championshipExternalId, stage.externalId),
+    );
 
     return championship
       ? [
@@ -36,6 +44,16 @@ export function calculateStageChanges(
   return calculateEntityChanges({
     incoming: resolved,
     existing: data.existing,
+    keyOfExisting: (stage) =>
+      createCompetitionStageKey(
+        stage.championship.externalId,
+        stage.externalId,
+      ),
+    keyOfIncoming: (stage) =>
+      createCompetitionStageKey(
+        stage.championship.externalId,
+        stage.externalId,
+      ),
     hasChanges: (stored, stage) =>
       stored.name !== stage.name ||
       stored.championship.id !== stage.championship.id ||
@@ -45,4 +63,11 @@ export function calculateStageChanges(
         stored.endsAt?.getTime() !== stage.endsAt.getTime()) ||
       (stage.season !== null && stored.season?.id !== stage.season.id),
   });
+}
+
+export function createCompetitionStageKey(
+  championshipExternalId: number,
+  stageExternalId: number,
+): string {
+  return `${championshipExternalId}:${stageExternalId}`;
 }

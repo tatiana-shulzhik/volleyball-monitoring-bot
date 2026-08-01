@@ -81,6 +81,7 @@ export function createTeamStatistics(
 
       return {
         fullName: relation.player.fullName,
+        birthYear: relation.player.birthYear,
         shirtNumber: relation.shirtNumber,
         position: relation.position,
         points: playerStatistics?.points ?? null,
@@ -97,6 +98,9 @@ export function createTeamStatistics(
     );
 
   return {
+    seasonName: relations[0].league.stage.season?.name ?? '—',
+    country: relations[0].team.country,
+    championshipName: relations[0].league.stage.championship.name,
     teamName: relations[0].team.name,
     leagueName: relations[0].league.name,
     players,
@@ -120,26 +124,36 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
           `(${((player.successfulAttacks / player.attackAttempts) * 100).toFixed(0)}%)`
         : '—';
 
-    return [
-      String(number).padStart(2),
-      truncate(player.fullName, 22).padEnd(22),
-      truncate(position, 3).padEnd(3),
-      statistics.padEnd(18),
-      attacks,
-    ].join(' ');
+    return (
+      '<tr>' +
+      `<td align="center">${number}</td>` +
+      `<td>${escapeHtml(player.fullName)}</td>` +
+      `<td align="center">${statistics}</td>` +
+      `<td align="center">${position}</td>` +
+      `<td align="center">${attacks}</td>` +
+      `<td align="center">${player.birthYear ?? '—'}</td>` +
+      '</tr>'
+    );
   });
 
-  const table = [
-    ' № Игрок                  Поз Рейтинг (очки/сеты) Атака (успешные/попытки)',
-    '──────────────────────────────────────────────────────────────────────────',
-    ...rows,
-  ].join('\n');
-
   return [
-    `<b>🏐 ${escapeHtml(data.teamName)}</b>`,
-    `🏆 ${escapeHtml(data.leagueName)}`,
-    `<pre>${escapeHtml(table)}</pre>`,
-  ].join('\n\n');
+    '<p><b>📊 Статистика команды</b></p>',
+    `<p>📅 ${escapeHtml(data.seasonName)}</p>`,
+    `<p>🌍 ${data.country ? escapeHtml(data.country) : '—'}</p>`,
+    `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
+    `<p>👥 ${escapeHtml(data.teamName)}</p>`,
+    '<small><table bordered striped>',
+    '<tr>' +
+      '<th align="center">№</th>' +
+      '<th align="center">Игрок</th>' +
+      '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
+      '<th align="center">Поз</th>' +
+      '<th align="center">Атака<br>(успешные/попытки)</th>' +
+      '<th align="center">Год рождения</th>' +
+      '</tr>',
+    ...rows,
+    '</table></small>',
+  ].join('');
 }
 
 function formatPlayerPosition(position: string | null): string {
@@ -164,14 +178,4 @@ function escapeHtml(value: string): string {
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
-}
-
-function truncate(value: string, maxLength: number): string {
-  const characters = [...value];
-
-  if (characters.length <= maxLength) {
-    return value;
-  }
-
-  return `${characters.slice(0, maxLength - 1).join('')}…`;
 }

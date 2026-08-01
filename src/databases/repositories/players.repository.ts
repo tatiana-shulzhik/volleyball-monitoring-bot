@@ -41,9 +41,10 @@ export class PlayersRepository {
 
   updateMany(players: PlayersEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
-    const values = players.map(({ externalId, fullName }) => ({
+    const values = players.map(({ externalId, fullName, birthYear }) => ({
       externalId,
       fullName,
+      birthYear,
     }));
 
     return repository.upsert(values, {

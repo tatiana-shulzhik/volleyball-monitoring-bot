@@ -21,6 +21,26 @@ export const MAIN_MENU = Markup.inlineKeyboard([
   [Markup.button.callback(MENU_BUTTONS[4], TELEGRAM_CALLBACKS.menu.live)],
 ]);
 
+export function formatChampionshipButton(name: string): string {
+  return name
+    .trim()
+    .replace(/\bCEV(?:\s+[A-Z0-9]+){0,2}\s+(Champions League) Volley\b/gi, '$1')
+    .replace(
+      /\bCEV (U\d+) Volleyball European Championship\b/gi,
+      '$1 European Champ.',
+    )
+    .replace(/\bCEV Volleyball Challenge Cup\b/gi, 'Challenge Cup')
+    .replace(/\bCEV Volleyball Cup\b/gi, 'CEV Cup')
+    .replace(/\bCEV Volleyball European League\b/gi, 'European League')
+    .replace(/\bCEV(?:\s+[A-Z0-9]+){0,2}\s+(EuroVolley)\b/gi, '$1')
+    .replace(
+      /\bCEV (?:Volleyball )?European (Golden|Silver) League\b/gi,
+      '$1 League',
+    )
+    .replace(/\b(Men|Women)\b/gi, (gender) => gender[0].toUpperCase())
+    .replace(/\s+/g, ' ');
+}
+
 export async function showList(
   context: Context,
   menu: ListMenu,

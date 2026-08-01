@@ -7,9 +7,11 @@ export interface EntityChanges<TEntity, TIncoming> {
   obsoleteIds: number[];
 }
 
-export interface CalculateEntityChangesParams<TEntity, TIncoming> {
+export interface CalculateEntityChangesParams<TEntity, TIncoming, TKey> {
   incoming: TIncoming[];
   existing: TEntity[];
+  keyOfExisting: (existing: TEntity) => TKey;
+  keyOfIncoming: (incoming: TIncoming) => TKey;
   hasChanges: (existing: TEntity, incoming: TIncoming) => boolean;
 }
 

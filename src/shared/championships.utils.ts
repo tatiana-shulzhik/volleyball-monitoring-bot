@@ -10,6 +10,8 @@ export function calculateChampionshipChanges(
   return calculateEntityChanges({
     incoming: data.incoming,
     existing: data.existing,
+    keyOfExisting: ({ externalId }) => externalId,
+    keyOfIncoming: ({ externalId }) => externalId,
     hasChanges: (stored, championship) =>
       stored.name !== championship.name ||
       stored.competitionType !== championship.competitionType,

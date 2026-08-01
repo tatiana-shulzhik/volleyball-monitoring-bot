@@ -10,4 +10,7 @@ export class PlayersEntity {
 
   @Column({ name: 'external_id', unique: true })
   externalId: string;
+
+  @Column({ name: 'birth_year', type: 'smallint', nullable: true })
+  birthYear: number | null;
 }

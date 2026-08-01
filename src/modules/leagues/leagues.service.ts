@@ -4,6 +4,7 @@ import { CompetitionStagesEntity } from '../../databases/entities/competition-st
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { SynchronizedLeagues } from '../../interfaces/responses/synchronized-leagues.interface';
+import { createCompetitionStageKey } from '../../shared/competition-stages.utils';
 import { calculateLeagueChanges } from '../../shared/leagues.utils';
 import {
   applyEntityChanges,
@@ -39,8 +40,14 @@ export class LeaguesService {
     const changes = calculateLeagueChanges({
       incoming: fetched.leagues,
       existing,
-      stagesByExternalId: new Map(
-        stages.map((stage) => [stage.externalId, stage]),
+      stagesByKey: new Map(
+        stages.map((stage) => [
+          createCompetitionStageKey(
+            stage.championship.externalId,
+            stage.externalId,
+          ),
+          stage,
+        ]),
       ),
     });
 

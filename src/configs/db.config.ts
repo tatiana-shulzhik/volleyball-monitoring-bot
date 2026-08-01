@@ -38,7 +38,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
       password: this.dbPassword,
       database: this.dbDatabase,
       migrationsTableName: 'migrations',
-      migrationsRun: true,
+      migrationsRun: false,
       synchronize: true,
       entities: [
         SeasonsEntity,

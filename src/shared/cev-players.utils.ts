@@ -2,6 +2,7 @@ import {
   IExtractPlayersParams,
   ICevPlayer,
 } from '../interfaces/requests/players.interface';
+import { CEV_COUNTRIES } from './consts/constants';
 
 const PLAYER_ROW = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
 const TABLE_CELL = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
@@ -32,6 +33,7 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
     const fullName = cleanText(playerMatch[2]);
     const shirtNumber = parseShirtNumber(cells[playerCellIndex - 1]);
     const position = cleanText(cells[playerCellIndex + 1] ?? '');
+    const birthYear = parseBirthYear(cells[playerCellIndex + 4]);
 
     if (fullName) {
       players.set(externalId, {
@@ -39,6 +41,7 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
         fullName,
         position,
         shirtNumber,
+        birthYear,
         teamExternalId,
         leagueExternalId,
       });
@@ -46,6 +49,19 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
   }
 
   return [...players.values()];
+}
+
+export function extractTeamCountry(html: string): string | null {
+  const flagCode = html
+    .match(/Images\/Flags_100\/([A-Z]{3})_100\.png/i)?.[1]
+    .toUpperCase();
+
+  return flagCode ? (CEV_COUNTRIES[flagCode] ?? flagCode) : null;
+}
+
+function parseBirthYear(value: string | undefined): number | null {
+  const year = cleanText(value ?? '').match(/\b(?:19|20)\d{2}\b/)?.[0];
+  return year ? Number(year) : null;
 }
 
 function parseShirtNumber(value: string | undefined): number | null {

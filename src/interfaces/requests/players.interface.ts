@@ -10,12 +10,14 @@ export interface ICevPlayer {
   fullName: string;
   position: string;
   shirtNumber: number | null;
+  birthYear: number | null;
   teamExternalId: string;
   leagueExternalId: number;
 }
 
 export interface IFetchedPlayers {
   players: ICevPlayer[];
+  teamCountries: Array<{ teamExternalId: string; country: string }>;
   isComplete: boolean;
 }
 

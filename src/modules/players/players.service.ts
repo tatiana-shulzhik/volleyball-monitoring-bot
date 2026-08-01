@@ -3,6 +3,7 @@ import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
+import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
@@ -26,11 +27,13 @@ export class PlayersService {
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly statisticsRepository: PlayerStatisticsRepository,
+    private readonly teamsRepository: TeamsRepository,
   ) {}
 
   async findTeamStatistics(
     teamId: number,
     leagueId: number,
+    aggregateSeasons?: Array<{ id: number; name: string }>,
   ): Promise<ITeamStatistics | null> {
     const relations = await this.relationsRepository.getWhere({
       team: { id: teamId },
@@ -48,13 +51,40 @@ export class PlayersService {
       return null;
     }
 
+    const isAggregate = Boolean(aggregateSeasons?.length);
+    const aggregateTeams = isAggregate
+      ? await this.teamsRepository.getWhere({ name: team.name })
+      : [team];
+
     const statistics = await this.statisticsRepository.getWhere({
       player: { id: In(relations.map(({ player }) => player.id)) },
-      team: { id: team.id },
-      stage: { season: { id: seasonId } },
+      team: {
+        id: isAggregate ? In(aggregateTeams.map(({ id }) => id)) : team.id,
+      },
+      stage: {
+        season: {
+          id: isAggregate
+            ? In(aggregateSeasons!.map(({ id }) => id))
+            : seasonId,
+        },
+        ...(isAggregate
+          ? {
+              championship: {
+                competitionType: league.stage.championship.competitionType,
+              },
+            }
+          : {}),
+      },
     });
+    const result = createTeamStatistics(relations, statistics);
 
-    return createTeamStatistics(relations, statistics);
+    if (result && aggregateSeasons?.length) {
+      const chronological = [...aggregateSeasons].reverse();
+      result.seasonName = `${chronological[0].name}–${chronological.at(-1)!.name}`;
+      result.championshipName = 'Все чемпионаты';
+    }
+
+    return result;
   }
 
   async synchronize(sources: IPlayerRosterSource[]): Promise<void> {
@@ -68,6 +98,12 @@ export class PlayersService {
     );
 
     const fetched = await this.gateway.fetchPlayers(sources);
+    await this.teamsRepository.updateCountries(
+      fetched.teamCountries.map(({ teamExternalId, country }) => ({
+        externalId: teamExternalId,
+        country,
+      })),
+    );
     const externalIds = [
       ...new Set(fetched.players.map(({ externalId }) => externalId)),
     ];

@@ -13,9 +13,9 @@ export function calculatePlayerChanges(
   const { incoming, existing } = data;
   const uniquePlayers = [
     ...new Map(
-      incoming.map(({ externalId, fullName }) => [
+      incoming.map(({ externalId, fullName, birthYear }) => [
         externalId,
-        { externalId, fullName },
+        { externalId, fullName, birthYear },
       ]),
     ).values(),
   ];
@@ -23,7 +23,11 @@ export function calculatePlayerChanges(
   return calculateEntityChanges({
     incoming: uniquePlayers,
     existing,
-    hasChanges: (stored, player) => stored.fullName !== player.fullName,
+    keyOfExisting: ({ externalId }) => externalId,
+    keyOfIncoming: ({ externalId }) => externalId,
+    hasChanges: (stored, player) =>
+      stored.fullName !== player.fullName ||
+      stored.birthYear !== player.birthYear,
   });
 }
 

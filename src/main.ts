@@ -13,6 +13,7 @@ async function bootstrap() {
     AppModule,
     fastifyAdapter,
   );
+  app.enableShutdownHooks();
   const config = app.get(AppConfig);
   const logger = new Logger('Bootstrap');
   const port = config.port ?? 3000;
