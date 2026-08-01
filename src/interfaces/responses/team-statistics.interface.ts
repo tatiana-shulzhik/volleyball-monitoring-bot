@@ -1,6 +1,7 @@
 export interface ITeamPlayerStatistics {
   fullName: string;
   seasonName: string;
+  teamName: string;
   birthYear: number | null;
   shirtNumber: number | null;
   position: string | null;
@@ -12,6 +13,7 @@ export interface ITeamPlayerStatistics {
 
 export interface ITeamStatistics {
   seasonName: string;
+  teamSeasonName: string;
   country: string | null;
   championshipName: string;
   teamName: string;
