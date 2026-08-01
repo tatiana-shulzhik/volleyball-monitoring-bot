@@ -12,7 +12,6 @@ import { SeasonsRepository } from '../../databases/repositories/seasons.reposito
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ECompetitionType } from '../../shared/enums';
-import { getSeasonName } from '../../shared/season.utils';
 
 @Injectable()
 export class TelegramStatisticsQueryService {
@@ -24,33 +23,44 @@ export class TelegramStatisticsQueryService {
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
   ) {}
 
-  findCurrentSeasons(
+  async findCurrentSeasons(
     competitionType: ECompetitionType,
   ): Promise<SeasonsEntity[]> {
-    return this.seasonsRepository.getWhere({
-      name: this.getCurrentSeasonName(competitionType),
-      stages: { championship: { competitionType } },
-    });
+    const season = await this.findCurrentSeason(competitionType);
+
+    return season ? [season] : [];
   }
 
   async findFinishedSeasons(
     competitionType: ECompetitionType,
   ): Promise<SeasonsEntity[]> {
-    return (
-      await this.seasonsRepository.findFinished(new Date(), competitionType)
-    ).slice(0, PREVIOUS_YEARS_COUNT);
+    const [currentSeason, finishedSeasons] = await Promise.all([
+      this.findCurrentSeason(competitionType),
+      this.seasonsRepository.findFinished(new Date(), competitionType),
+    ]);
+
+    return finishedSeasons
+      .filter(({ id }) => id !== currentSeason?.id)
+      .slice(0, PREVIOUS_YEARS_COUNT);
   }
 
   async findChampionships(
     competitionType: ECompetitionType,
     seasonId?: number,
   ): Promise<ChampionshipsEntity[]> {
+    const selectedSeasonId =
+      seasonId ?? (await this.findCurrentSeason(competitionType))?.id;
+
+    if (selectedSeasonId === undefined) {
+      return [];
+    }
+
     const championships = await this.championshipsRepository.getWhere({
       competitionType,
-      stages:
-        seasonId === undefined
-          ? { season: { name: this.getCurrentSeasonName(competitionType) } }
-          : { season: { id: seasonId }, endsAt: LessThan(new Date()) },
+      stages: {
+        season: { id: selectedSeasonId },
+        ...(seasonId === undefined ? {} : { endsAt: LessThan(new Date()) }),
+      },
     });
 
     return championships.sort((left, right) =>
@@ -63,12 +73,16 @@ export class TelegramStatisticsQueryService {
     competitionType: ECompetitionType,
     seasonId?: number,
   ): Promise<CompetitionStagesEntity[]> {
+    const selectedSeasonId =
+      seasonId ?? (await this.findCurrentSeason(competitionType))?.id;
+
+    if (selectedSeasonId === undefined) {
+      return [];
+    }
+
     const stages = await this.stagesRepository.getWhere({
       championship: { id: championshipId },
-      season:
-        seasonId === undefined
-          ? { name: this.getCurrentSeasonName(competitionType) }
-          : { id: seasonId },
+      season: { id: selectedSeasonId },
     });
 
     return stages.sort((left, right) => left.name.localeCompare(right.name));
@@ -92,9 +106,12 @@ export class TelegramStatisticsQueryService {
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  private getCurrentSeasonName(competitionType: ECompetitionType): string {
-    return competitionType === ECompetitionType.Club
-      ? getSeasonName(new Date())
-      : String(new Date().getFullYear());
+  private findCurrentSeason(
+    competitionType: ECompetitionType,
+  ): Promise<SeasonsEntity | null> {
+    return this.seasonsRepository.findLatestWithActiveMatches(
+      new Date(),
+      competitionType,
+    );
   }
 }

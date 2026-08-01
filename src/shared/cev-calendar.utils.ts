@@ -103,6 +103,11 @@ export function extractCalendarChampionships(
 
     const startsAt = parseCevDate(dateRange[1], false);
     const endsAt = parseCevDate(dateRange[2], true);
+    const competitionYear = Number(competition[2]);
+    const seasonReferenceYear =
+      competitionType === ECompetitionType.Club
+        ? competitionYear
+        : calendarYear;
     const stageKey = createCompetitionStageKey(externalId, stageExternalId);
     const existingStage = stages.get(stageKey);
 
@@ -115,7 +120,10 @@ export function extractCalendarChampionships(
       externalId: stageExternalId,
       name: competition[3]?.trim() || competition[1].trim(),
       championshipExternalId: externalId,
-      seasonName: getCompetitionSeasonName(competitionType, calendarYear),
+      seasonName: getCompetitionSeasonName(
+        competitionType,
+        seasonReferenceYear,
+      ),
       startsAt:
         existingStage && existingStage.startsAt! < startsAt
           ? existingStage.startsAt

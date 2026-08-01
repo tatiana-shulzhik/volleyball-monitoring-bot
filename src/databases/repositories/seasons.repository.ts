@@ -7,7 +7,7 @@ import {
   Repository,
 } from 'typeorm';
 import { ISeason } from '../../interfaces/requests/seasons.interface';
-import { ECompetitionType } from '../../shared/enums';
+import { ECompetitionType, EMatchStatus } from '../../shared/enums';
 import { SeasonsEntity } from '../entities/seasons.entity';
 
 @Injectable()
@@ -60,6 +60,32 @@ export class SeasonsRepository {
       )
       .orderBy('season.name', 'DESC')
       .getMany();
+  }
+
+  findLatestWithActiveMatches(
+    now: Date,
+    competitionType: ECompetitionType,
+  ): Promise<SeasonsEntity | null> {
+    return this.repository
+      .createQueryBuilder('season')
+      .where(
+        'EXISTS (SELECT 1 FROM competition_stages stage ' +
+          'INNER JOIN championships championship ' +
+          'ON championship.id = stage.championship_id ' +
+          'INNER JOIN leagues league ON league.stage_id = stage.id ' +
+          'INNER JOIN matches match ON match.league_id = league.id ' +
+          'WHERE stage.season_id = season.id ' +
+          'AND championship.competition_type = :competitionType ' +
+          'AND stage.ends_at >= :now ' +
+          'AND match.status = :scheduled)',
+        {
+          now,
+          competitionType,
+          scheduled: EMatchStatus.Scheduled,
+        },
+      )
+      .orderBy('season.name', 'DESC')
+      .getOne();
   }
 
   hasAny(): Promise<boolean> {

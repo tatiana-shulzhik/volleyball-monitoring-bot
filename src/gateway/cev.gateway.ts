@@ -125,7 +125,7 @@ export class CevGateway {
 
         if (
           existing &&
-          (parseSeasonEndYear(existing.seasonName) ?? 0) <
+          (parseSeasonEndYear(existing.seasonName) ?? 0) >=
             (parseSeasonEndYear(stage.seasonName) ?? 0)
         ) {
           continue;

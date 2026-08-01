@@ -16,13 +16,13 @@ export function getSeasonName(date: Date): string {
 
 export function getCompetitionSeasonName(
   competitionType: ECompetitionType,
-  calendarYear: number,
+  year: number,
 ): string {
   if (competitionType === ECompetitionType.NationalTeam) {
-    return String(calendarYear);
+    return String(year);
   }
 
-  return `${calendarYear - 1}/${String(calendarYear).slice(-2)}`;
+  return `${year - 1}/${String(year).slice(-2)}`;
 }
 
 export function parseSeasonStartYear(name?: string): number | undefined {
