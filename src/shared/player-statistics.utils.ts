@@ -158,7 +158,7 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
   ];
   const statistics =
     seasons.length > 1
-      ? formatRetroPlayers(data.players)
+      ? formatRetroPlayers(data.players, data.teamSeasonName, data.teamName)
       : formatPlayersTable(data.players);
   const teamSeason =
     data.teamSeasonName === data.seasonName
@@ -175,7 +175,11 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
   ].join('');
 }
 
-function formatRetroPlayers(players: ITeamStatistics['players']): string {
+function formatRetroPlayers(
+  players: ITeamStatistics['players'],
+  selectedSeasonName: string,
+  selectedTeamName: string,
+): string {
   const playersByName = players.reduce((groups, player) => {
     const stored = groups.get(player.fullName) ?? [];
     stored.push(player);
@@ -185,30 +189,33 @@ function formatRetroPlayers(players: ITeamStatistics['players']): string {
 
   return [...playersByName.values()]
     .map((seasons) => {
+      const selectedSeason = seasons.find(
+        ({ seasonName, teamName }) =>
+          seasonName === selectedSeasonName && teamName === selectedTeamName,
+      );
       const rows = seasons.map(
         (season) =>
           '<tr>' +
           `<td>${escapeHtml(season.seasonName)}</td>` +
           `<td>${escapeHtml(season.teamName)}</td>` +
-          `<td align="center">${season.shirtNumber ?? '—'}</td>` +
           `<td align="center">${formatPlayerRating(season)}</td>` +
-          `<td align="center">${formatPlayerPosition(season.position)}</td>` +
           `<td align="center">${formatPlayerAttacks(season)}</td>` +
+          `<td align="center">${formatPlayerPosition(season.position)}</td>` +
           '</tr>',
       );
 
       return [
         '<br>',
-        `<p>👤 <b>${escapeHtml(seasons[0].fullName)}</b> · `,
+        `<p>👤 №${selectedSeason?.shirtNumber ?? '—'} `,
+        `<b>${escapeHtml(seasons[0].fullName)}</b> · `,
         `${seasons[0].birthYear ?? '—'} г.р.</p>`,
         '<small><table bordered striped>',
         '<tr>' +
           '<th>Сезон</th>' +
           '<th>Команда</th>' +
-          '<th>№<br>игрока</th>' +
           '<th>Рейтинг<br>(очки/сеты)</th>' +
-          '<th>Поз</th>' +
           '<th>Атака<br>(успешные/попытки)</th>' +
+          '<th>Поз</th>' +
           '</tr>',
         ...rows,
         '</table></small>',
@@ -227,9 +234,9 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
       `<td align="center">${number}</td>` +
       `<td>${escapeHtml(player.fullName)}</td>` +
       `<td align="center">${formatPlayerRating(player)}</td>` +
-      `<td align="center">${position}</td>` +
       `<td align="center">${formatPlayerAttacks(player)}</td>` +
       `<td align="center">${player.birthYear ?? '—'}</td>` +
+      `<td align="center">${position}</td>` +
       '</tr>'
     );
   });
@@ -240,9 +247,9 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
       '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
-      '<th align="center">Поз</th>' +
       '<th align="center">Атака<br>(успешные/попытки)</th>' +
       '<th align="center">Год рождения</th>' +
+      '<th align="center">Поз</th>' +
       '</tr>',
     ...rows,
     '</table></small>',
