@@ -55,9 +55,24 @@ export class PlayersService {
     const aggregateTeams = isAggregate
       ? await this.teamsRepository.getWhere({ name: team.name })
       : [team];
+    const displayedRelations = isAggregate
+      ? await this.relationsRepository.getWhere({
+          team: { id: In(aggregateTeams.map(({ id }) => id)) },
+          league: {
+            stage: {
+              season: { id: In(aggregateSeasons!.map(({ id }) => id)) },
+              championship: {
+                competitionType: league.stage.championship.competitionType,
+              },
+            },
+          },
+        })
+      : relations;
 
     const statistics = await this.statisticsRepository.getWhere({
-      player: { id: In(relations.map(({ player }) => player.id)) },
+      player: {
+        id: In(displayedRelations.map(({ player }) => player.id)),
+      },
       team: {
         id: isAggregate ? In(aggregateTeams.map(({ id }) => id)) : team.id,
       },
@@ -76,7 +91,7 @@ export class PlayersService {
           : {}),
       },
     });
-    const result = createTeamStatistics(relations, statistics);
+    const result = createTeamStatistics(displayedRelations, statistics);
 
     if (result && aggregateSeasons?.length) {
       const chronological = [...aggregateSeasons].reverse();
