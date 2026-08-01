@@ -2,6 +2,7 @@ import {
   IExtractPlayersParams,
   ICevPlayer,
 } from '../interfaces/requests/players.interface';
+import { CEV_COUNTRIES } from './consts/constants';
 
 const PLAYER_ROW = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>([\s\S]*?)<\/tr>/gi;
 const TABLE_CELL = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
@@ -59,14 +60,12 @@ export function extractTeamCountry(html: string): string | null {
     return null;
   }
 
-  const text = cleanText(addressSection);
-  const matches = [
-    ...text.matchAll(
-      /,\s*([\p{Letter} .'-]+?)(?:\/[^()]*)?\s*\(\s*[A-Z]{3}\s*\)/gu,
-    ),
+  const codes = [
+    ...cleanText(addressSection).matchAll(/\(\s*([A-Z]{3})\s*\)/g),
   ];
+  const code = codes.at(-1)?.[1];
 
-  return matches.at(-1)?.[1].trim() || null;
+  return code ? (CEV_COUNTRIES[code] ?? code) : null;
 }
 
 function parseBirthYear(value: string | undefined): number | null {
