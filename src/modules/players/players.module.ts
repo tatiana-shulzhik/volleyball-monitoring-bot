@@ -3,6 +3,7 @@ import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
+import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { PlayersService } from './players.service';
 import { PlayerStatisticsService } from './player-statistics.service';
 
@@ -14,6 +15,7 @@ import { PlayerStatisticsService } from './player-statistics.service';
     PlayerTeamLeaguesRepository,
     PlayerStatisticsRepository,
     MatchesRepository,
+    TeamsRepository,
   ],
   exports: [
     PlayersService,

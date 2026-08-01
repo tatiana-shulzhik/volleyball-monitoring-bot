@@ -11,11 +11,18 @@ export function calculateTeamChanges(
   data: CalculateTeamChangesParams,
 ): TeamChanges {
   const { incoming, existing } = data;
+  const existingByExternalId = new Map(
+    existing.map((team) => [team.externalId, team]),
+  );
   const uniqueTeams = [
     ...new Map(
       incoming.map(({ externalId, name }) => [
         externalId,
-        { externalId, name },
+        {
+          externalId,
+          name,
+          country: existingByExternalId.get(externalId)?.country ?? null,
+        },
       ]),
     ).values(),
   ];

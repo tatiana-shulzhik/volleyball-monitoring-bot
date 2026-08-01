@@ -98,6 +98,9 @@ export function createTeamStatistics(
     );
 
   return {
+    seasonName: relations[0].league.stage.season?.name ?? '—',
+    country: relations[0].team.country,
+    championshipName: relations[0].league.stage.championship.name,
     teamName: relations[0].team.name,
     leagueName: relations[0].league.name,
     players,
@@ -134,8 +137,11 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
   });
 
   return [
-    `<p><b>🏐 ${escapeHtml(data.teamName)}</b></p>`,
-    `<p>🏆 ${escapeHtml(data.leagueName)}</p>`,
+    '<p><b>📊 Статистика команды</b></p>',
+    `<p>📅 ${escapeHtml(data.seasonName)}</p>`,
+    `<p>🌍 ${data.country ? escapeHtml(data.country) : '—'}</p>`,
+    `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
+    `<p>👥 ${escapeHtml(data.teamName)}</p>`,
     '<small><table bordered striped>',
     '<tr>' +
       '<th align="center">№</th>' +

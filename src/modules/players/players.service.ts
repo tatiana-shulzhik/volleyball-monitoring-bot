@@ -3,6 +3,7 @@ import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
+import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
@@ -26,6 +27,7 @@ export class PlayersService {
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly statisticsRepository: PlayerStatisticsRepository,
+    private readonly teamsRepository: TeamsRepository,
   ) {}
 
   async findTeamStatistics(
@@ -68,6 +70,12 @@ export class PlayersService {
     );
 
     const fetched = await this.gateway.fetchPlayers(sources);
+    await this.teamsRepository.updateCountries(
+      fetched.teamCountries.map(({ teamExternalId, country }) => ({
+        externalId: teamExternalId,
+        country,
+      })),
+    );
     const externalIds = [
       ...new Set(fetched.players.map(({ externalId }) => externalId)),
     ];

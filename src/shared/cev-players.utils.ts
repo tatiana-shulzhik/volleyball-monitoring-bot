@@ -50,6 +50,25 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
   return [...players.values()];
 }
 
+export function extractTeamCountry(html: string): string | null {
+  const addressSection = html.match(
+    /Addresses[\s\S]*?(?:Media Details|Contacts|<\/fieldset>)/i,
+  )?.[0];
+
+  if (!addressSection) {
+    return null;
+  }
+
+  const text = cleanText(addressSection);
+  const matches = [
+    ...text.matchAll(
+      /,\s*([\p{Letter} .'-]+?)(?:\/[^()]*)?\s*\(\s*[A-Z]{3}\s*\)/gu,
+    ),
+  ];
+
+  return matches.at(-1)?.[1].trim() || null;
+}
+
 function parseBirthYear(value: string | undefined): number | null {
   const year = cleanText(value ?? '').match(/\b(?:19|20)\d{2}\b/)?.[0];
   return year ? Number(year) : null;

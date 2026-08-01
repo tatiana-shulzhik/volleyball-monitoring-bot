@@ -10,4 +10,7 @@ export class TeamEntity {
 
   @Column({ name: 'external_id', unique: true })
   externalId: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  country: string | null;
 }

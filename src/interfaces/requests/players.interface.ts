@@ -17,6 +17,7 @@ export interface ICevPlayer {
 
 export interface IFetchedPlayers {
   players: ICevPlayer[];
+  teamCountries: Array<{ teamExternalId: string; country: string }>;
   isComplete: boolean;
 }
 
