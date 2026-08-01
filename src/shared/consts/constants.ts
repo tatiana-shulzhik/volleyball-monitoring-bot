@@ -14,7 +14,7 @@ export const MATCH_MONITORING_WINDOW_HOURS = 36;
 
 export const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 
-export const INITIAL_SYNCHRONIZATION_KEY = 'initial-catalog-country-v2';
+export const INITIAL_SYNCHRONIZATION_KEY = 'initial-catalog-country';
 
 export const CEV_COUNTRIES: Record<string, string> = {
   ALB: 'Albania',

@@ -52,20 +52,11 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
 }
 
 export function extractTeamCountry(html: string): string | null {
-  const addressSection = html.match(
-    /Addresses[\s\S]*?(?:Media Details|Contacts|<\/fieldset>)/i,
-  )?.[0];
+  const flagCode = html
+    .match(/Images\/Flags_100\/([A-Z]{3})_100\.png/i)?.[1]
+    .toUpperCase();
 
-  if (!addressSection) {
-    return null;
-  }
-
-  const codes = [
-    ...cleanText(addressSection).matchAll(/\(\s*([A-Z]{3})\s*\)/g),
-  ];
-  const code = codes.at(-1)?.[1];
-
-  return code ? (CEV_COUNTRIES[code] ?? code) : null;
+  return flagCode ? (CEV_COUNTRIES[flagCode] ?? flagCode) : null;
 }
 
 function parseBirthYear(value: string | undefined): number | null {
