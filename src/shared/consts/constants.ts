@@ -6,7 +6,7 @@ export const MAX_ATTEMPTS = 3;
 
 export const CEV_HTTP_CONCURRENCY = 10;
 
-export const PREVIOUS_YEARS_COUNT = 3;
+export const PREVIOUS_YEARS_COUNT = 4;
 
 export const WRITE_BATCH_SIZE = 5000;
 
