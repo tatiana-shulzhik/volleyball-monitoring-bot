@@ -10,6 +10,7 @@ export interface ICevPlayer {
   fullName: string;
   position: string;
   shirtNumber: number | null;
+  birthYear: number | null;
   teamExternalId: string;
   leagueExternalId: number;
 }

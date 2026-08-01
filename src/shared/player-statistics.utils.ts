@@ -81,6 +81,7 @@ export function createTeamStatistics(
 
       return {
         fullName: relation.player.fullName,
+        birthYear: relation.player.birthYear,
         shirtNumber: relation.shirtNumber,
         position: relation.position,
         points: playerStatistics?.points ?? null,
@@ -127,6 +128,7 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
       `<td align="center">${statistics}</td>` +
       `<td align="center">${position}</td>` +
       `<td align="center">${attacks}</td>` +
+      `<td align="center">${player.birthYear ?? '—'}</td>` +
       '</tr>'
     );
   });
@@ -141,6 +143,7 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
       '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
       '<th align="center">Поз</th>' +
       '<th align="center">Атака<br>(успешные/попытки)</th>' +
+      '<th align="center">Год рождения</th>' +
       '</tr>',
     ...rows,
     '</table></small>',

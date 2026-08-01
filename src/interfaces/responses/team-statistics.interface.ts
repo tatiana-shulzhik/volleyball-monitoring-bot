@@ -1,5 +1,6 @@
 export interface ITeamPlayerStatistics {
   fullName: string;
+  birthYear: number | null;
   shirtNumber: number | null;
   position: string | null;
   points: number | null;

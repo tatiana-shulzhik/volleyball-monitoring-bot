@@ -32,6 +32,7 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
     const fullName = cleanText(playerMatch[2]);
     const shirtNumber = parseShirtNumber(cells[playerCellIndex - 1]);
     const position = cleanText(cells[playerCellIndex + 1] ?? '');
+    const birthYear = parseBirthYear(cells[playerCellIndex + 4]);
 
     if (fullName) {
       players.set(externalId, {
@@ -39,6 +40,7 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
         fullName,
         position,
         shirtNumber,
+        birthYear,
         teamExternalId,
         leagueExternalId,
       });
@@ -46,6 +48,11 @@ export function extractPlayers(data: IExtractPlayersParams): ICevPlayer[] {
   }
 
   return [...players.values()];
+}
+
+function parseBirthYear(value: string | undefined): number | null {
+  const year = cleanText(value ?? '').match(/\b(?:19|20)\d{2}\b/)?.[0];
+  return year ? Number(year) : null;
 }
 
 function parseShirtNumber(value: string | undefined): number | null {
