@@ -33,13 +33,6 @@ export const TELEGRAM_CALLBACKS = {
       competitionType: ECompetitionType,
     ) =>
       `statistics:stage:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
-    league: (
-      leagueId: number,
-      stageId: number,
-      championshipId: number,
-      competitionType: ECompetitionType,
-    ) =>
-      `statistics:league:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
     team: (
       teamId: number,
       leagueId: number,
@@ -67,14 +60,6 @@ export const TELEGRAM_CALLBACKS = {
       competitionType: ECompetitionType,
     ) =>
       `retro-statistics:stage:${stageId}:${championshipId}:${seasonId}:${COMPETITION_TYPE_CODES[competitionType]}`,
-    league: (
-      leagueId: number,
-      stageId: number,
-      championshipId: number,
-      seasonId: number,
-      competitionType: ECompetitionType,
-    ) =>
-      `retro-statistics:league:${leagueId}:${stageId}:${championshipId}:${seasonId}:${COMPETITION_TYPE_CODES[competitionType]}`,
     team: (
       teamId: number,
       leagueId: number,
@@ -110,9 +95,6 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
     stage: new RegExp(
       `^statistics:stage:(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
-    league: new RegExp(
-      `^statistics:league:(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
-    ),
     team: new RegExp(
       `^statistics:team:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
@@ -129,9 +111,6 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
     ),
     stage: new RegExp(
       `^retro-statistics:stage:(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
-    ),
-    league: new RegExp(
-      `^retro-statistics:league:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
     team: new RegExp(
       `^retro-statistics:team:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
