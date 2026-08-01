@@ -33,6 +33,7 @@ export class PlayersService {
   async findTeamStatistics(
     teamId: number,
     leagueId: number,
+    aggregateSeasons?: Array<{ id: number; name: string }>,
   ): Promise<ITeamStatistics | null> {
     const relations = await this.relationsRepository.getWhere({
       team: { id: teamId },
@@ -53,10 +54,23 @@ export class PlayersService {
     const statistics = await this.statisticsRepository.getWhere({
       player: { id: In(relations.map(({ player }) => player.id)) },
       team: { id: team.id },
-      stage: { season: { id: seasonId } },
+      stage: {
+        season: {
+          id: aggregateSeasons?.length
+            ? In(aggregateSeasons.map(({ id }) => id))
+            : seasonId,
+        },
+      },
     });
+    const result = createTeamStatistics(relations, statistics);
 
-    return createTeamStatistics(relations, statistics);
+    if (result && aggregateSeasons?.length) {
+      const chronological = [...aggregateSeasons].reverse();
+      result.seasonName = `${chronological[0].name}–${chronological.at(-1)!.name}`;
+      result.championshipName = 'Все чемпионаты';
+    }
+
+    return result;
   }
 
   async synchronize(sources: IPlayerRosterSource[]): Promise<void> {

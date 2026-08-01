@@ -310,9 +310,13 @@ export class TelegramStatisticsHandlers {
       [
         TELEGRAM_CALLBACK_PATTERNS.statistics.team,
         TELEGRAM_CALLBACK_PATTERNS.retroStatistics.team,
+        TELEGRAM_CALLBACK_PATTERNS.retroStatistics.teamSummary,
       ],
       async (context) => {
         const isRetro = context.match[0].startsWith('retro-statistics:');
+        const isSummary = context.match[0].startsWith(
+          'retro-statistics:team-summary:',
+        );
         const teamId = Number(context.match[1]);
         const leagueId = Number(context.match[2]);
         const stageId = Number(context.match[3]);
@@ -324,8 +328,37 @@ export class TelegramStatisticsHandlers {
         const statistics = await this.playersService.findTeamStatistics(
           teamId,
           leagueId,
+          isSummary
+            ? await this.queries.findFinishedSeasons(competitionType)
+            : undefined,
         );
         const keyboard = Markup.inlineKeyboard([
+          ...(isRetro
+            ? [
+                [
+                  Markup.button.callback(
+                    isSummary ? '📅 Только выбранный сезон' : '📊 За 3 сезона',
+                    isSummary
+                      ? TELEGRAM_CALLBACKS.retroStatistics.team(
+                          teamId,
+                          leagueId,
+                          stageId,
+                          championshipId,
+                          seasonId!,
+                          competitionType,
+                        )
+                      : TELEGRAM_CALLBACKS.retroStatistics.teamSummary(
+                          teamId,
+                          leagueId,
+                          stageId,
+                          championshipId,
+                          seasonId!,
+                          competitionType,
+                        ),
+                  ),
+                ],
+              ]
+            : []),
           [
             Markup.button.callback(
               TELEGRAM_MESSAGES.teams.back,
