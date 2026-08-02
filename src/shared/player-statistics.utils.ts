@@ -1,6 +1,7 @@
 import type { PlayerStatisticsEntity } from '../databases/entities/player-statistics.entity';
 import type { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import type { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
+import { parseSeasonEndYear } from './season.utils';
 
 export function normalizeName(value: string): string {
   return value
@@ -160,6 +161,62 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
     seasons.length > 1
       ? formatRetroPlayers(data.players, data.teamSeasonName, data.teamName)
       : formatPlayersTable(data.players);
+
+  return formatTeamStatisticsHeader(data) + statistics;
+}
+
+export function formatTeamStatisticsPages(
+  data: ITeamStatistics,
+  maxLength = 20000,
+): string[] {
+  const formatted = formatTeamStatistics(data);
+  const seasons = new Set(data.players.map(({ seasonName }) => seasonName));
+
+  if (formatted.length <= maxLength || seasons.size < 2) {
+    return [formatted];
+  }
+
+  const header = formatTeamStatisticsHeader(data);
+  const groups = groupRetroPlayers(data.players);
+  const pages: string[] = [];
+  let pageGroups: ITeamStatistics['players'][] = [];
+
+  for (const group of groups) {
+    const candidateGroups = [...pageGroups, group];
+    const candidate =
+      header +
+      formatRetroPlayerGroups(
+        candidateGroups,
+        data.teamSeasonName,
+        data.teamName,
+      );
+
+    if (candidate.length > maxLength && pageGroups.length) {
+      pages.push(
+        header +
+          formatRetroPlayerGroups(
+            pageGroups,
+            data.teamSeasonName,
+            data.teamName,
+          ),
+      );
+      pageGroups = [group];
+    } else {
+      pageGroups = candidateGroups;
+    }
+  }
+
+  if (pageGroups.length) {
+    pages.push(
+      header +
+        formatRetroPlayerGroups(pageGroups, data.teamSeasonName, data.teamName),
+    );
+  }
+
+  return pages;
+}
+
+function formatTeamStatisticsHeader(data: ITeamStatistics): string {
   const teamSeason =
     data.teamSeasonName === data.seasonName
       ? ''
@@ -171,7 +228,6 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
     `<p>🌍 ${data.country ? escapeHtml(data.country) : '—'}</p>`,
     `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
     `<p>👥 ${escapeHtml(data.teamName)}${teamSeason}</p>`,
-    statistics,
   ].join('');
 }
 
@@ -180,6 +236,16 @@ function formatRetroPlayers(
   selectedSeasonName: string,
   selectedTeamName: string,
 ): string {
+  return formatRetroPlayerGroups(
+    groupRetroPlayers(players),
+    selectedSeasonName,
+    selectedTeamName,
+  );
+}
+
+function groupRetroPlayers(
+  players: ITeamStatistics['players'],
+): ITeamStatistics['players'][] {
   const playersByName = players.reduce((groups, player) => {
     const stored = groups.get(player.fullName) ?? [];
     stored.push(player);
@@ -187,7 +253,15 @@ function formatRetroPlayers(
     return groups;
   }, new Map<string, ITeamStatistics['players']>());
 
-  return [...playersByName.values()]
+  return [...playersByName.values()].sort(compareRetroPlayerGroups);
+}
+
+function formatRetroPlayerGroups(
+  groups: ITeamStatistics['players'][],
+  selectedSeasonName: string,
+  selectedTeamName: string,
+): string {
+  return groups
     .map((seasons) => {
       const selectedSeason = seasons.find(
         ({ seasonName, teamName }) =>
@@ -222,6 +296,43 @@ function formatRetroPlayers(
       ].join('');
     })
     .join('');
+}
+
+function compareRetroPlayerGroups(
+  left: ITeamStatistics['players'],
+  right: ITeamStatistics['players'],
+): number {
+  const leftSeason = getLatestPlayerSeason(left);
+  const rightSeason = getLatestPlayerSeason(right);
+
+  return (
+    rightSeason.year - leftSeason.year ||
+    (rightSeason.rating ?? -1) - (leftSeason.rating ?? -1) ||
+    left[0].fullName.localeCompare(right[0].fullName)
+  );
+}
+
+function getLatestPlayerSeason(players: ITeamStatistics['players']): {
+  year: number;
+  rating: number | null;
+} {
+  const latestYear = Math.max(
+    ...players.map(({ seasonName }) => parseSeasonEndYear(seasonName) ?? 0),
+  );
+  const ratings = players
+    .filter(
+      ({ seasonName }) => (parseSeasonEndYear(seasonName) ?? 0) === latestYear,
+    )
+    .flatMap((player) => {
+      const rating = calculatePlayerRating(player.points, player.setsPlayed);
+
+      return rating === null ? [] : [rating];
+    });
+
+  return {
+    year: latestYear,
+    rating: ratings.length ? Math.max(...ratings) : null,
+  };
 }
 
 function formatPlayersTable(players: ITeamStatistics['players']): string {

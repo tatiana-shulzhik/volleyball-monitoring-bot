@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
 import { ECompetitionType } from '../../shared/enums';
-import { formatTeamStatistics } from '../../shared/player-statistics.utils';
+import {
+  formatTeamStatistics,
+  formatTeamStatisticsPages,
+} from '../../shared/player-statistics.utils';
 import { PlayersService } from '../players/players.service';
 import {
   parseCompetitionType,
@@ -271,6 +274,9 @@ export class TelegramStatisticsHandlers {
         const competitionType = parseCompetitionType(
           context.match[isRetro ? 6 : 5],
         );
+        const requestedPage = isSummary
+          ? Number(context.match[isRetro ? 7 : 6] ?? 0)
+          : 0;
         const statistics = await this.playersService.findTeamStatistics(
           teamId,
           leagueId,
@@ -294,29 +300,64 @@ export class TelegramStatisticsHandlers {
               championshipId,
               competitionType,
             );
-        const summaryCallbackData = isRetro
-          ? TELEGRAM_CALLBACKS.retroStatistics.teamSummary(
-              teamId,
-              leagueId,
-              stageId,
-              championshipId,
-              seasonId!,
-              competitionType,
-            )
-          : TELEGRAM_CALLBACKS.statistics.teamSummary(
-              teamId,
-              leagueId,
-              stageId,
-              championshipId,
-              competitionType,
-            );
+        const createSummaryCallbackData = (page = 0) =>
+          isRetro
+            ? TELEGRAM_CALLBACKS.retroStatistics.teamSummary(
+                teamId,
+                leagueId,
+                stageId,
+                championshipId,
+                seasonId!,
+                competitionType,
+                page,
+              )
+            : TELEGRAM_CALLBACKS.statistics.teamSummary(
+                teamId,
+                leagueId,
+                stageId,
+                championshipId,
+                competitionType,
+                page,
+              );
+        const pages = statistics
+          ? isSummary
+            ? formatTeamStatisticsPages(statistics)
+            : [formatTeamStatistics(statistics)]
+          : [];
+        const page = pages.length
+          ? Math.min(Math.max(requestedPage, 0), pages.length - 1)
+          : 0;
+        const paginationButtons =
+          pages.length > 1
+            ? [
+                [
+                  ...(page > 0
+                    ? [
+                        Markup.button.callback(
+                          `⬅️ ${page}/${pages.length}`,
+                          createSummaryCallbackData(page - 1),
+                        ),
+                      ]
+                    : []),
+                  ...(page < pages.length - 1
+                    ? [
+                        Markup.button.callback(
+                          `${page + 2}/${pages.length} ➡️`,
+                          createSummaryCallbackData(page + 1),
+                        ),
+                      ]
+                    : []),
+                ],
+              ]
+            : [];
         const keyboard = Markup.inlineKeyboard([
           [
             Markup.button.callback(
               isSummary ? '📅 Только выбранный сезон' : '📊 За 4 сезона',
-              isSummary ? teamCallbackData : summaryCallbackData,
+              isSummary ? teamCallbackData : createSummaryCallbackData(),
             ),
           ],
+          ...paginationButtons,
           [
             Markup.button.callback(
               TELEGRAM_MESSAGES.teams.back,
@@ -362,7 +403,7 @@ export class TelegramStatisticsHandlers {
         await editRichMessage('editMessageText', {
           chat_id: message.chat.id,
           message_id: message.message_id,
-          rich_message: { html: formatTeamStatistics(statistics) },
+          rich_message: { html: pages[page] },
           reply_markup: keyboard.reply_markup,
         });
       },

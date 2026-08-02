@@ -47,8 +47,9 @@ export const TELEGRAM_CALLBACKS = {
       stageId: number,
       championshipId: number,
       competitionType: ECompetitionType,
+      page = 0,
     ) =>
-      `statistics:team-summary:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+      `statistics:team-summary:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}:${page}`,
   },
   retroStatistics: {
     competitionType: (competitionType: ECompetitionType) =>
@@ -84,8 +85,9 @@ export const TELEGRAM_CALLBACKS = {
       championshipId: number,
       seasonId: number,
       competitionType: ECompetitionType,
+      page = 0,
     ) =>
-      `retro-statistics:team-summary:${teamId}:${leagueId}:${stageId}:${championshipId}:${seasonId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+      `retro-statistics:team-summary:${teamId}:${leagueId}:${stageId}:${championshipId}:${seasonId}:${COMPETITION_TYPE_CODES[competitionType]}:${page}`,
   },
 } as const;
 
@@ -107,7 +109,7 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
       `^statistics:team:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
     teamSummary: new RegExp(
-      `^statistics:team-summary:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
+      `^statistics:team-summary:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}(?::(\\d+))?$`,
     ),
   },
   retroStatistics: {
@@ -127,7 +129,7 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
       `^retro-statistics:team:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
     teamSummary: new RegExp(
-      `^retro-statistics:team-summary:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
+      `^retro-statistics:team-summary:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}(?::(\\d+))?$`,
     ),
   },
   development: /^menu:(?!back|statistics|retro-statistics)/,
