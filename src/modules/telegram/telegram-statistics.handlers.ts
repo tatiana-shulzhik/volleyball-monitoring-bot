@@ -280,10 +280,8 @@ export class TelegramStatisticsHandlers {
         const requestedPage = isSummary
           ? Number(context.match[isRetro ? 7 : 6] ?? 0)
           : 0;
-        const cacheKey = `team-statistics:${competitionType}:${teamId}:${leagueId}`;
-        let pages = isSummary
-          ? ((await this.cache.get<string[]>(cacheKey)) ?? undefined)
-          : undefined;
+        const cacheKey = `team-statistics:${isSummary ? 'summary' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
+        let pages = (await this.cache.get<string[]>(cacheKey)) ?? undefined;
 
         if (pages === undefined) {
           const statistics = await this.playersService.findTeamStatistics(
@@ -300,13 +298,11 @@ export class TelegramStatisticsHandlers {
               : [formatTeamStatistics(statistics)]
             : [];
 
-          if (isSummary) {
-            await this.cache.set(
-              cacheKey,
-              pages,
-              TEAM_STATISTICS_CACHE_TTL_SECONDS,
-            );
-          }
+          await this.cache.set(
+            cacheKey,
+            pages,
+            TEAM_STATISTICS_CACHE_TTL_SECONDS,
+          );
         }
         const teamCallbackData = isRetro
           ? TELEGRAM_CALLBACKS.retroStatistics.team(
