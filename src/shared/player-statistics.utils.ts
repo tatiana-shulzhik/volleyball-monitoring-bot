@@ -159,7 +159,7 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
   ];
   const statistics =
     seasons.length > 1
-      ? formatRetroPlayers(data.players, data.teamSeasonName, data.teamName)
+      ? formatRetroPlayers(data.players)
       : formatPlayersTable(data.players);
 
   return formatTeamStatisticsHeader(data) + statistics;
@@ -183,23 +183,10 @@ export function formatTeamStatisticsPages(
 
   for (const group of groups) {
     const candidateGroups = [...pageGroups, group];
-    const candidate =
-      header +
-      formatRetroPlayerGroups(
-        candidateGroups,
-        data.teamSeasonName,
-        data.teamName,
-      );
+    const candidate = header + formatRetroPlayerGroups(candidateGroups);
 
     if (candidate.length > maxLength && pageGroups.length) {
-      pages.push(
-        header +
-          formatRetroPlayerGroups(
-            pageGroups,
-            data.teamSeasonName,
-            data.teamName,
-          ),
-      );
+      pages.push(header + formatRetroPlayerGroups(pageGroups));
       pageGroups = [group];
     } else {
       pageGroups = candidateGroups;
@@ -207,10 +194,7 @@ export function formatTeamStatisticsPages(
   }
 
   if (pageGroups.length) {
-    pages.push(
-      header +
-        formatRetroPlayerGroups(pageGroups, data.teamSeasonName, data.teamName),
-    );
+    pages.push(header + formatRetroPlayerGroups(pageGroups));
   }
 
   return pages;
@@ -231,16 +215,8 @@ function formatTeamStatisticsHeader(data: ITeamStatistics): string {
   ].join('');
 }
 
-function formatRetroPlayers(
-  players: ITeamStatistics['players'],
-  selectedSeasonName: string,
-  selectedTeamName: string,
-): string {
-  return formatRetroPlayerGroups(
-    groupRetroPlayers(players),
-    selectedSeasonName,
-    selectedTeamName,
-  );
+function formatRetroPlayers(players: ITeamStatistics['players']): string {
+  return formatRetroPlayerGroups(groupRetroPlayers(players));
 }
 
 function groupRetroPlayers(
@@ -256,17 +232,22 @@ function groupRetroPlayers(
   return [...playersByName.values()].sort(compareRetroPlayerGroups);
 }
 
-function formatRetroPlayerGroups(
-  groups: ITeamStatistics['players'][],
-  selectedSeasonName: string,
-  selectedTeamName: string,
-): string {
+function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
   return groups
     .map((seasons) => {
-      const selectedSeason = seasons.find(
-        ({ seasonName, teamName }) =>
-          seasonName === selectedSeasonName && teamName === selectedTeamName,
+      const latestSeasonYear = Math.max(
+        ...seasons.map(({ seasonName }) => parseSeasonEndYear(seasonName) ?? 0),
       );
+      const latestSeason =
+        seasons.find(
+          ({ seasonName, shirtNumber }) =>
+            (parseSeasonEndYear(seasonName) ?? 0) === latestSeasonYear &&
+            shirtNumber !== null,
+        ) ??
+        seasons.find(
+          ({ seasonName }) =>
+            (parseSeasonEndYear(seasonName) ?? 0) === latestSeasonYear,
+        );
       const rows = seasons.map(
         (season) =>
           '<tr>' +
@@ -280,7 +261,7 @@ function formatRetroPlayerGroups(
 
       return [
         '<br>',
-        `<p>👤 №${selectedSeason?.shirtNumber ?? '—'} `,
+        `<p>👤 №${latestSeason?.shirtNumber ?? '—'} `,
         `<b>${escapeHtml(seasons[0].fullName)}</b> · `,
         `${seasons[0].birthYear ?? '—'} г.р.</p>`,
         '<small><table bordered striped>',
