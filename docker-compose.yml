@@ -40,6 +40,16 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
 
+  redis:
+    image: bitnami/redis:latest
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/bitnami/redis/data
+    restart: unless-stopped
+
   tabix:
     image: spoonest/clickhouse-tabix-web-client
     ports:
@@ -54,6 +64,7 @@ services:
     depends_on:
       - pg
       - clickhouse
+      - redis
     ports:
       - "${APP_PORT}:3000"
     env_file:
@@ -61,7 +72,9 @@ services:
     environment:
       POSTGRES_HOST: pg
       CLICKHOUSE_HOST: clickhouse
-
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
 volumes:
   postgres_data:
@@ -69,3 +82,4 @@ volumes:
   clickhouse_data:
   clickhouse_logs:
   tabix_data:
+  redis_data:

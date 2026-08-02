@@ -8,6 +8,8 @@ export const CEV_HTTP_CONCURRENCY = 10;
 
 export const PREVIOUS_YEARS_COUNT = 4;
 
+export const TEAM_STATISTICS_CACHE_TTL_SECONDS = 10 * 60;
+
 export const WRITE_BATCH_SIZE = 5000;
 
 export const MATCH_MONITORING_WINDOW_HOURS = 36;
