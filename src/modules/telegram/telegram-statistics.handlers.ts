@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
+import { RedisCacheService } from '../../cache/redis-cache.service';
+import { TEAM_STATISTICS_CACHE_TTL_SECONDS } from '../../shared/consts/constants';
 import { ECompetitionType } from '../../shared/enums';
 import {
   formatTeamStatistics,
@@ -23,6 +25,7 @@ export class TelegramStatisticsHandlers {
   constructor(
     private readonly queries: TelegramStatisticsQueryService,
     private readonly playersService: PlayersService,
+    private readonly cache: RedisCacheService,
   ) {}
 
   register(bot: Telegraf): void {
@@ -277,13 +280,30 @@ export class TelegramStatisticsHandlers {
         const requestedPage = isSummary
           ? Number(context.match[isRetro ? 7 : 6] ?? 0)
           : 0;
-        const statistics = await this.playersService.findTeamStatistics(
-          teamId,
-          leagueId,
-          isSummary
-            ? await this.queries.findRecentSeasons(competitionType)
-            : undefined,
-        );
+        const cacheKey = `team-statistics:${isSummary ? 'summary' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
+        let pages = (await this.cache.get<string[]>(cacheKey)) ?? undefined;
+
+        if (pages === undefined) {
+          const statistics = await this.playersService.findTeamStatistics(
+            teamId,
+            leagueId,
+            isSummary
+              ? await this.queries.findRecentSeasons(competitionType)
+              : undefined,
+          );
+
+          pages = statistics
+            ? isSummary
+              ? formatTeamStatisticsPages(statistics)
+              : [formatTeamStatistics(statistics)]
+            : [];
+
+          await this.cache.set(
+            cacheKey,
+            pages,
+            TEAM_STATISTICS_CACHE_TTL_SECONDS,
+          );
+        }
         const teamCallbackData = isRetro
           ? TELEGRAM_CALLBACKS.retroStatistics.team(
               teamId,
@@ -319,11 +339,6 @@ export class TelegramStatisticsHandlers {
                 competitionType,
                 page,
               );
-        const pages = statistics
-          ? isSummary
-            ? formatTeamStatisticsPages(statistics)
-            : [formatTeamStatistics(statistics)]
-          : [];
         const page = pages.length
           ? Math.min(Math.max(requestedPage, 0), pages.length - 1)
           : 0;
@@ -379,7 +394,7 @@ export class TelegramStatisticsHandlers {
 
         await context.answerCbQuery();
 
-        if (!statistics) {
+        if (!pages.length) {
           await context.editMessageText(
             TELEGRAM_MESSAGES.teams.statisticsEmpty,
             keyboard,

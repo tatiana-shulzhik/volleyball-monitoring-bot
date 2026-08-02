@@ -4,6 +4,7 @@ import { AppConfig } from './app.config';
 import { ClickHouseConfig } from './clickhouse.config';
 import { ConfigService } from './config.service';
 import { DbConfig } from './db.config';
+import { RedisConfig } from './redis.config';
 import { TelegramConfig } from './telegram.config';
 
 @Global()
@@ -18,6 +19,7 @@ import { TelegramConfig } from './telegram.config';
     AppConfig,
     ClickHouseConfig,
     DbConfig,
+    RedisConfig,
     TelegramConfig,
   ],
   exports: [
@@ -25,6 +27,7 @@ import { TelegramConfig } from './telegram.config';
     AppConfig,
     ClickHouseConfig,
     DbConfig,
+    RedisConfig,
     TelegramConfig,
   ],
 })
