@@ -102,8 +102,16 @@ export class PlayersService {
     const result = createTeamStatistics(displayedRelations, statistics);
 
     if (result && aggregateSeasons?.length) {
-      const chronological = [...aggregateSeasons].reverse();
-      result.seasonName = `${chronological[0].name}–${chronological.at(-1)!.name}`;
+      const seasons = [
+        ...new Set(result.players.map(({ seasonName }) => seasonName)),
+      ].sort();
+      const firstSeason = seasons[0];
+      const lastSeason = seasons.at(-1)!;
+
+      result.seasonName =
+        firstSeason === lastSeason
+          ? firstSeason
+          : `${lastSeason}–${firstSeason}`;
       result.teamSeasonName = league.stage.season?.name ?? '—';
       result.teamName = team.name;
       result.country = team.country;
