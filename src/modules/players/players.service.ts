@@ -96,22 +96,16 @@ export class PlayersService {
                 competitionType: league.stage.championship.competitionType,
               },
             }
-          : {}),
+          : { championship: { id: league.stage.championship.id } }),
       },
     });
     const result = createTeamStatistics(displayedRelations, statistics);
 
     if (result && aggregateSeasons?.length) {
-      const seasons = [
-        ...new Set(result.players.map(({ seasonName }) => seasonName)),
-      ].sort();
-      const firstSeason = seasons[0];
-      const lastSeason = seasons.at(-1)!;
-
-      result.seasonName =
-        firstSeason === lastSeason
-          ? firstSeason
-          : `${lastSeason}–${firstSeason}`;
+      result.seasonName = aggregateSeasons
+        .map(({ name }) => name)
+        .sort((left, right) => right.localeCompare(left))
+        .join('–');
       result.teamSeasonName = league.stage.season?.name ?? '—';
       result.teamName = team.name;
       result.country = team.country;

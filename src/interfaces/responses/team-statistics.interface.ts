@@ -1,6 +1,7 @@
 export interface ITeamPlayerStatistics {
   fullName: string;
   seasonName: string;
+  championshipName: string;
   teamName: string;
   birthYear: number | null;
   shirtNumber: number | null;

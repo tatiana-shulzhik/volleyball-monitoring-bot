@@ -20,7 +20,11 @@ export class PlayerStatisticsRepository {
 
     return repository.find({
       where,
-      relations: { player: true, team: true, stage: { season: true } },
+      relations: {
+        player: true,
+        team: true,
+        stage: { championship: true, season: true },
+      },
     });
   }
 
