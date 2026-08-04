@@ -50,26 +50,32 @@ export function createTeamStatistics(
     return null;
   }
 
-  const statisticsByPlayerAndSeason = statistics.reduce(
+  const statisticsByPlayerAndTournament = statistics.reduce(
     (result, item) => {
-      const seasonId = item.stage.season?.id;
+      const season = item.stage.season;
 
-      if (!seasonId) {
+      if (!season) {
         return result;
       }
 
-      const key = createStatisticsKey(item.player.id, seasonId, item.team.name);
+      const key = createStatisticsKey(
+        item.player.id,
+        item.stage.championship.id,
+        item.team.name,
+      );
       const stored = result.get(key) ?? {
         points: 0,
         setsPlayed: 0,
         attackAttempts: 0,
         successfulAttacks: 0,
+        seasonNames: new Set<string>(),
       };
 
       stored.points += item.points;
       stored.setsPlayed += item.setsPlayed;
       stored.attackAttempts += item.attackAttempts;
       stored.successfulAttacks += item.successfulAttacks;
+      stored.seasonNames.add(season.name);
       result.set(key, stored);
       return result;
     },
@@ -80,42 +86,58 @@ export function createTeamStatistics(
         setsPlayed: number;
         attackAttempts: number;
         successfulAttacks: number;
+        seasonNames: Set<string>;
       }
     >(),
   );
-  const uniqueRelations = new Map(
-    relations.flatMap((relation) => {
-      const seasonId = relation.league.stage.season?.id;
-
-      return seasonId
-        ? [
-            [
-              createStatisticsKey(
-                relation.player.id,
-                seasonId,
-                relation.team.name,
-              ),
-              relation,
-            ] as const,
-          ]
-        : [];
-    }),
-  );
-  const players = [...uniqueRelations.values()]
-    .flatMap((relation) => {
+  const relationsByPlayerAndTournament = relations.reduce(
+    (result, relation) => {
       const season = relation.league.stage.season;
 
       if (!season) {
-        return [];
+        return result;
       }
 
-      const playerStatistics = statisticsByPlayerAndSeason.get(
-        createStatisticsKey(relation.player.id, season.id, relation.team.name),
+      const key = createStatisticsKey(
+        relation.player.id,
+        relation.league.stage.championship.id,
+        relation.team.name,
       );
+      const stored = result.get(key);
+
+      if (!stored) {
+        result.set(key, { relation, seasonNames: new Set([season.name]) });
+        return result;
+      }
+
+      stored.seasonNames.add(season.name);
+
+      if (compareRelationsBySeason(relation, stored.relation) < 0) {
+        stored.relation = relation;
+      }
+
+      return result;
+    },
+    new Map<
+      string,
+      { relation: PlayerTeamLeagueEntity; seasonNames: Set<string> }
+    >(),
+  );
+  const players = [...relationsByPlayerAndTournament.entries()]
+    .flatMap(([key, stored]) => {
+      const { relation } = stored;
+      const championship = relation.league.stage.championship;
+
+      const playerStatistics = statisticsByPlayerAndTournament.get(key);
+      const seasonNames = new Set([
+        ...stored.seasonNames,
+        ...(playerStatistics?.seasonNames ?? []),
+      ]);
 
       return {
         fullName: relation.player.fullName,
-        seasonName: season.name,
+        seasonName: formatSeasonNames(seasonNames),
+        championshipName: championship.name,
         teamName: relation.team.name,
         birthYear: relation.player.birthYear,
         shirtNumber: relation.shirtNumber,
@@ -129,7 +151,9 @@ export function createTeamStatistics(
     .sort(
       (left, right) =>
         left.fullName.localeCompare(right.fullName) ||
-        right.seasonName.localeCompare(left.seasonName) ||
+        getLatestSeasonYear(right.seasonName) -
+          getLatestSeasonYear(left.seasonName) ||
+        left.championshipName.localeCompare(right.championshipName) ||
         left.teamName.localeCompare(right.teamName),
     );
 
@@ -158,7 +182,7 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
     ...new Set(data.players.map(({ seasonName }) => seasonName)),
   ];
   const statistics =
-    seasons.length > 1
+    data.teamSeasonName !== data.seasonName || seasons.length > 1
       ? formatRetroPlayers(data.players)
       : formatPlayersTable(data.players);
 
@@ -172,7 +196,10 @@ export function formatTeamStatisticsPages(
   const formatted = formatTeamStatistics(data);
   const seasons = new Set(data.players.map(({ seasonName }) => seasonName));
 
-  if (formatted.length <= maxLength || seasons.size < 2) {
+  if (
+    formatted.length <= maxLength ||
+    (data.teamSeasonName === data.seasonName && seasons.size < 2)
+  ) {
     return [formatted];
   }
 
@@ -236,22 +263,23 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
   return groups
     .map((seasons) => {
       const latestSeasonYear = Math.max(
-        ...seasons.map(({ seasonName }) => parseSeasonEndYear(seasonName) ?? 0),
+        ...seasons.map(({ seasonName }) => getLatestSeasonYear(seasonName)),
       );
       const latestSeason =
         seasons.find(
           ({ seasonName, shirtNumber }) =>
-            (parseSeasonEndYear(seasonName) ?? 0) === latestSeasonYear &&
+            getLatestSeasonYear(seasonName) === latestSeasonYear &&
             shirtNumber !== null,
         ) ??
         seasons.find(
           ({ seasonName }) =>
-            (parseSeasonEndYear(seasonName) ?? 0) === latestSeasonYear,
+            getLatestSeasonYear(seasonName) === latestSeasonYear,
         );
       const rows = seasons.map(
         (season) =>
           '<tr>' +
           `<td>${escapeHtml(season.seasonName)}</td>` +
+          `<td>${escapeHtml(season.championshipName)}</td>` +
           `<td>${escapeHtml(season.teamName)}</td>` +
           `<td align="center">${formatPlayerRating(season)}</td>` +
           `<td align="center">${formatPlayerAttacks(season)}</td>` +
@@ -267,6 +295,7 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
         '<small><table bordered striped>',
         '<tr>' +
           '<th>Сезон</th>' +
+          '<th>Турнир</th>' +
           '<th>Команда</th>' +
           '<th>Рейтинг<br>(очки/сеты)</th>' +
           '<th>Атака<br>(успешные/попытки)</th>' +
@@ -298,12 +327,10 @@ function getLatestPlayerSeason(players: ITeamStatistics['players']): {
   rating: number | null;
 } {
   const latestYear = Math.max(
-    ...players.map(({ seasonName }) => parseSeasonEndYear(seasonName) ?? 0),
+    ...players.map(({ seasonName }) => getLatestSeasonYear(seasonName)),
   );
   const ratings = players
-    .filter(
-      ({ seasonName }) => (parseSeasonEndYear(seasonName) ?? 0) === latestYear,
-    )
+    .filter(({ seasonName }) => getLatestSeasonYear(seasonName) === latestYear)
     .flatMap((player) => {
       const rating = calculatePlayerRating(player.points, player.setsPlayed);
 
@@ -325,6 +352,7 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
       '<tr>' +
       `<td align="center">${number}</td>` +
       `<td>${escapeHtml(player.fullName)}</td>` +
+      `<td>${escapeHtml(player.championshipName)}</td>` +
       `<td align="center">${formatPlayerRating(player)}</td>` +
       `<td align="center">${formatPlayerAttacks(player)}</td>` +
       `<td align="center">${player.birthYear ?? '—'}</td>` +
@@ -338,6 +366,7 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
     '<tr>' +
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
+      '<th align="center">Турнир</th>' +
       '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
       '<th align="center">Атака<br>(успешные/попытки)</th>' +
       '<th align="center">Год рождения</th>' +
@@ -388,10 +417,38 @@ function formatPlayerPosition(position: string | null): string {
 
 function createStatisticsKey(
   playerId: number,
-  seasonId: number,
+  championshipId: number,
   teamName: string,
 ): string {
-  return `${playerId}:${seasonId}:${normalizeName(teamName)}`;
+  return `${playerId}:${championshipId}:${normalizeName(teamName)}`;
+}
+
+function formatSeasonNames(seasonNames: Iterable<string>): string {
+  return [...new Set(seasonNames)]
+    .sort(
+      (left, right) => getLatestSeasonYear(right) - getLatestSeasonYear(left),
+    )
+    .join('–');
+}
+
+function getLatestSeasonYear(seasonName: string): number {
+  return Math.max(
+    ...seasonName.split('–').map((name) => parseSeasonEndYear(name) ?? 0),
+  );
+}
+
+function compareRelationsBySeason(
+  left: PlayerTeamLeagueEntity,
+  right: PlayerTeamLeagueEntity,
+): number {
+  const seasonDifference =
+    getLatestSeasonYear(right.league.stage.season?.name ?? '') -
+    getLatestSeasonYear(left.league.stage.season?.name ?? '');
+
+  return (
+    seasonDifference ||
+    Number(right.shirtNumber !== null) - Number(left.shirtNumber !== null)
+  );
 }
 
 function escapeHtml(value: string): string {
