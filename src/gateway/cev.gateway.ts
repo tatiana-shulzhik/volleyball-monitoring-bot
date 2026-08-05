@@ -11,6 +11,7 @@ import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   IFetchedMatchAttackStatistics,
+  IFetchedMatchRoster,
   IFetchedPlayerStatistics,
 } from '../interfaces/requests/player-statistics.interface';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
@@ -24,6 +25,7 @@ import {
   extractTeamCountry,
 } from '../shared/cev-players.utils';
 import {
+  extractMatchRoster,
   extractPlayerAttackStatistics,
   extractPlayerStatistics,
 } from '../shared/cev-player-statistics.utils';
@@ -46,6 +48,7 @@ import {
   CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
   createCompetitionUrl,
+  createMatchPageUrl,
   createMatchesUrl,
   createMatchStatisticsUrl,
   createPlayerStatisticsUrl,
@@ -355,6 +358,41 @@ export class CevGateway {
       },
       concurrency: CEV_HTTP_CONCURRENCY,
     });
+  }
+
+  async fetchMatchRosters(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchRoster>[]> {
+    const results = await this.mapSettled({
+      items: matches,
+      mapper: async (match) => {
+        const html = await this.http.get(
+          createMatchPageUrl(
+            match.league.stage.championship.externalId,
+            match.league.externalId,
+            match.externalId,
+          ),
+        );
+
+        return {
+          matchExternalId: match.externalId,
+          home: extractMatchRoster(html, 'home'),
+          away: extractMatchRoster(html, 'guest'),
+        };
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match roster request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
   }
 
   private fetchCalendarYear(

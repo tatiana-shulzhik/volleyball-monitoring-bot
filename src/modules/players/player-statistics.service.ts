@@ -7,17 +7,20 @@ import { PlayerStatisticsRepository } from '../../databases/repositories/player-
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { MatchPlayerAttackStatisticsEntity } from '../../databases/entities/match-player-attack-statistics.entity';
+import { MatchEntity } from '../../databases/entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { PlayerStatisticsEntity } from '../../databases/entities/player-statistics.entity';
+import { IFetchedMatchRoster } from '../../interfaces/requests/player-statistics.interface';
 import { IPlayerStatisticsSynchronizationResult } from '../../interfaces/responses/player-statistics.interface';
 import { createCompetitionStageKey } from '../../shared/competition-stages.utils';
 import {
-  normalizePlayerName,
   uniquePlayerStatistics,
   buildRelationMaps,
   findPlayerRelation,
   getMatchTeams,
+  createPlayerTeamLeagueKey,
 } from '../../shared/player-statistics.utils';
 
 @Injectable()
@@ -78,110 +81,64 @@ export class PlayerStatisticsService {
       return 0;
     }
 
-    const [relations, fetchedAttacks] = await Promise.all([
+    const [storedRelations, fetchedAttacks] = await Promise.all([
       this.relationsRepository.getWhere({
         league: { stage: { id: In(stageIds) } },
       }),
       this.gateway.fetchMatchAttackStatistics(matches),
     ]);
-    let relationMaps = buildRelationMaps(relations);
-    const sourceUpdatedAt = new Date();
     const matchesByExternalId = new Map(
       matches.map((match) => [match.externalId, match]),
     );
-    const attackRows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
-    const loadedMatchIds: number[] = [];
-
-    const protocolPlayers = new Map<
-      string,
-      {
-        externalId: string;
-        fullName: string;
-        team: (typeof matches)[number]['homeTeam'];
-        league: (typeof matches)[number]['league'];
-      }
-    >();
-    for (const result of fetchedAttacks) {
+    let relationMaps = buildRelationMaps(storedRelations);
+    const rosterMatches = fetchedAttacks.flatMap((result) => {
       if (result.status === 'rejected') {
-        continue;
+        return [];
       }
 
       const match = matchesByExternalId.get(result.value.matchExternalId);
+
       if (!match) {
-        continue;
+        return [];
       }
 
       const sourceKey = createCompetitionStageKey(
         match.league.stage.championship.externalId,
         match.league.stage.externalId,
       );
-      for (const { team, players } of getMatchTeams(match, result.value)) {
-        for (const player of players) {
-          const found = findPlayerRelation(
-            relationMaps,
-            sourceKey,
-            team.name,
-            player.playerName,
-          );
-          if (found.relation) {
-            continue;
-          }
+      const hasUnresolvedPlayers = getMatchTeams(match, result.value).some(
+        ({ team, players }) =>
+          players.some((player) => {
+            const relation = findPlayerRelation(
+              relationMaps,
+              sourceKey,
+              team.name,
+              player.playerName,
+            );
 
-          const externalId = `protocol:${team.externalId}:${normalizePlayerName(player.playerName)}`;
-          protocolPlayers.set(externalId, {
-            externalId,
-            fullName: player.playerName,
-            team,
-            league: match.league,
-          });
-        }
-      }
+            return !relation;
+          }),
+      );
+
+      return hasUnresolvedPlayers ? [match] : [];
+    });
+
+    if (rosterMatches.length) {
+      const fetchedRosters =
+        await this.gateway.fetchMatchRosters(rosterMatches);
+      const relations = await this.synchronizeMatchRosterRelations(
+        stageIds,
+        rosterMatches,
+        fetchedRosters,
+        storedRelations,
+      );
+      relationMaps = buildRelationMaps(relations);
     }
 
-    if (protocolPlayers.size) {
-      const externalIds = [...protocolPlayers.keys()];
-      const existingPlayers = await this.playersRepository.getWhere({
-        externalId: In(externalIds),
-      });
-      const existingIds = new Set(
-        existingPlayers.map(({ externalId }) => externalId),
-      );
-      const missingPlayers = [...protocolPlayers.values()]
-        .filter(({ externalId }) => !existingIds.has(externalId))
-        .map(({ externalId, fullName }) => ({
-          externalId,
-          fullName,
-          birthYear: null,
-        }));
-
-      if (missingPlayers.length) {
-        await this.playersRepository.insertMany(missingPlayers);
-      }
-
-      const storedPlayers = await this.playersRepository.getWhere({
-        externalId: In(externalIds),
-      });
-      await this.relationsRepository.updateMany(
-        storedPlayers.map((player) => {
-          const candidate = protocolPlayers.get(player.externalId)!;
-          return {
-            player,
-            team: candidate.team,
-            league: candidate.league,
-            shirtNumber: null,
-            position: null,
-          };
-        }),
-      );
-      relationMaps = buildRelationMaps(
-        await this.relationsRepository.getWhere({
-          league: { stage: { id: In(stageIds) } },
-        }),
-      );
-      this.logger.log(
-        `${protocolPlayers.size} players imported from match protocols`,
-      );
-    }
+    const sourceUpdatedAt = new Date();
+    const attackRows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
+    const replacedMatchIds: number[] = [];
+    const completedMatchIds: number[] = [];
 
     for (const [index, result] of fetchedAttacks.entries()) {
       if (result.status === 'rejected') {
@@ -214,7 +171,7 @@ export class PlayerStatisticsService {
 
       for (const { team, players } of getMatchTeams(match, result.value)) {
         for (const player of players) {
-          const { relation } = findPlayerRelation(
+          const relation = findPlayerRelation(
             relationMaps,
             sourceKey,
             team.name,
@@ -251,28 +208,161 @@ export class PlayerStatisticsService {
       }
 
       attackRows.push(...currentRows);
-      loadedMatchIds.push(match.id);
+      replacedMatchIds.push(match.id);
+
+      if (!unresolvedPlayerNames.length) {
+        completedMatchIds.push(match.id);
+      }
     }
 
-    if (loadedMatchIds.length) {
+    if (replacedMatchIds.length) {
       await this.matchAttacksRepository.useTransaction(async (manager) => {
         await this.matchAttacksRepository.replaceMany(
-          loadedMatchIds,
+          replacedMatchIds,
           attackRows,
           manager,
         );
-        await this.matchesRepository.markAttackStatisticsLoaded(
-          loadedMatchIds,
-          sourceUpdatedAt,
-          manager,
-        );
+
+        if (completedMatchIds.length) {
+          await this.matchesRepository.markAttackStatisticsLoaded(
+            completedMatchIds,
+            sourceUpdatedAt,
+            manager,
+          );
+        }
       });
       this.logger.log(
-        `${loadedMatchIds.length} match attack statistics loaded`,
+        `${replacedMatchIds.length} match attack statistics loaded, ` +
+          `${completedMatchIds.length} completed`,
       );
     }
 
-    return loadedMatchIds.length;
+    return replacedMatchIds.length;
+  }
+
+  private async synchronizeMatchRosterRelations(
+    stageIds: number[],
+    matches: MatchEntity[],
+    fetched: PromiseSettledResult<IFetchedMatchRoster>[],
+    existingRelations: PlayerTeamLeagueEntity[],
+  ): Promise<PlayerTeamLeagueEntity[]> {
+    const matchesByExternalId = new Map(
+      matches.map((match) => [match.externalId, match]),
+    );
+    const rosterEntries = fetched.flatMap((result) => {
+      if (result.status === 'rejected') {
+        return [];
+      }
+
+      const match = matchesByExternalId.get(result.value.matchExternalId);
+
+      if (!match) {
+        return [];
+      }
+
+      return [
+        ...result.value.home.map((player) => ({
+          player,
+          team: match.homeTeam,
+          league: match.league,
+        })),
+        ...result.value.away.map((player) => ({
+          player,
+          team: match.awayTeam,
+          league: match.league,
+        })),
+      ];
+    });
+
+    if (!rosterEntries.length) {
+      return existingRelations;
+    }
+
+    const externalIds = [
+      ...new Set(rosterEntries.map(({ player }) => player.externalId)),
+    ];
+    const playersByExternalId = new Map(
+      (
+        await this.playersRepository.getWhere({ externalId: In(externalIds) })
+      ).map((player) => [player.externalId, player]),
+    );
+    const missingPlayers = [
+      ...new Map(
+        rosterEntries
+          .filter(({ player }) => !playersByExternalId.has(player.externalId))
+          .map(({ player }) => [
+            player.externalId,
+            {
+              externalId: player.externalId,
+              fullName: player.playerName,
+              birthYear: null,
+            },
+          ]),
+      ).values(),
+    ];
+
+    if (missingPlayers.length) {
+      await this.playersRepository.insertMany(missingPlayers);
+
+      for (const player of await this.playersRepository.getWhere({
+        externalId: In(missingPlayers.map(({ externalId }) => externalId)),
+      })) {
+        playersByExternalId.set(player.externalId, player);
+      }
+    }
+
+    const existingByKey = new Map(
+      existingRelations.map((relation) => [
+        createPlayerTeamLeagueKey(
+          relation.player.id,
+          relation.team.id,
+          relation.league.id,
+        ),
+        relation,
+      ]),
+    );
+    const relationRows = [
+      ...new Map(
+        rosterEntries.flatMap(({ player: rosterPlayer, team, league }) => {
+          const player = playersByExternalId.get(rosterPlayer.externalId);
+
+          if (!player) {
+            return [];
+          }
+
+          const key = createPlayerTeamLeagueKey(player.id, team.id, league.id);
+          const existing = existingByKey.get(key);
+
+          return [
+            [
+              key,
+              {
+                player,
+                team,
+                league,
+                shirtNumber:
+                  rosterPlayer.shirtNumber ?? existing?.shirtNumber ?? null,
+                position: existing?.position ?? null,
+              },
+            ] as const,
+          ];
+        }),
+      ).values(),
+    ];
+
+    if (!relationRows.length) {
+      return existingRelations;
+    }
+
+    await this.relationsRepository.updateMany(relationRows);
+    this.logger.log(
+      `Match rosters synchronized: ${missingPlayers.length} players inserted, ` +
+        `${relationRows.length} relations upserted`,
+    );
+
+    return this.relationsRepository.getWhere({
+      league: { stage: { id: In(stageIds) } },
+    });
   }
 
   private async synchronizePlayerRankings(
@@ -298,6 +388,8 @@ export class PlayerStatisticsService {
     const sourceUpdatedAt = new Date();
     const rows: Partial<PlayerStatisticsEntity>[] = [];
     const synchronizedStageExternalIds: number[] = [];
+    const skippedExamples: string[] = [];
+    let skippedRows = 0;
 
     for (const result of fetched) {
       if (result.status === 'rejected') {
@@ -319,7 +411,7 @@ export class PlayerStatisticsService {
       }
 
       for (const item of result.value.statistics) {
-        const { relation, isExact } = findPlayerRelation(
+        const relation = findPlayerRelation(
           relationMaps,
           sourceKey,
           item.teamName,
@@ -327,14 +419,12 @@ export class PlayerStatisticsService {
         );
 
         if (!relation) {
-          continue;
-        }
+          skippedRows++;
 
-        if (!isExact) {
-          this.logger.warn(
-            `Player statistics team name mismatch: "${item.teamName}" -> ` +
-              `"${relation.team.name}" for "${item.playerName}"`,
-          );
+          if (skippedExamples.length < 5) {
+            skippedExamples.push(`"${item.playerName}" / "${item.teamName}"`);
+          }
+          continue;
         }
 
         rows.push({
@@ -347,6 +437,14 @@ export class PlayerStatisticsService {
           sourceUpdatedAt,
         });
       }
+    }
+
+    if (skippedRows) {
+      this.logger.warn(
+        `${skippedRows} player statistics rows skipped because an exact ` +
+          `player-team relation was not found` +
+          `${skippedExamples.length ? ` (${skippedExamples.join(', ')})` : ''}`,
+      );
     }
 
     const unique = uniquePlayerStatistics(rows);

@@ -10,6 +10,7 @@ import type {
 } from '../interfaces/requests/player-statistics.interface';
 import type { MatchEntity } from '../databases/entities/match.entity';
 import { createCompetitionStageKey } from './competition-stages.utils';
+import { CEV_COUNTRIES } from './consts/constants';
 import { parseSeasonEndYear } from './season.utils';
 
 export function normalizeName(value: string): string {
@@ -26,6 +27,12 @@ export function normalizePlayerName(value: string): string {
   )
     .sort((left, right) => left.localeCompare(right))
     .join('');
+}
+
+export function normalizeTeamName(value: string): string {
+  const countryName = CEV_COUNTRIES[value.trim().toUpperCase()];
+
+  return normalizeName(countryName ?? value);
 }
 
 function foldLatinText(value: string): string {
@@ -58,8 +65,16 @@ export function createPlayerRelationKey(
 ): string {
   return (
     `${sourceExternalId}:` +
-    `${normalizeName(teamName)}:${normalizePlayerName(playerName)}`
+    `${normalizeTeamName(teamName)}:${normalizePlayerName(playerName)}`
   );
+}
+
+export function createPlayerTeamLeagueKey(
+  playerId: number,
+  teamId: number,
+  leagueId: number,
+): string {
+  return `${playerId}:${teamId}:${leagueId}`;
 }
 
 export function calculatePlayerRating(
@@ -116,9 +131,10 @@ export function uniqueMatchPlayerAttackStatistics(
   return [...unique.values()];
 }
 
-export function buildRelationMaps(items: PlayerRelation[]): IPlayerRelationMaps {
+export function buildRelationMaps(
+  items: PlayerRelation[],
+): IPlayerRelationMaps {
   const byExactPlayer = new Map<string, PlayerRelation>();
-  const byStageAndPlayer = new Map<string, Map<string, PlayerRelation>>();
 
   for (const relation of items) {
     const sourceKey = createCompetitionStageKey(
@@ -126,16 +142,16 @@ export function buildRelationMaps(items: PlayerRelation[]): IPlayerRelationMaps 
       relation.league.stage.externalId,
     );
     byExactPlayer.set(
-      createPlayerRelationKey(sourceKey, relation.team.name, relation.player.fullName),
+      createPlayerRelationKey(
+        sourceKey,
+        relation.team.name,
+        relation.player.fullName,
+      ),
       relation,
     );
-    const playerKey = createPlayerRelationKey(sourceKey, '', relation.player.fullName);
-    const candidates = byStageAndPlayer.get(playerKey) ?? new Map<string, PlayerRelation>();
-    candidates.set(`${relation.team.id}:${relation.player.id}`, relation);
-    byStageAndPlayer.set(playerKey, candidates);
   }
 
-  return { byExactPlayer, byStageAndPlayer };
+  return { byExactPlayer };
 }
 
 export function findPlayerRelation(
@@ -143,18 +159,10 @@ export function findPlayerRelation(
   sourceKey: string,
   teamName: string,
   playerName: string,
-): { relation?: PlayerRelation; isExact: boolean } {
-  const exact = maps.byExactPlayer.get(
+): PlayerRelation | undefined {
+  return maps.byExactPlayer.get(
     createPlayerRelationKey(sourceKey, teamName, playerName),
   );
-  if (exact) return { relation: exact, isExact: true };
-  const candidates = maps.byStageAndPlayer.get(
-    createPlayerRelationKey(sourceKey, '', playerName),
-  );
-  return {
-    relation: candidates?.size === 1 ? candidates.values().next().value : undefined,
-    isExact: false,
-  };
 }
 
 export function getMatchTeams(

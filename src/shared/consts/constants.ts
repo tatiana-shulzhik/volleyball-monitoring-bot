@@ -113,3 +113,14 @@ export function createMatchStatisticsUrl(matchExternalId: string): string {
     `?ID=${matchExternalId}`
   );
 }
+
+export function createMatchPageUrl(
+  seasonExternalId: number,
+  leagueExternalId: number,
+  matchExternalId: string,
+): string {
+  return (
+    `${CEV_BASE_URL}/Competition-Area/MatchPage.aspx` +
+    `?mID=${matchExternalId}&ID=${seasonExternalId}&CID=${leagueExternalId}`
+  );
+}

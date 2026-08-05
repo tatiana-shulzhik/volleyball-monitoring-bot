@@ -1,4 +1,5 @@
 import {
+  ICevMatchRosterPlayer,
   ICevPlayerAttackStatistics,
   ICevPlayerStatistics,
 } from '../interfaces/requests/player-statistics.interface';
@@ -130,6 +131,51 @@ export function extractPlayerAttackStatistics(
       },
     ];
   });
+}
+
+export function extractMatchRoster(
+  html: string,
+  side: 'home' | 'guest',
+): ICevMatchRosterPlayer[] {
+  const gridName = side === 'home' ? 'Home' : 'Guest';
+  const rowPattern = new RegExp(
+    `<tr\\b[^>]*id=["'][^"']*RG_Roster${gridName}[^"']*["'][^>]*>` +
+      `([\\s\\S]*?)<\\/tr>`,
+    'gi',
+  );
+  const players = new Map<string, ICevMatchRosterPlayer>();
+
+  for (const row of html.matchAll(rowPattern)) {
+    const player = row[1].match(
+      /<a\b(?=[^>]*href=["'][^"']*PlayerDetails\.aspx\?[^"']*PlayerID=(\d+))[^>]*>([\s\S]*?)<\/a>/i,
+    );
+
+    if (!player) {
+      continue;
+    }
+
+    const linkText = cleanText(player[2]);
+    const details = linkText.match(/^(\d+)\s+(.+)$/);
+    const cells = [...row[1].matchAll(TABLE_CELL)].map((match) =>
+      cleanText(match[1]),
+    );
+    const shirtNumber = details
+      ? Number(details[1])
+      : parseInteger(cells.find((cell) => /^\d+$/.test(cell)));
+    const playerName = details?.[2] ?? linkText;
+
+    if (!playerName) {
+      continue;
+    }
+
+    players.set(player[1], {
+      externalId: player[1],
+      playerName,
+      shirtNumber,
+    });
+  }
+
+  return [...players.values()];
 }
 
 function parseNumber(value: string | undefined): number | null {

@@ -21,6 +21,18 @@ export interface ICevPlayerAttackStatistics {
   successful: number;
 }
 
+export interface ICevMatchRosterPlayer {
+  externalId: string;
+  playerName: string;
+  shirtNumber: number | null;
+}
+
+export interface IFetchedMatchRoster {
+  matchExternalId: string;
+  home: ICevMatchRosterPlayer[];
+  away: ICevMatchRosterPlayer[];
+}
+
 export interface IFetchedMatchAttackStatistics {
   matchExternalId: string;
   home: ICevPlayerAttackStatistics[];
@@ -31,5 +43,4 @@ export type PlayerRelation = PlayerTeamLeagueEntity;
 
 export interface IPlayerRelationMaps {
   byExactPlayer: Map<string, PlayerRelation>;
-  byStageAndPlayer: Map<string, Map<string, PlayerRelation>>;
 }

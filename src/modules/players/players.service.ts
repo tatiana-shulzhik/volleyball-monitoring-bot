@@ -89,12 +89,13 @@ export class PlayersService {
         displayedRelations.map(({ league }) => league.stage.championship.id),
       ),
     ];
-    const attacksPromise = championshipIds.length && playerIds.length
-      ? this.matchAttacksRepository.aggregateByChampionshipIds(
-          championshipIds,
-          playerIds,
-        )
-      : Promise.resolve([]);
+    const attacksPromise =
+      championshipIds.length && playerIds.length
+        ? this.matchAttacksRepository.aggregateByChampionshipIds(
+            championshipIds,
+            playerIds,
+          )
+        : Promise.resolve([]);
     const [statistics, attacks] = await Promise.all([
       this.statisticsRepository.getWhere({
         player: { id: In(playerIds) },
