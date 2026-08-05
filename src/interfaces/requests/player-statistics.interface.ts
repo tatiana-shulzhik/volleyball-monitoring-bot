@@ -1,3 +1,5 @@
+import type { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
+
 export interface ICevPlayerStatistics {
   playerName: string;
   teamName: string;
@@ -23,4 +25,11 @@ export interface IFetchedMatchAttackStatistics {
   matchExternalId: string;
   home: ICevPlayerAttackStatistics[];
   away: ICevPlayerAttackStatistics[];
+}
+
+export type PlayerRelation = PlayerTeamLeagueEntity;
+
+export interface IPlayerRelationMaps {
+  byExactPlayer: Map<string, PlayerRelation>;
+  byStageAndPlayer: Map<string, Map<string, PlayerRelation>>;
 }

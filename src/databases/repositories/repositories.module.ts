@@ -13,6 +13,7 @@ import { CompetitionStagesEntity } from '../entities/competition-stages.entity';
 import { TeamLeagueEntity } from '../entities/team-league.entity';
 import { TeamEntity } from '../entities/team.entity';
 import { SynchronizationStateEntity } from '../entities/synchronization-state.entity';
+import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
 
 @Global()
 @Module({
@@ -33,6 +34,7 @@ import { SynchronizationStateEntity } from '../entities/synchronization-state.en
       PlayerTeamLeagueEntity,
       PlayerStatisticsEntity,
       MatchEntity,
+      MatchPlayerAttackStatisticsEntity,
       SynchronizationStateEntity,
     ]),
   ],

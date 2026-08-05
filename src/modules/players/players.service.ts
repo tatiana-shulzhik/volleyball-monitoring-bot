@@ -4,6 +4,7 @@ import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player
 import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
@@ -29,6 +30,7 @@ export class PlayersService {
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly statisticsRepository: PlayerStatisticsRepository,
     private readonly teamsRepository: TeamsRepository,
+    private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
   ) {}
 
   async findTeamStatistics(
@@ -79,27 +81,46 @@ export class PlayersService {
         })
       : relations;
 
-    const statistics = await this.statisticsRepository.getWhere({
-      player: {
-        id: In(displayedRelations.map(({ player }) => player.id)),
-      },
-      ...(isAggregate ? {} : { team: { id: team.id } }),
-      stage: {
-        season: {
-          id: isAggregate
-            ? In(aggregateSeasons!.map(({ id }) => id))
-            : seasonId,
+    const playerIds = [
+      ...new Set(displayedRelations.map(({ player }) => player.id)),
+    ];
+    const championshipIds = [
+      ...new Set(
+        displayedRelations.map(({ league }) => league.stage.championship.id),
+      ),
+    ];
+    const attacksPromise = championshipIds.length && playerIds.length
+      ? this.matchAttacksRepository.aggregateByChampionshipIds(
+          championshipIds,
+          playerIds,
+        )
+      : Promise.resolve([]);
+    const [statistics, attacks] = await Promise.all([
+      this.statisticsRepository.getWhere({
+        player: { id: In(playerIds) },
+        ...(isAggregate ? {} : { team: { id: team.id } }),
+        stage: {
+          season: {
+            id: isAggregate
+              ? In(aggregateSeasons!.map(({ id }) => id))
+              : seasonId,
+          },
+          ...(isAggregate
+            ? {
+                championship: {
+                  competitionType: league.stage.championship.competitionType,
+                },
+              }
+            : { championship: { id: league.stage.championship.id } }),
         },
-        ...(isAggregate
-          ? {
-              championship: {
-                competitionType: league.stage.championship.competitionType,
-              },
-            }
-          : { championship: { id: league.stage.championship.id } }),
-      },
-    });
-    const result = createTeamStatistics(displayedRelations, statistics);
+      }),
+      attacksPromise,
+    ]);
+    const result = createTeamStatistics(
+      displayedRelations,
+      statistics,
+      attacks,
+    );
 
     if (result && aggregateSeasons?.length) {
       result.seasonName = aggregateSeasons

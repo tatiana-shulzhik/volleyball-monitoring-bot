@@ -11,6 +11,7 @@ import { LeaguesEntity } from './leagues.entity';
 import { TeamEntity } from './team.entity';
 
 @Entity({ name: 'matches' })
+@Index(['status', 'attackStatisticsUpdatedAt'])
 export class MatchEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -40,6 +41,13 @@ export class MatchEntity {
     nullable: true,
   })
   monitoringStartedAt: Date | null;
+
+  @Column({
+    name: 'attack_statistics_updated_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  attackStatisticsUpdatedAt: Date | null;
 
   @Column({
     type: 'enum',

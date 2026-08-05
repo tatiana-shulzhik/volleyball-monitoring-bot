@@ -4,10 +4,13 @@ import { PlayerStatisticsRepository } from '../../databases/repositories/player-
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
+import { RedisCacheModule } from '../../cache/redis-cache.module';
 import { PlayersService } from './players.service';
 import { PlayerStatisticsService } from './player-statistics.service';
 
 @Module({
+  imports: [RedisCacheModule],
   providers: [
     PlayersService,
     PlayerStatisticsService,
@@ -15,6 +18,7 @@ import { PlayerStatisticsService } from './player-statistics.service';
     PlayerTeamLeaguesRepository,
     PlayerStatisticsRepository,
     MatchesRepository,
+    MatchPlayerAttackStatisticsRepository,
     TeamsRepository,
   ],
   exports: [

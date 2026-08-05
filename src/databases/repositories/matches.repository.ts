@@ -59,6 +59,7 @@ export class MatchesRepository {
         awayTeam,
         scheduledAt,
         status,
+        attackStatisticsUpdatedAt: null,
       }),
     );
 
@@ -117,5 +118,46 @@ export class MatchesRepository {
         awayTeam: true,
       },
     });
+  }
+
+  findFinishedRequiringAttackStatistics(
+    stageIds: number[],
+  ): Promise<MatchEntity[]> {
+    return this.repository.find({
+      where: {
+        status: EMatchStatus.Finished,
+        attackStatisticsUpdatedAt: IsNull(),
+        league: { stage: { id: In(stageIds) } },
+      },
+      relations: {
+        league: { stage: { championship: true } },
+        homeTeam: true,
+        awayTeam: true,
+      },
+    });
+  }
+
+  async findStageIdsRequiringAttackStatistics(): Promise<number[]> {
+    const rows: Array<{ stageId: string }> = await this.repository
+      .createQueryBuilder('match')
+      .innerJoin('match.league', 'league')
+      .select('DISTINCT league.stage_id', 'stageId')
+      .where('match.status = :finished', {
+        finished: EMatchStatus.Finished,
+      })
+      .andWhere('match.attack_statistics_updated_at IS NULL')
+      .getRawMany();
+
+    return rows.map(({ stageId }) => Number(stageId));
+  }
+
+  async markAttackStatisticsLoaded(
+    ids: number[],
+    sourceUpdatedAt: Date,
+    manager: EntityManager,
+  ): Promise<void> {
+    await manager
+      .getRepository(MatchEntity)
+      .update({ id: In(ids) }, { attackStatisticsUpdatedAt: sourceUpdatedAt });
   }
 }
