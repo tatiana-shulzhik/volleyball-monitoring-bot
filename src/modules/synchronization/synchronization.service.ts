@@ -140,7 +140,6 @@ export class SynchronizationService implements OnApplicationBootstrap {
         this.logger.log(
           'Catalog is already initialized; startup synchronization skipped',
         );
-        await this.runExclusive(() => this.repairIncompletePlayerStatistics());
         return;
       }
 
