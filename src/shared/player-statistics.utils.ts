@@ -352,7 +352,6 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
       '<tr>' +
       `<td align="center">${number}</td>` +
       `<td>${escapeHtml(player.fullName)}</td>` +
-      `<td>${escapeHtml(player.championshipName)}</td>` +
       `<td align="center">${formatPlayerRating(player)}</td>` +
       `<td align="center">${formatPlayerAttacks(player)}</td>` +
       `<td align="center">${player.birthYear ?? '—'}</td>` +
@@ -366,7 +365,6 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
     '<tr>' +
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
-      '<th align="center">Турнир</th>' +
       '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
       '<th align="center">Атака<br>(успешные/попытки)</th>' +
       '<th align="center">Год рождения</th>' +
