@@ -35,6 +35,12 @@ export class MatchPlayerAttackStatisticsEntity {
   @Column({ type: 'integer' })
   successful: number;
 
+  @Column({ type: 'integer', nullable: true })
+  points: number | null;
+
+  @Column({ name: 'sets_played', type: 'smallint', nullable: true })
+  setsPlayed: number | null;
+
   @Column({ name: 'source_updated_at', type: 'timestamptz' })
   sourceUpdatedAt: Date;
 }

@@ -3,7 +3,6 @@ import { In } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
-import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { MatchPlayerAttackStatisticsEntity } from '../../databases/entities/match-player-attack-statistics.entity';
@@ -11,12 +10,9 @@ import { MatchEntity } from '../../databases/entities/match.entity';
 import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { PlayerStatisticsEntity } from '../../databases/entities/player-statistics.entity';
 import { IFetchedMatchRoster } from '../../interfaces/requests/player-statistics.interface';
-import { IPlayerStatisticsSynchronizationResult } from '../../interfaces/responses/player-statistics.interface';
 import { createCompetitionStageKey } from '../../shared/competition-stages.utils';
 import {
-  uniquePlayerStatistics,
   buildRelationMaps,
   findPlayerRelation,
   getMatchTeams,
@@ -31,7 +27,6 @@ export class PlayerStatisticsService {
     private readonly gateway: CevGateway,
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
-    private readonly statisticsRepository: PlayerStatisticsRepository,
     private readonly matchesRepository: MatchesRepository,
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
     private readonly cache: RedisCacheService,
@@ -41,15 +36,12 @@ export class PlayerStatisticsService {
     return this.matchesRepository.findStageIdsRequiringAttackStatistics();
   }
 
-  async synchronize(
-    stages: CompetitionStagesEntity[],
-  ): Promise<IPlayerStatisticsSynchronizationResult> {
+  async synchronize(stages: CompetitionStagesEntity[]): Promise<void> {
     if (!stages.length) {
-      return { loadedRows: 0, synchronizedStageExternalIds: [] };
+      return;
     }
 
     await this.loadPendingAttacks(stages);
-    return this.synchronizePlayerRankings(stages);
   }
 
   async synchronizePendingAttacks(
@@ -191,6 +183,8 @@ export class PlayerStatisticsService {
             team: relation.team,
             attempts: player.attempts,
             successful: player.successful,
+            points: player.points,
+            setsPlayed: player.setsPlayed,
             sourceUpdatedAt,
           });
         }
@@ -363,97 +357,5 @@ export class PlayerStatisticsService {
     return this.relationsRepository.getWhere({
       league: { stage: { id: In(stageIds) } },
     });
-  }
-
-  private async synchronizePlayerRankings(
-    stages: CompetitionStagesEntity[],
-  ): Promise<IPlayerStatisticsSynchronizationResult> {
-    const stageIds = stages.map(({ id }) => id);
-    const [fetched, relations] = await Promise.all([
-      this.gateway.fetchPlayerStatistics(stages),
-      this.relationsRepository.getWhere({
-        league: { stage: { id: In(stageIds) } },
-      }),
-    ]);
-    const stagesByExternalKey = new Map(
-      stages.map((stage) => [
-        createCompetitionStageKey(
-          stage.championship.externalId,
-          stage.externalId,
-        ),
-        stage,
-      ]),
-    );
-    const relationMaps = buildRelationMaps(relations);
-    const sourceUpdatedAt = new Date();
-    const rows: Partial<PlayerStatisticsEntity>[] = [];
-    const synchronizedStageExternalIds: number[] = [];
-    const skippedExamples: string[] = [];
-    let skippedRows = 0;
-
-    for (const result of fetched) {
-      if (result.status === 'rejected') {
-        this.logger.warn(
-          `Player statistics request failed: ${String(result.reason)}`,
-        );
-        continue;
-      }
-
-      synchronizedStageExternalIds.push(result.value.stageExternalId);
-      const sourceKey = createCompetitionStageKey(
-        result.value.championshipExternalId,
-        result.value.stageExternalId,
-      );
-      const stage = stagesByExternalKey.get(sourceKey);
-
-      if (!stage) {
-        continue;
-      }
-
-      for (const item of result.value.statistics) {
-        const relation = findPlayerRelation(
-          relationMaps,
-          sourceKey,
-          item.teamName,
-          item.playerName,
-        );
-
-        if (!relation) {
-          skippedRows++;
-
-          if (skippedExamples.length < 5) {
-            skippedExamples.push(`"${item.playerName}" / "${item.teamName}"`);
-          }
-          continue;
-        }
-
-        rows.push({
-          player: relation.player,
-          team: relation.team,
-          stage,
-          matchesPlayed: item.matchesPlayed,
-          points: item.points,
-          setsPlayed: item.setsPlayed,
-          sourceUpdatedAt,
-        });
-      }
-    }
-
-    if (skippedRows) {
-      this.logger.warn(
-        `${skippedRows} player statistics rows skipped because an exact ` +
-          `player-team relation was not found` +
-          `${skippedExamples.length ? ` (${skippedExamples.join(', ')})` : ''}`,
-      );
-    }
-
-    const unique = uniquePlayerStatistics(rows);
-    await this.statisticsRepository.upsertMany(unique);
-    await this.cache.deleteByPattern('team-statistics:*');
-    this.logger.log(`${unique.length} player statistics rows loaded`);
-    return {
-      loadedRows: unique.length,
-      synchronizedStageExternalIds,
-    };
   }
 }

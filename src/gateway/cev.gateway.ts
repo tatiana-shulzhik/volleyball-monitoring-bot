@@ -12,7 +12,6 @@ import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   IFetchedMatchAttackStatistics,
   IFetchedMatchRoster,
-  IFetchedPlayerStatistics,
 } from '../interfaces/requests/player-statistics.interface';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
@@ -27,11 +26,6 @@ import {
 import {
   extractMatchRoster,
   extractPlayerAttackStatistics,
-  extractPlayerStatistics,
-} from '../shared/cev-player-statistics.utils';
-import {
-  createStatisticsPhaseForm,
-  getStatisticsPhaseIds,
 } from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
 import { getErrorMessage } from '../shared/error.utils';
@@ -51,7 +45,6 @@ import {
   createMatchPageUrl,
   createMatchesUrl,
   createMatchStatisticsUrl,
-  createPlayerStatisticsUrl,
   createTeamUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
@@ -296,48 +289,6 @@ export class CevGateway {
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };
-  }
-
-  async fetchPlayerStatistics(
-    stages: CompetitionStagesEntity[],
-  ): Promise<PromiseSettledResult<IFetchedPlayerStatistics>[]> {
-    const championshipPages = new Map<number, Promise<string>>();
-
-    return this.mapSettled({
-      items: stages,
-      mapper: async (stage) => {
-        const championshipExternalId = stage.championship.externalId;
-        let page = championshipPages.get(championshipExternalId);
-
-        if (!page) {
-          page = this.http.get(
-            createPlayerStatisticsUrl(championshipExternalId),
-          );
-          championshipPages.set(championshipExternalId, page);
-        }
-
-        const html = await page;
-
-        if (!getStatisticsPhaseIds(html).has(stage.externalId)) {
-          throw new Error(
-            `Statistics phase ${stage.externalId} is unavailable ` +
-              `for championship ${championshipExternalId}`,
-          );
-        }
-
-        const phaseHtml = await this.http.postForm(
-          createPlayerStatisticsUrl(championshipExternalId),
-          createStatisticsPhaseForm(html, stage.externalId),
-        );
-
-        return {
-          championshipExternalId,
-          stageExternalId: stage.externalId,
-          statistics: extractPlayerStatistics(phaseHtml),
-        };
-      },
-      concurrency: CEV_HTTP_CONCURRENCY,
-    });
   }
 
   async fetchMatchAttackStatistics(

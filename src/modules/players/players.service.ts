@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
-import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
@@ -28,7 +27,6 @@ export class PlayersService {
     private readonly gateway: CevGateway,
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
-    private readonly statisticsRepository: PlayerStatisticsRepository,
     private readonly teamsRepository: TeamsRepository,
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
   ) {}
@@ -89,39 +87,14 @@ export class PlayersService {
         displayedRelations.map(({ league }) => league.stage.championship.id),
       ),
     ];
-    const attacksPromise =
+    const attacks =
       championshipIds.length && playerIds.length
-        ? this.matchAttacksRepository.aggregateByChampionshipIds(
+        ? await this.matchAttacksRepository.aggregateByChampionshipIds(
             championshipIds,
             playerIds,
           )
-        : Promise.resolve([]);
-    const [statistics, attacks] = await Promise.all([
-      this.statisticsRepository.getWhere({
-        player: { id: In(playerIds) },
-        ...(isAggregate ? {} : { team: { id: team.id } }),
-        stage: {
-          season: {
-            id: isAggregate
-              ? In(aggregateSeasons!.map(({ id }) => id))
-              : seasonId,
-          },
-          ...(isAggregate
-            ? {
-                championship: {
-                  competitionType: league.stage.championship.competitionType,
-                },
-              }
-            : { championship: { id: league.stage.championship.id } }),
-        },
-      }),
-      attacksPromise,
-    ]);
-    const result = createTeamStatistics(
-      displayedRelations,
-      statistics,
-      attacks,
-    );
+        : [];
+    const result = createTeamStatistics(displayedRelations, attacks);
 
     if (result && aggregateSeasons?.length) {
       result.seasonName = aggregateSeasons

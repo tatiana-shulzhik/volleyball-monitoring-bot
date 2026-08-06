@@ -123,18 +123,24 @@ export class MatchesRepository {
   findFinishedRequiringAttackStatistics(
     stageIds: number[],
   ): Promise<MatchEntity[]> {
-    return this.repository.find({
-      where: {
-        status: EMatchStatus.Finished,
-        attackStatisticsUpdatedAt: IsNull(),
-        league: { stage: { id: In(stageIds) } },
-      },
-      relations: {
-        league: { stage: { championship: true } },
-        homeTeam: true,
-        awayTeam: true,
-      },
-    });
+    return this.repository
+      .createQueryBuilder('match')
+      .innerJoinAndSelect('match.league', 'league')
+      .innerJoinAndSelect('league.stage', 'stage')
+      .innerJoinAndSelect('stage.championship', 'championship')
+      .innerJoinAndSelect('match.homeTeam', 'homeTeam')
+      .innerJoinAndSelect('match.awayTeam', 'awayTeam')
+      .where('match.status = :finished', {
+        finished: EMatchStatus.Finished,
+      })
+      .andWhere('stage.id IN (:...stageIds)', { stageIds })
+      .andWhere(
+        '(match.attack_statistics_updated_at IS NULL OR EXISTS (' +
+          'SELECT 1 FROM match_player_attack_statistics attack ' +
+          'WHERE attack.match_id = match.id ' +
+          'AND (attack.points IS NULL OR attack.sets_played IS NULL)))',
+      )
+      .getMany();
   }
 
   async findStageIdsRequiringAttackStatistics(): Promise<number[]> {
@@ -145,7 +151,12 @@ export class MatchesRepository {
       .where('match.status = :finished', {
         finished: EMatchStatus.Finished,
       })
-      .andWhere('match.attack_statistics_updated_at IS NULL')
+      .andWhere(
+        '(match.attack_statistics_updated_at IS NULL OR EXISTS (' +
+          'SELECT 1 FROM match_player_attack_statistics attack ' +
+          'WHERE attack.match_id = match.id ' +
+          'AND (attack.points IS NULL OR attack.sets_played IS NULL)))',
+      )
       .getRawMany();
 
     return rows.map(({ stageId }) => Number(stageId));

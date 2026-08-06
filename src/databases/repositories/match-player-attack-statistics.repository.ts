@@ -54,6 +54,16 @@ export class MatchPlayerAttackStatisticsRepository {
       .addSelect('attack.player_id', 'playerId')
       .addSelect('SUM(attack.attempts)', 'attempts')
       .addSelect('SUM(attack.successful)', 'successful')
+      .addSelect(
+        'CASE WHEN COUNT(*) FILTER (WHERE attack.points IS NULL OR ' +
+          'attack.sets_played IS NULL) = 0 THEN SUM(attack.points) END',
+        'points',
+      )
+      .addSelect(
+        'CASE WHEN COUNT(*) FILTER (WHERE attack.points IS NULL OR ' +
+          'attack.sets_played IS NULL) = 0 THEN SUM(attack.sets_played) END',
+        'setsPlayed',
+      )
       .where('stage.championship_id IN (:...championshipIds)', {
         championshipIds,
       })
@@ -69,6 +79,8 @@ export class MatchPlayerAttackStatisticsRepository {
       playerId: string;
       attempts: string;
       successful: string;
+      points: string | null;
+      setsPlayed: string | null;
     }> = await query
       .groupBy('stage.championship_id')
       .addGroupBy('attack.team_id')
@@ -81,6 +93,8 @@ export class MatchPlayerAttackStatisticsRepository {
       playerId: Number(row.playerId),
       attempts: Number(row.attempts),
       successful: Number(row.successful),
+      points: row.points === null ? null : Number(row.points),
+      setsPlayed: row.setsPlayed === null ? null : Number(row.setsPlayed),
     }));
   }
 }

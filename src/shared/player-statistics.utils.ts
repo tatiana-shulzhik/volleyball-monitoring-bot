@@ -1,4 +1,3 @@
-import type { PlayerStatisticsEntity } from '../databases/entities/player-statistics.entity';
 import type { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
 import type { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import type { IPlayerAttackStatisticsAggregate } from '../interfaces/responses/player-statistics.interface';
@@ -84,19 +83,6 @@ export function calculatePlayerRating(
   return points !== null && setsPlayed ? points / setsPlayed : null;
 }
 
-export function uniquePlayerStatistics(
-  rows: Partial<PlayerStatisticsEntity>[],
-): Partial<PlayerStatisticsEntity>[] {
-  return [
-    ...new Map(
-      rows.map((row) => [
-        `${row.stage?.id}:${row.team?.id}:${row.player?.id}`,
-        row,
-      ]),
-    ).values(),
-  ];
-}
-
 export function uniqueMatchPlayerAttackStatistics(
   rows: Partial<MatchPlayerAttackStatisticsEntity>[],
 ): Partial<MatchPlayerAttackStatisticsEntity>[] {
@@ -177,47 +163,12 @@ export function getMatchTeams(
 
 export function createTeamStatistics(
   relations: PlayerTeamLeagueEntity[],
-  statistics: PlayerStatisticsEntity[],
   attacks: IPlayerAttackStatisticsAggregate[],
 ): ITeamStatistics | null {
   if (!relations.length) {
     return null;
   }
 
-  const statisticsByPlayerAndTournament = statistics.reduce(
-    (result, item) => {
-      const season = item.stage.season;
-
-      if (!season) {
-        return result;
-      }
-
-      const key = createStatisticsKey(
-        item.player.id,
-        item.stage.championship.id,
-        item.team.id,
-      );
-      const stored = result.get(key) ?? {
-        points: 0,
-        setsPlayed: 0,
-        seasonNames: new Set<string>(),
-      };
-
-      stored.points += item.points;
-      stored.setsPlayed += item.setsPlayed;
-      stored.seasonNames.add(season.name);
-      result.set(key, stored);
-      return result;
-    },
-    new Map<
-      string,
-      {
-        points: number;
-        setsPlayed: number;
-        seasonNames: Set<string>;
-      }
-    >(),
-  );
   const attacksByPlayerAndTournament = new Map(
     attacks.map((item) => [
       createStatisticsKey(item.playerId, item.championshipId, item.teamId),
@@ -262,23 +213,18 @@ export function createTeamStatistics(
       const { relation } = stored;
       const championship = relation.league.stage.championship;
 
-      const playerStatistics = statisticsByPlayerAndTournament.get(key);
       const attackStatistics = attacksByPlayerAndTournament.get(key);
-      const seasonNames = new Set([
-        ...stored.seasonNames,
-        ...(playerStatistics?.seasonNames ?? []),
-      ]);
 
       return {
         fullName: relation.player.fullName,
-        seasonName: formatSeasonNames(seasonNames),
+        seasonName: formatSeasonNames(stored.seasonNames),
         championshipName: championship.name,
         teamName: relation.team.name,
         birthYear: relation.player.birthYear,
         shirtNumber: relation.shirtNumber,
         position: relation.position,
-        points: playerStatistics?.points ?? null,
-        setsPlayed: playerStatistics?.setsPlayed ?? null,
+        points: attackStatistics?.points ?? null,
+        setsPlayed: attackStatistics?.setsPlayed ?? null,
         attackAttempts: attackStatistics?.attempts ?? null,
         successfulAttacks: attackStatistics?.successful ?? null,
       };

@@ -103,10 +103,6 @@ export function createMatchesUrl(
   );
 }
 
-export function createPlayerStatisticsUrl(seasonExternalId: number): string {
-  return `${CEV_BASE_URL}/Competition-Area/Statistics.aspx?ID=${seasonExternalId}`;
-}
-
 export function createMatchStatisticsUrl(matchExternalId: string): string {
   return (
     `${CEV_BASE_URL}/Competition-Area/MatchStatistics.aspx` +
