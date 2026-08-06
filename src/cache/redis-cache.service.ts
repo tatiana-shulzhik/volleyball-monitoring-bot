@@ -37,6 +37,34 @@ export class RedisCacheService {
     }
   }
 
+  async deleteByPattern(pattern: string): Promise<void> {
+    if (this.client.status !== 'ready') {
+      return;
+    }
+
+    try {
+      let cursor = '0';
+
+      do {
+        const [nextCursor, keys] = await this.client.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          100,
+        );
+
+        cursor = nextCursor;
+
+        if (keys.length) {
+          await this.client.unlink(...keys);
+        }
+      } while (cursor !== '0');
+    } catch (error) {
+      this.logger.warn(`Redis DELETE failed: ${this.getErrorMessage(error)}`);
+    }
+  }
+
   private getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }

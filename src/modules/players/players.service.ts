@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
-import { PlayerStatisticsRepository } from '../../databases/repositories/player-statistics.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
@@ -27,8 +27,8 @@ export class PlayersService {
     private readonly gateway: CevGateway,
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
-    private readonly statisticsRepository: PlayerStatisticsRepository,
     private readonly teamsRepository: TeamsRepository,
+    private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
   ) {}
 
   async findTeamStatistics(
@@ -79,27 +79,22 @@ export class PlayersService {
         })
       : relations;
 
-    const statistics = await this.statisticsRepository.getWhere({
-      player: {
-        id: In(displayedRelations.map(({ player }) => player.id)),
-      },
-      ...(isAggregate ? {} : { team: { id: team.id } }),
-      stage: {
-        season: {
-          id: isAggregate
-            ? In(aggregateSeasons!.map(({ id }) => id))
-            : seasonId,
-        },
-        ...(isAggregate
-          ? {
-              championship: {
-                competitionType: league.stage.championship.competitionType,
-              },
-            }
-          : { championship: { id: league.stage.championship.id } }),
-      },
-    });
-    const result = createTeamStatistics(displayedRelations, statistics);
+    const playerIds = [
+      ...new Set(displayedRelations.map(({ player }) => player.id)),
+    ];
+    const championshipIds = [
+      ...new Set(
+        displayedRelations.map(({ league }) => league.stage.championship.id),
+      ),
+    ];
+    const attacks =
+      championshipIds.length && playerIds.length
+        ? await this.matchAttacksRepository.aggregateByChampionshipIds(
+            championshipIds,
+            playerIds,
+          )
+        : [];
+    const result = createTeamStatistics(displayedRelations, attacks);
 
     if (result && aggregateSeasons?.length) {
       result.seasonName = aggregateSeasons

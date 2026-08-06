@@ -4,7 +4,7 @@ export const CEV_CALENDAR_URL = `${CEV_BASE_URL}/calendar.aspx`;
 
 export const MAX_ATTEMPTS = 3;
 
-export const CEV_HTTP_CONCURRENCY = 10;
+export const CEV_HTTP_CONCURRENCY = 50;
 
 export const PREVIOUS_YEARS_COUNT = 4;
 
@@ -103,13 +103,20 @@ export function createMatchesUrl(
   );
 }
 
-export function createPlayerStatisticsUrl(seasonExternalId: number): string {
-  return `${CEV_BASE_URL}/Competition-Area/Statistics.aspx?ID=${seasonExternalId}`;
-}
-
 export function createMatchStatisticsUrl(matchExternalId: string): string {
   return (
     `${CEV_BASE_URL}/Competition-Area/MatchStatistics.aspx` +
     `?ID=${matchExternalId}`
+  );
+}
+
+export function createMatchPageUrl(
+  seasonExternalId: number,
+  leagueExternalId: number,
+  matchExternalId: string,
+): string {
+  return (
+    `${CEV_BASE_URL}/Competition-Area/MatchPage.aspx` +
+    `?mID=${matchExternalId}&ID=${seasonExternalId}&CID=${leagueExternalId}`
   );
 }

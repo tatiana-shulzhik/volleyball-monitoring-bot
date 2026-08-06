@@ -280,7 +280,7 @@ export class TelegramStatisticsHandlers {
         const requestedPage = isSummary
           ? Number(context.match[isRetro ? 7 : 6] ?? 0)
           : 0;
-        const cacheKey = `team-statistics:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
+        const cacheKey = `team-statistics:v2:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
         let pages = (await this.cache.get<string[]>(cacheKey)) ?? undefined;
 
         if (pages === undefined) {

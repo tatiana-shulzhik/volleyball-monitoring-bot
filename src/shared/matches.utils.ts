@@ -22,6 +22,7 @@ export function calculateMatchChanges(
             awayTeam,
             scheduledAt: match.scheduledAt,
             monitoringStartedAt: null,
+            attackStatisticsUpdatedAt: null,
             status: match.status,
           },
         ]

@@ -59,6 +59,7 @@ export class MatchesRepository {
         awayTeam,
         scheduledAt,
         status,
+        attackStatisticsUpdatedAt: null,
       }),
     );
 
@@ -117,5 +118,57 @@ export class MatchesRepository {
         awayTeam: true,
       },
     });
+  }
+
+  findFinishedRequiringAttackStatistics(
+    stageIds: number[],
+  ): Promise<MatchEntity[]> {
+    return this.repository
+      .createQueryBuilder('match')
+      .innerJoinAndSelect('match.league', 'league')
+      .innerJoinAndSelect('league.stage', 'stage')
+      .innerJoinAndSelect('stage.championship', 'championship')
+      .innerJoinAndSelect('match.homeTeam', 'homeTeam')
+      .innerJoinAndSelect('match.awayTeam', 'awayTeam')
+      .where('match.status = :finished', {
+        finished: EMatchStatus.Finished,
+      })
+      .andWhere('stage.id IN (:...stageIds)', { stageIds })
+      .andWhere(
+        '(match.attack_statistics_updated_at IS NULL OR EXISTS (' +
+          'SELECT 1 FROM match_player_attack_statistics attack ' +
+          'WHERE attack.match_id = match.id ' +
+          'AND (attack.points IS NULL OR attack.sets_played IS NULL)))',
+      )
+      .getMany();
+  }
+
+  async findStageIdsRequiringAttackStatistics(): Promise<number[]> {
+    const rows: Array<{ stageId: string }> = await this.repository
+      .createQueryBuilder('match')
+      .innerJoin('match.league', 'league')
+      .select('DISTINCT league.stage_id', 'stageId')
+      .where('match.status = :finished', {
+        finished: EMatchStatus.Finished,
+      })
+      .andWhere(
+        '(match.attack_statistics_updated_at IS NULL OR EXISTS (' +
+          'SELECT 1 FROM match_player_attack_statistics attack ' +
+          'WHERE attack.match_id = match.id ' +
+          'AND (attack.points IS NULL OR attack.sets_played IS NULL)))',
+      )
+      .getRawMany();
+
+    return rows.map(({ stageId }) => Number(stageId));
+  }
+
+  async markAttackStatisticsLoaded(
+    ids: number[],
+    sourceUpdatedAt: Date,
+    manager: EntityManager,
+  ): Promise<void> {
+    await manager
+      .getRepository(MatchEntity)
+      .update({ id: In(ids) }, { attackStatisticsUpdatedAt: sourceUpdatedAt });
   }
 }

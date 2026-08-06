@@ -1,14 +1,60 @@
-import type { PlayerStatisticsEntity } from '../databases/entities/player-statistics.entity';
+import type { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
 import type { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
+import type { IPlayerAttackStatisticsAggregate } from '../interfaces/responses/player-statistics.interface';
 import type { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
+import type {
+  IFetchedMatchAttackStatistics,
+  IPlayerRelationMaps,
+  PlayerRelation,
+} from '../interfaces/requests/player-statistics.interface';
+import type { MatchEntity } from '../databases/entities/match.entity';
+import { createCompetitionStageKey } from './competition-stages.utils';
+import { CEV_COUNTRIES } from './consts/constants';
 import { parseSeasonEndYear } from './season.utils';
 
 export function normalizeName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
+  return foldLatinText(value)
     .replace(/[^\p{Letter}\p{Number}]/gu, '')
     .toLowerCase();
+}
+
+export function normalizePlayerName(value: string): string {
+  return (
+    foldLatinText(value)
+      .toLowerCase()
+      .match(/[\p{Letter}\p{Number}]+/gu) ?? []
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .join('');
+}
+
+export function normalizeTeamName(value: string): string {
+  const countryName = CEV_COUNTRIES[value.trim().toUpperCase()];
+
+  return normalizeName(countryName ?? value);
+}
+
+function foldLatinText(value: string): string {
+  const replacements: Record<string, string> = {
+    æ: 'ae',
+    đ: 'd',
+    ð: 'd',
+    ħ: 'h',
+    ı: 'i',
+    ł: 'l',
+    ŋ: 'n',
+    œ: 'oe',
+    ø: 'o',
+    ß: 'ss',
+    þ: 'th',
+    ŧ: 't',
+  };
+
+  return value
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[æđðħıłŋœøßþŧ]/gu, (character) => replacements[character]);
 }
 
 export function createPlayerRelationKey(
@@ -18,8 +64,16 @@ export function createPlayerRelationKey(
 ): string {
   return (
     `${sourceExternalId}:` +
-    `${normalizeName(teamName)}:${normalizeName(playerName)}`
+    `${normalizeTeamName(teamName)}:${normalizePlayerName(playerName)}`
   );
+}
+
+export function createPlayerTeamLeagueKey(
+  playerId: number,
+  teamId: number,
+  leagueId: number,
+): string {
+  return `${playerId}:${teamId}:${leagueId}`;
 }
 
 export function calculatePlayerRating(
@@ -29,66 +83,97 @@ export function calculatePlayerRating(
   return points !== null && setsPlayed ? points / setsPlayed : null;
 }
 
-export function uniquePlayerStatistics(
-  rows: Partial<PlayerStatisticsEntity>[],
-): Partial<PlayerStatisticsEntity>[] {
+export function uniqueMatchPlayerAttackStatistics(
+  rows: Partial<MatchPlayerAttackStatisticsEntity>[],
+): Partial<MatchPlayerAttackStatisticsEntity>[] {
+  const unique = new Map<string, Partial<MatchPlayerAttackStatisticsEntity>>();
+
+  for (const row of rows) {
+    const matchId = row.match?.id;
+    const playerId = row.player?.id;
+    const teamId = row.team?.id;
+
+    if (
+      matchId === undefined ||
+      playerId === undefined ||
+      teamId === undefined
+    ) {
+      throw new Error('Match attack statistics relation id is missing');
+    }
+
+    const key = `${matchId}:${playerId}:${teamId}`;
+    const stored = unique.get(key);
+
+    if (
+      !stored ||
+      (row.attempts ?? 0) > (stored.attempts ?? 0) ||
+      ((row.attempts ?? 0) === (stored.attempts ?? 0) &&
+        (row.successful ?? 0) > (stored.successful ?? 0))
+    ) {
+      unique.set(key, row);
+    }
+  }
+
+  return [...unique.values()];
+}
+
+export function buildRelationMaps(
+  items: PlayerRelation[],
+): IPlayerRelationMaps {
+  const byExactPlayer = new Map<string, PlayerRelation>();
+
+  for (const relation of items) {
+    const sourceKey = createCompetitionStageKey(
+      relation.league.stage.championship.externalId,
+      relation.league.stage.externalId,
+    );
+    byExactPlayer.set(
+      createPlayerRelationKey(
+        sourceKey,
+        relation.team.name,
+        relation.player.fullName,
+      ),
+      relation,
+    );
+  }
+
+  return { byExactPlayer };
+}
+
+export function findPlayerRelation(
+  maps: IPlayerRelationMaps,
+  sourceKey: string,
+  teamName: string,
+  playerName: string,
+): PlayerRelation | undefined {
+  return maps.byExactPlayer.get(
+    createPlayerRelationKey(sourceKey, teamName, playerName),
+  );
+}
+
+export function getMatchTeams(
+  match: MatchEntity,
+  attackStatistics: IFetchedMatchAttackStatistics,
+) {
   return [
-    ...new Map(
-      rows.map((row) => [
-        `${row.stage?.id}:${row.team?.id}:${row.player?.id}`,
-        row,
-      ]),
-    ).values(),
-  ];
+    { team: match.homeTeam, players: attackStatistics.home },
+    { team: match.awayTeam, players: attackStatistics.away },
+  ] as const;
 }
 
 export function createTeamStatistics(
   relations: PlayerTeamLeagueEntity[],
-  statistics: PlayerStatisticsEntity[],
+  attacks: IPlayerAttackStatisticsAggregate[],
 ): ITeamStatistics | null {
   if (!relations.length) {
     return null;
   }
 
-  const statisticsByPlayerAndTournament = statistics.reduce(
-    (result, item) => {
-      const season = item.stage.season;
-
-      if (!season) {
-        return result;
-      }
-
-      const key = createStatisticsKey(
-        item.player.id,
-        item.stage.championship.id,
-        item.team.name,
-      );
-      const stored = result.get(key) ?? {
-        points: 0,
-        setsPlayed: 0,
-        attackAttempts: 0,
-        successfulAttacks: 0,
-        seasonNames: new Set<string>(),
-      };
-
-      stored.points += item.points;
-      stored.setsPlayed += item.setsPlayed;
-      stored.attackAttempts += item.attackAttempts;
-      stored.successfulAttacks += item.successfulAttacks;
-      stored.seasonNames.add(season.name);
-      result.set(key, stored);
-      return result;
-    },
-    new Map<
-      string,
-      {
-        points: number;
-        setsPlayed: number;
-        attackAttempts: number;
-        successfulAttacks: number;
-        seasonNames: Set<string>;
-      }
-    >(),
+  const attacksByPlayerAndTournament = new Map(
+    attacks.map((item) => [
+      createStatisticsKey(item.playerId, item.championshipId, item.teamId),
+      item,
+    ]),
   );
   const relationsByPlayerAndTournament = relations.reduce(
     (result, relation) => {
@@ -101,7 +186,7 @@ export function createTeamStatistics(
       const key = createStatisticsKey(
         relation.player.id,
         relation.league.stage.championship.id,
-        relation.team.name,
+        relation.team.id,
       );
       const stored = result.get(key);
 
@@ -128,24 +213,20 @@ export function createTeamStatistics(
       const { relation } = stored;
       const championship = relation.league.stage.championship;
 
-      const playerStatistics = statisticsByPlayerAndTournament.get(key);
-      const seasonNames = new Set([
-        ...stored.seasonNames,
-        ...(playerStatistics?.seasonNames ?? []),
-      ]);
+      const attackStatistics = attacksByPlayerAndTournament.get(key);
 
       return {
         fullName: relation.player.fullName,
-        seasonName: formatSeasonNames(seasonNames),
+        seasonName: formatSeasonNames(stored.seasonNames),
         championshipName: championship.name,
         teamName: relation.team.name,
         birthYear: relation.player.birthYear,
         shirtNumber: relation.shirtNumber,
         position: relation.position,
-        points: playerStatistics?.points ?? null,
-        setsPlayed: playerStatistics?.setsPlayed ?? null,
-        attackAttempts: playerStatistics?.attackAttempts ?? null,
-        successfulAttacks: playerStatistics?.successfulAttacks ?? null,
+        points: attackStatistics?.points ?? null,
+        setsPlayed: attackStatistics?.setsPlayed ?? null,
+        attackAttempts: attackStatistics?.attempts ?? null,
+        successfulAttacks: attackStatistics?.successful ?? null,
       };
     })
     .sort(
@@ -416,9 +497,9 @@ function formatPlayerPosition(position: string | null): string {
 function createStatisticsKey(
   playerId: number,
   championshipId: number,
-  teamName: string,
+  teamId: number,
 ): string {
-  return `${playerId}:${championshipId}:${normalizeName(teamName)}`;
+  return `${playerId}:${championshipId}:${teamId}`;
 }
 
 function formatSeasonNames(seasonNames: Iterable<string>): string {

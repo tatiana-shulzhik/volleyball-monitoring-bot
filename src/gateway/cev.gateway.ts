@@ -11,7 +11,7 @@ import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   IFetchedMatchAttackStatistics,
-  IFetchedPlayerStatistics,
+  IFetchedMatchRoster,
 } from '../interfaces/requests/player-statistics.interface';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
@@ -24,12 +24,8 @@ import {
   extractTeamCountry,
 } from '../shared/cev-players.utils';
 import {
+  extractMatchRoster,
   extractPlayerAttackStatistics,
-  extractPlayerStatistics,
-} from '../shared/cev-player-statistics.utils';
-import {
-  createStatisticsPhaseForm,
-  getStatisticsPhaseIds,
 } from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
 import { getErrorMessage } from '../shared/error.utils';
@@ -46,9 +42,9 @@ import {
   CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
   createCompetitionUrl,
+  createMatchPageUrl,
   createMatchesUrl,
   createMatchStatisticsUrl,
-  createPlayerStatisticsUrl,
   createTeamUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
@@ -295,48 +291,6 @@ export class CevGateway {
     };
   }
 
-  async fetchPlayerStatistics(
-    stages: CompetitionStagesEntity[],
-  ): Promise<PromiseSettledResult<IFetchedPlayerStatistics>[]> {
-    const championshipPages = new Map<number, Promise<string>>();
-
-    return this.mapSettled({
-      items: stages,
-      mapper: async (stage) => {
-        const championshipExternalId = stage.championship.externalId;
-        let page = championshipPages.get(championshipExternalId);
-
-        if (!page) {
-          page = this.http.get(
-            createPlayerStatisticsUrl(championshipExternalId),
-          );
-          championshipPages.set(championshipExternalId, page);
-        }
-
-        const html = await page;
-
-        if (!getStatisticsPhaseIds(html).has(stage.externalId)) {
-          throw new Error(
-            `Statistics phase ${stage.externalId} is unavailable ` +
-              `for championship ${championshipExternalId}`,
-          );
-        }
-
-        const phaseHtml = await this.http.postForm(
-          createPlayerStatisticsUrl(championshipExternalId),
-          createStatisticsPhaseForm(html, stage.externalId),
-        );
-
-        return {
-          championshipExternalId,
-          stageExternalId: stage.externalId,
-          statistics: extractPlayerStatistics(phaseHtml),
-        };
-      },
-      concurrency: CEV_HTTP_CONCURRENCY,
-    });
-  }
-
   async fetchMatchAttackStatistics(
     matches: MatchEntity[],
   ): Promise<PromiseSettledResult<IFetchedMatchAttackStatistics>[]> {
@@ -355,6 +309,41 @@ export class CevGateway {
       },
       concurrency: CEV_HTTP_CONCURRENCY,
     });
+  }
+
+  async fetchMatchRosters(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchRoster>[]> {
+    const results = await this.mapSettled({
+      items: matches,
+      mapper: async (match) => {
+        const html = await this.http.get(
+          createMatchPageUrl(
+            match.league.stage.championship.externalId,
+            match.league.externalId,
+            match.externalId,
+          ),
+        );
+
+        return {
+          matchExternalId: match.externalId,
+          home: extractMatchRoster(html, 'home'),
+          away: extractMatchRoster(html, 'guest'),
+        };
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match roster request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
   }
 
   private fetchCalendarYear(

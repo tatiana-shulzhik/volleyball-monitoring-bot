@@ -5,7 +5,7 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
@@ -95,6 +95,18 @@ export class SynchronizationService implements OnApplicationBootstrap {
   })
   async synchronizePlayerStatisticsByCron(): Promise<void> {
     await this.runExclusive(() => this.synchronizePlayerStatistics(), false);
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_2AM, {
+    name: 'daily-incomplete-match-attack-statistics-repair',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async repairIncompletePlayerStatisticsByCron(): Promise<void> {
+    await this.runExclusive(
+      () => this.repairIncompletePlayerStatistics(),
+      false,
+    );
   }
 
   private async removeOutdatedCatalog(): Promise<CleanupResult> {
@@ -192,6 +204,23 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.stagesRepository.getWhere({
         startsAt: LessThanOrEqual(new Date()),
       }),
+    );
+  }
+
+  private async repairIncompletePlayerStatistics(): Promise<void> {
+    const stageIds =
+      await this.playerStatisticsService.findPendingAttackStageIds();
+
+    if (!stageIds.length) {
+      this.logger.log('No incomplete match attack statistics found');
+      return;
+    }
+
+    this.logger.log(
+      `Repairing match attack statistics for ${stageIds.length} stages`,
+    );
+    await this.playerStatisticsService.synchronizePendingAttacks(
+      await this.stagesRepository.getWhere({ id: In(stageIds) }),
     );
   }
 
