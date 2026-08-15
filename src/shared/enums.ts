@@ -19,3 +19,8 @@ export enum ESourceCode {
   LegaVolley = 'legavolley',
   LegaVolleyFemminile = 'legavolley_femminile',
 }
+
+export enum ESynchronizationKey {
+  CevInitialCatalog = 'initial-catalog-country',
+  LegaVolleyInitialCatalog = 'initial-catalog-legavolley',
+}

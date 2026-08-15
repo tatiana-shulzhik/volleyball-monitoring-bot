@@ -51,7 +51,7 @@ export class LeaguesRepository {
     }));
 
     return repository.upsert(values, {
-      conflictPaths: ['externalId'],
+      conflictPaths: ['externalId', 'stage'],
       skipUpdateIfNoValuesChanged: true,
     });
   }

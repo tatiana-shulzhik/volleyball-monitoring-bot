@@ -26,6 +26,8 @@ import { CreateMatchPlayerAttackStatistics1760000010000 } from '../databases/mig
 import { CreateSynchronizationState1760000011000 } from '../databases/migrations/1760000011000-CreateSynchronizationState';
 import { AddSourceColumns1760000011500 } from '../databases/migrations/1760000011500-AddSourceColumns';
 import { MarkExistingCevData1760000012000 } from '../databases/migrations/1760000012000-MarkExistingCevData';
+import { SeedLegaVolleySource1760000013000 } from '../databases/migrations/1760000013000-SeedLegaVolleySource';
+import { ScopeLeagueExternalIdByStage1760000014000 } from '../databases/migrations/1760000014000-ScopeLeagueExternalIdByStage';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -84,6 +86,8 @@ export class DbConfig implements TypeOrmOptionsFactory {
         CreateSynchronizationState1760000011000,
         AddSourceColumns1760000011500,
         MarkExistingCevData1760000012000,
+        SeedLegaVolleySource1760000013000,
+        ScopeLeagueExternalIdByStage1760000014000,
       ],
     };
   }

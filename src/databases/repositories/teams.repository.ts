@@ -37,15 +37,25 @@ export class TeamsRepository {
 
   async insertMany(teams: Partial<TeamEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
-    const source = await (manager?.getRepository(SourcesEntity) ?? this.repository.manager.getRepository(SourcesEntity)).findOneByOrFail({ code: ESourceCode.Cev });
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: ESourceCode.Cev });
 
     return repository.insert(teams.map((team) => ({ ...team, source })));
   }
 
   async updateMany(teams: TeamEntity[], manager?: EntityManager) {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
-    const source = await (manager?.getRepository(SourcesEntity) ?? this.repository.manager.getRepository(SourcesEntity)).findOneByOrFail({ code: ESourceCode.Cev });
-    const values = teams.map(({ externalId, name }) => ({ externalId, name, source }));
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: ESourceCode.Cev });
+    const values = teams.map(({ externalId, name }) => ({
+      externalId,
+      name,
+      source,
+    }));
 
     return repository.upsert(values, {
       conflictPaths: ['externalId'],

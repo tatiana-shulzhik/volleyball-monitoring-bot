@@ -14,12 +14,19 @@ export class SynchronizationStateRepository {
     private readonly sourcesRepository: Repository<SourcesEntity>,
   ) {}
 
-  hasCompleted(key: string): Promise<boolean> {
-    return this.repository.exists({ where: { key } });
+  hasCompleted(key: string, sourceCode = ESourceCode.Cev): Promise<boolean> {
+    return this.repository.exists({
+      where: { key, source: { code: sourceCode } },
+    });
   }
 
-  async markCompleted(key: string): Promise<void> {
-    const source = await this.sourcesRepository.findOneByOrFail({ code: ESourceCode.Cev });
+  async markCompleted(
+    key: string,
+    sourceCode = ESourceCode.Cev,
+  ): Promise<void> {
+    const source = await this.sourcesRepository.findOneByOrFail({
+      code: sourceCode,
+    });
     await this.repository.upsert(
       { key, source, completedAt: new Date() },
       { conflictPaths: ['key'] },

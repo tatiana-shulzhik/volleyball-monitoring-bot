@@ -15,7 +15,6 @@ import { SynchronizationStateRepository } from '../../databases/repositories/syn
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
 import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import {
-  INITIAL_SYNCHRONIZATION_KEY,
   MOSCOW_TIME_ZONE,
   PREVIOUS_YEARS_COUNT,
 } from '../../shared/consts/constants';
@@ -27,6 +26,8 @@ import { PlayersService } from '../players/players.service';
 import { PlayerStatisticsService } from '../players/player-statistics.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
+import { LegaVolleyCatalogService } from '../lega-volley/lega-volley-catalog.service';
+import { ESourceCode, ESynchronizationKey } from '../../shared/enums';
 
 @Injectable()
 export class SynchronizationService implements OnApplicationBootstrap {
@@ -46,10 +47,16 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
     private readonly synchronizationStateRepository: SynchronizationStateRepository,
+    private readonly legaVolleyCatalogService: LegaVolleyCatalogService,
   ) {}
 
   onApplicationBootstrap(): void {
-    void this.initializeEmptyCatalog();
+    void this.initializeCatalogs();
+  }
+
+  private async initializeCatalogs(): Promise<void> {
+    await this.initializeEmptyCatalog();
+    await this.initializeLegaVolleyCatalog();
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
@@ -58,13 +65,12 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async synchronizeCurrentCatalogByCron(): Promise<void> {
-    await this.runExclusive(
-      async () =>
-        this.synchronizeCatalog(
-          await this.seasonsService.discoverCurrentAndFutureSeasons(),
-        ),
-      false,
-    );
+    await this.runExclusive(async () => {
+      await this.synchronizeCatalog(
+        await this.seasonsService.discoverCurrentAndFutureSeasons(),
+      );
+      await this.legaVolleyCatalogService.synchronizeStoredRange();
+    }, false);
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM, {
@@ -134,7 +140,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     try {
       if (
         await this.synchronizationStateRepository.hasCompleted(
-          INITIAL_SYNCHRONIZATION_KEY,
+          ESynchronizationKey.CevInitialCatalog,
         )
       ) {
         this.logger.log(
@@ -148,6 +154,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
         await this.synchronizeCatalog(
           await this.seasonsService.synchronizeStoredRange(),
         );
+        await this.legaVolleyCatalogService.synchronizeCurrentAndFuture();
         await this.performMatchesSynchronization(false);
       });
       this.logger.log('Full catalog synchronization completed');
@@ -156,11 +163,42 @@ export class SynchronizationService implements OnApplicationBootstrap {
         this.synchronizeIncompletePlayerStatistics(),
       );
       await this.synchronizationStateRepository.markCompleted(
-        INITIAL_SYNCHRONIZATION_KEY,
+        ESynchronizationKey.CevInitialCatalog,
       );
     } catch (error) {
       this.logger.error(
         'Initial catalog synchronization failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async initializeLegaVolleyCatalog(): Promise<void> {
+    try {
+      if (
+        await this.synchronizationStateRepository.hasCompleted(
+          ESynchronizationKey.LegaVolleyInitialCatalog,
+          ESourceCode.LegaVolley,
+        )
+      ) {
+        this.logger.log(
+          'LegaVolley catalog is already initialized; startup synchronization skipped',
+        );
+        return;
+      }
+
+      this.logger.log('Starting LegaVolley catalog synchronization');
+      await this.runExclusive(() =>
+        this.legaVolleyCatalogService.synchronizeStoredRange(),
+      );
+      await this.synchronizationStateRepository.markCompleted(
+        ESynchronizationKey.LegaVolleyInitialCatalog,
+        ESourceCode.LegaVolley,
+      );
+      this.logger.log('LegaVolley catalog synchronization completed');
+    } catch (error) {
+      this.logger.error(
+        'LegaVolley catalog synchronization failed',
         error instanceof Error ? error.stack : String(error),
       );
     }

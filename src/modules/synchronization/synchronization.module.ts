@@ -7,6 +7,7 @@ import { SeasonsModule } from '../seasons/seasons.module';
 import { TeamsModule } from '../teams/teams.module';
 import { SynchronizationService } from './synchronization.service';
 import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
+import { LegaVolleyCatalogService } from '../lega-volley/lega-volley-catalog.service';
 
 @Module({
   imports: [
@@ -17,6 +18,10 @@ import { SynchronizationStateRepository } from '../../databases/repositories/syn
     TeamsModule,
     PlayersModule,
   ],
-  providers: [SynchronizationService, SynchronizationStateRepository],
+  providers: [
+    SynchronizationService,
+    SynchronizationStateRepository,
+    LegaVolleyCatalogService,
+  ],
 })
 export class SynchronizationModule {}

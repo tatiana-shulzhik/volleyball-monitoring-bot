@@ -40,15 +40,27 @@ export class ChampionshipsRepository {
     championships: Partial<ChampionshipsEntity>[],
     manager?: EntityManager,
   ) {
-    const repository = manager?.getRepository(ChampionshipsEntity) ?? this.repository;
-    const source = await (manager?.getRepository(SourcesEntity) ?? this.repository.manager.getRepository(SourcesEntity)).findOneByOrFail({ code: ESourceCode.Cev });
-    return repository.insert(championships.map((championship) => ({ ...championship, source })));
-  }
-
-  async updateMany(championships: ChampionshipsEntity[], manager?: EntityManager) {
     const repository =
       manager?.getRepository(ChampionshipsEntity) ?? this.repository;
-    const source = await (manager?.getRepository(SourcesEntity) ?? this.repository.manager.getRepository(SourcesEntity)).findOneByOrFail({ code: ESourceCode.Cev });
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: ESourceCode.Cev });
+    return repository.insert(
+      championships.map((championship) => ({ ...championship, source })),
+    );
+  }
+
+  async updateMany(
+    championships: ChampionshipsEntity[],
+    manager?: EntityManager,
+  ) {
+    const repository =
+      manager?.getRepository(ChampionshipsEntity) ?? this.repository;
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: ESourceCode.Cev });
     const values = championships.map(
       ({ externalId, name, competitionType }) => ({
         externalId,

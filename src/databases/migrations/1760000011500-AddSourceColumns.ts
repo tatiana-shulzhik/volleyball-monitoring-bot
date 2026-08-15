@@ -10,7 +10,9 @@ export class AddSourceColumns1760000011500 implements MigrationInterface {
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('sources'))) {
-      await queryRunner.query(`CREATE TABLE "sources" ("id" SERIAL NOT NULL, "code" character varying NOT NULL, "name" character varying NOT NULL, "base_url" character varying NOT NULL, CONSTRAINT "PK_sources_id" PRIMARY KEY ("id"), CONSTRAINT "UQ_sources_code" UNIQUE ("code"))`);
+      await queryRunner.query(
+        `CREATE TABLE "sources" ("id" SERIAL NOT NULL, "code" character varying NOT NULL, "name" character varying NOT NULL, "base_url" character varying NOT NULL, CONSTRAINT "PK_sources_id" PRIMARY KEY ("id"), CONSTRAINT "UQ_sources_code" UNIQUE ("code"))`,
+      );
     }
 
     for (const table of [
@@ -22,13 +24,19 @@ export class AddSourceColumns1760000011500 implements MigrationInterface {
       if (!(await queryRunner.hasColumn(table, 'source_id'))) {
         await queryRunner.addColumn(
           table,
-          new TableColumn({ name: 'source_id', type: 'integer', isNullable: true }),
+          new TableColumn({
+            name: 'source_id',
+            type: 'integer',
+            isNullable: true,
+          }),
         );
       }
 
       const tableMetadata = await queryRunner.getTable(table);
       const foreignKeyName = `FK_${table}_source`;
-      if (!tableMetadata?.foreignKeys.some(({ name }) => name === foreignKeyName)) {
+      if (
+        !tableMetadata?.foreignKeys.some(({ name }) => name === foreignKeyName)
+      ) {
         await queryRunner.createForeignKey(
           table,
           new TableForeignKey({
@@ -36,7 +44,8 @@ export class AddSourceColumns1760000011500 implements MigrationInterface {
             columnNames: ['source_id'],
             referencedTableName: 'sources',
             referencedColumnNames: ['id'],
-            onDelete: table === 'synchronization_state' ? 'CASCADE' : 'RESTRICT',
+            onDelete:
+              table === 'synchronization_state' ? 'CASCADE' : 'RESTRICT',
           }),
         );
       }

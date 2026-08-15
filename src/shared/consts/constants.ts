@@ -1,4 +1,5 @@
 export const CEV_BASE_URL = 'https://www-old.cev.eu';
+export const LEGA_VOLLEY_BASE_URL = 'https://www.legavolley.it';
 
 export const CEV_CALENDAR_URL = `${CEV_BASE_URL}/calendar.aspx`;
 
@@ -15,8 +16,6 @@ export const WRITE_BATCH_SIZE = 5000;
 export const MATCH_MONITORING_WINDOW_HOURS = 36;
 
 export const MOSCOW_TIME_ZONE = 'Europe/Moscow';
-
-export const INITIAL_SYNCHRONIZATION_KEY = 'initial-catalog-country';
 
 export const CEV_COUNTRIES: Record<string, string> = {
   ALB: 'Albania',
