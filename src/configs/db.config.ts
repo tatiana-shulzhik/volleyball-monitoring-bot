@@ -11,6 +11,7 @@ import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
 import { TeamEntity } from '../databases/entities/team.entity';
 import { SynchronizationStateEntity } from '../databases/entities/synchronization-state.entity';
 import { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
+import { SourcesEntity } from '../databases/entities/sources.entity';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -52,6 +53,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         MatchEntity,
         MatchPlayerAttackStatisticsEntity,
         SynchronizationStateEntity,
+        SourcesEntity,
       ],
       migrations: [],
     };

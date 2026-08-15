@@ -13,6 +13,7 @@ import { TeamLeagueEntity } from '../entities/team-league.entity';
 import { TeamEntity } from '../entities/team.entity';
 import { SynchronizationStateEntity } from '../entities/synchronization-state.entity';
 import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
+import { SourcesEntity } from '../entities/sources.entity';
 
 @Global()
 @Module({
@@ -34,6 +35,7 @@ import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-atta
       MatchEntity,
       MatchPlayerAttackStatisticsEntity,
       SynchronizationStateEntity,
+      SourcesEntity,
     ]),
   ],
   exports: [TypeOrmModule],

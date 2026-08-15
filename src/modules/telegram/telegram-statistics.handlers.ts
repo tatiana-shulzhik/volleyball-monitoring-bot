@@ -418,7 +418,8 @@ export class TelegramStatisticsHandlers {
         await editRichMessage('editMessageText', {
           chat_id: message.chat.id,
           message_id: message.message_id,
-          rich_message: { html: pages[page] },
+          text: pages[page],
+          parse_mode: 'HTML',
           reply_markup: keyboard.reply_markup,
         });
       },

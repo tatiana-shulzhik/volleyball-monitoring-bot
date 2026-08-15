@@ -1,6 +1,14 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { ECompetitionType } from '../../shared/enums';
 import { CompetitionStagesEntity } from './competition-stages.entity';
+import { SourcesEntity } from './sources.entity';
 
 @Entity({ name: 'championships' })
 export class ChampionshipsEntity {
@@ -19,6 +27,13 @@ export class ChampionshipsEntity {
     default: ECompetitionType.Club,
   })
   competitionType: ECompetitionType;
+
+  @ManyToOne(() => SourcesEntity, (source) => source.championships, {
+    nullable: true,
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({ name: 'source_id' })
+  source?: SourcesEntity | null;
 
   @OneToMany(() => CompetitionStagesEntity, (stage) => stage.championship)
   stages: CompetitionStagesEntity[];
