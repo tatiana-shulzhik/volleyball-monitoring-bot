@@ -13,3 +13,9 @@ export enum ECompetitionType {
   Club = 'club',
   NationalTeam = 'national_team',
 }
+
+export enum ESourceCode {
+  Cev = 'cev',
+  LegaVolley = 'legavolley',
+  LegaVolleyFemminile = 'legavolley_femminile',
+}
