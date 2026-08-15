@@ -24,6 +24,7 @@ import { CreatePlayerTeamLeagues1760000008000 } from '../databases/migrations/17
 import { CreateMatches1760000009000 } from '../databases/migrations/1760000009000-CreateMatches';
 import { CreateMatchPlayerAttackStatistics1760000010000 } from '../databases/migrations/1760000010000-CreateMatchPlayerAttackStatistics';
 import { CreateSynchronizationState1760000011000 } from '../databases/migrations/1760000011000-CreateSynchronizationState';
+import { AddSourceColumns1760000011500 } from '../databases/migrations/1760000011500-AddSourceColumns';
 import { MarkExistingCevData1760000012000 } from '../databases/migrations/1760000012000-MarkExistingCevData';
 import { ConfigService } from './config.service';
 
@@ -81,6 +82,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         CreateMatches1760000009000,
         CreateMatchPlayerAttackStatistics1760000010000,
         CreateSynchronizationState1760000011000,
+        AddSourceColumns1760000011500,
         MarkExistingCevData1760000012000,
       ],
     };
