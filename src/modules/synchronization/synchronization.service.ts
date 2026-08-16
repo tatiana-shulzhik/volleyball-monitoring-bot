@@ -70,6 +70,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
         await this.seasonsService.discoverCurrentAndFutureSeasons(),
       );
       await this.legaVolleyCatalogService.synchronizeCurrentAndFuture();
+      await this.legaVolleyCatalogService.synchronizeCurrentMatchStatistics();
     }, false);
   }
 
@@ -191,6 +192,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.runExclusive(() =>
         this.legaVolleyCatalogService.synchronizeStoredRange(),
       );
+      await this.runExclusive(() =>
+        this.legaVolleyCatalogService.synchronizeMatchStatisticsStoredRange(),
+      );
       await this.synchronizationStateRepository.markCompleted(
         ESynchronizationKey.LegaVolleyInitialCatalog,
         ESourceCode.LegaVolley,
@@ -217,9 +221,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async performMatchesSynchronization(
     frequentOnly: boolean,
   ): Promise<void> {
-    const stages = (
-      await this.stagesRepository.getWhere({})
-    ).filter(
+    const stages = (await this.stagesRepository.getWhere({})).filter(
       ({ championship }) => championship.source?.code === ESourceCode.Cev,
     );
 

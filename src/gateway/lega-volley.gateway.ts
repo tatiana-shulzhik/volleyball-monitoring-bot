@@ -12,6 +12,8 @@ import {
   IMapSettledParams,
   ILegaLeagueSchedule,
   ILegaPlayer,
+  ILegaMatchStatistics,
+  ILegaOption,
 } from '../interfaces/requests/lega-volley.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import {
@@ -20,9 +22,12 @@ import {
 } from '../shared/consts/constants';
 import {
   normalizeLegaSeasonName,
+  parseLegaPostGaraDate,
   parseLegaTeamPage,
+  parseLegaMatchStatistics,
   parseLegaSeason,
   readLegaMatches,
+  readLegaMatchIds,
   readLegaOptions,
   readLegaTeams,
 } from '../shared/lega-volley.utils';
@@ -232,6 +237,137 @@ export class LegaVolleyGateway {
       ),
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };
+  }
+
+  async fetchMatchStatisticsSince(
+    earliestYear: number,
+  ): Promise<ILegaMatchStatistics[]> {
+    const results: ILegaMatchStatistics[] = [];
+    for (let year = earliestYear; year <= new Date().getFullYear(); year++) {
+      results.push(...(await this.fetchSeasonMatchStatistics(year)));
+    }
+    return results;
+  }
+
+  private async fetchSeasonMatchStatistics(
+    year: number,
+  ): Promise<ILegaMatchStatistics[]> {
+    const html = await this.fetchPostGara({ year });
+    const series = readLegaOptions(html, 'serie');
+    const results = await Promise.all(
+      series.map((item) => this.fetchSeriesMatchStatistics(year, item)),
+    );
+
+    return results.flat();
+  }
+
+  private async fetchSeriesMatchStatistics(
+    year: number,
+    series: ILegaOption,
+  ): Promise<ILegaMatchStatistics[]> {
+    const html = await this.fetchPostGara({ year, series: series.value });
+    const championships = readLegaOptions(html, 'campionato');
+    const results = await Promise.all(
+      championships.map((item) =>
+        this.fetchChampionshipMatchStatistics(year, series.value, item),
+      ),
+    );
+
+    return results.flat();
+  }
+
+  private async fetchChampionshipMatchStatistics(
+    year: number,
+    series: string,
+    championship: ILegaOption,
+  ): Promise<ILegaMatchStatistics[]> {
+    const html = await this.fetchPostGara({
+      year,
+      series,
+      championship: championship.value,
+    });
+    const phases = readLegaOptions(html, 'fase');
+    const results = await Promise.all(
+      phases.map((item) =>
+        this.fetchPhaseMatchStatistics(year, series, championship.value, item),
+      ),
+    );
+
+    return results.flat();
+  }
+
+  private async fetchPhaseMatchStatistics(
+    year: number,
+    series: string,
+    championship: string,
+    phase: ILegaOption,
+  ): Promise<ILegaMatchStatistics[]> {
+    const html = await this.fetchPostGara({
+      year,
+      series,
+      championship,
+      phase: phase.value,
+    });
+    const days = readLegaOptions(html, 'giornata');
+    const results = await this.mapSettled({
+      items: days,
+      mapper: (day) =>
+        this.fetchMatchDayStatistics(
+          { year, series, championship, phase: phase.value, day: day.value },
+          day,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    return results.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value : [],
+    );
+  }
+
+  private async fetchMatchDayStatistics(
+    params: {
+      year: number;
+      series: string;
+      championship: string;
+      phase: string;
+      day: string;
+    },
+    day: ILegaOption,
+  ): Promise<ILegaMatchStatistics[]> {
+    const html = await this.fetchPostGara(params);
+    const playedOn = parseLegaPostGaraDate(day.label);
+    const ids = readLegaMatchIds(html);
+    const results = await this.mapSettled({
+      items: ids,
+      mapper: async (id) =>
+        parseLegaMatchStatistics(
+          await this.http.get(`${LEGA_VOLLEY_BASE_URL}/match/${id}`),
+          id,
+          Number(params.championship),
+          playedOn,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    return results.flatMap((result) =>
+      result.status === 'fulfilled' && result.value ? [result.value] : [],
+    );
+  }
+
+  private fetchPostGara(params: {
+    year: number;
+    series?: string;
+    championship?: string;
+    phase?: string;
+    day?: string;
+  }): Promise<string> {
+    const query = new URLSearchParams({ stagione: String(params.year) });
+    if (params.series) query.set('serie', params.series);
+    if (params.championship) query.set('campionato', params.championship);
+    if (params.phase) query.set('fase', params.phase);
+    if (params.day) query.set('giornata', params.day);
+
+    return this.http.get(`${LEGA_VOLLEY_BASE_URL}/postgara/?${query}`);
   }
 
   private fetchLeagueSchedule(

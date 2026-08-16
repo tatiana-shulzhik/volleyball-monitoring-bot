@@ -55,3 +55,20 @@ export interface ILegaLeagueSchedule {
   year: number;
   leagueExternalId: number;
 }
+
+export interface ILegaMatchPlayerStatistic {
+  externalId: string;
+  shirtNumber: number | null;
+  points: number | null;
+  played: boolean;
+}
+
+export interface ILegaMatchStatistics {
+  sourceMatchId: string;
+  leagueExternalId: number;
+  playedOn: Date | null;
+  homeTeamName: string;
+  awayTeamName: string;
+  home: ILegaMatchPlayerStatistic[];
+  away: ILegaMatchPlayerStatistic[];
+}

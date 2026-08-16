@@ -14,6 +14,7 @@ import { TeamEntity } from '../entities/team.entity';
 import { SynchronizationStateEntity } from '../entities/synchronization-state.entity';
 import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
 import { SourcesEntity } from '../entities/sources.entity';
+import { LegaMatchPlayerStatisticsEntity } from '../entities/lega-match-stats.entity';
 
 @Global()
 @Module({
@@ -36,6 +37,7 @@ import { SourcesEntity } from '../entities/sources.entity';
       MatchPlayerAttackStatisticsEntity,
       SynchronizationStateEntity,
       SourcesEntity,
+      LegaMatchPlayerStatisticsEntity,
     ]),
   ],
   exports: [TypeOrmModule],

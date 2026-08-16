@@ -10,9 +10,14 @@ import { TeamLeagueEntity } from '../../databases/entities/team-league.entity';
 import { PlayersEntity } from '../../databases/entities/players.entity';
 import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { MatchEntity } from '../../databases/entities/match.entity';
+import { LegaMatchPlayerStatisticsRepository } from '../../databases/repositories/lega-match-player-statistics.repository';
 import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
 import { ESourceCode } from '../../shared/enums';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import {
+  createLegaMatchKey,
+  normalizeLegaName,
+} from '../../shared/lega-volley.utils';
 
 @Injectable()
 export class LegaVolleyCatalogService {
@@ -21,6 +26,7 @@ export class LegaVolleyCatalogService {
   constructor(
     private readonly gateway: LegaVolleyGateway,
     private readonly dataSource: DataSource,
+    private readonly legaMatchStatisticsRepository: LegaMatchPlayerStatisticsRepository,
   ) {}
 
   async synchronizeStoredRange(): Promise<void> {
@@ -95,6 +101,103 @@ export class LegaVolleyCatalogService {
     this.logger.log(
       `LegaVolley matches synchronized: ${matches.length} matches, ` +
         `${fetched.isComplete ? 'complete' : 'partially complete'}`,
+    );
+  }
+
+  async synchronizeMatchStatisticsStoredRange(): Promise<void> {
+    await this.synchronizeMatchStatisticsSince(
+      new Date().getFullYear() - PREVIOUS_YEARS_COUNT,
+    );
+  }
+
+  async synchronizeCurrentMatchStatistics(): Promise<void> {
+    await this.synchronizeMatchStatisticsSince(new Date().getFullYear());
+  }
+
+  private async synchronizeMatchStatisticsSince(
+    earliestYear: number,
+  ): Promise<void> {
+    const source = await this.dataSource
+      .getRepository(SourcesEntity)
+      .findOneByOrFail({ code: ESourceCode.LegaVolley });
+    const [teams, players, matches, fetched] = await Promise.all([
+      this.dataSource
+        .getRepository(TeamEntity)
+        .find({ where: { source: { id: source.id } } }),
+      this.dataSource
+        .getRepository(PlayersEntity)
+        .find({ where: { source: { id: source.id } } }),
+      this.dataSource.getRepository(MatchEntity).find({
+        where: {
+          league: { stage: { championship: { source: { id: source.id } } } },
+        },
+        relations: { league: true, homeTeam: true, awayTeam: true },
+      }),
+      this.gateway.fetchMatchStatisticsSince(earliestYear),
+    ]);
+    const teamsByName = new Map(
+      teams.map((team) => [normalizeLegaName(team.name), team]),
+    );
+    const playersByExternalId = new Map(
+      players.map((player) => [player.externalId, player]),
+    );
+    const matchesByKey = new Map(
+      matches.map((match) => [
+        createLegaMatchKey(
+          match.league.externalId,
+          match.homeTeam.externalId,
+          match.awayTeam.externalId,
+          match.scheduledAt,
+        ),
+        match,
+      ]),
+    );
+    const sourceUpdatedAt = new Date();
+    const rows: Parameters<
+      LegaMatchPlayerStatisticsRepository['upsertMany']
+    >[0] = [];
+
+    for (const statistics of fetched) {
+      const homeTeam = teamsByName.get(
+        normalizeLegaName(statistics.homeTeamName),
+      );
+      const awayTeam = teamsByName.get(
+        normalizeLegaName(statistics.awayTeamName),
+      );
+      if (!homeTeam || !awayTeam) continue;
+      const match = matchesByKey.get(
+        createLegaMatchKey(
+          statistics.leagueExternalId,
+          homeTeam.externalId,
+          awayTeam.externalId,
+          statistics.playedOn,
+        ),
+      );
+      if (!match) continue;
+      for (const [team, playersStatistics] of [
+        [homeTeam, statistics.home],
+        [awayTeam, statistics.away],
+      ] as const) {
+        for (const statistic of playersStatistics) {
+          const player = playersByExternalId.get(statistic.externalId);
+          if (player)
+            rows.push({
+              match,
+              team,
+              player,
+              points: statistic.points,
+              shirtNumber: statistic.shirtNumber,
+              played: statistic.played,
+              sourceUpdatedAt,
+            });
+        }
+      }
+    }
+    if (rows.length) {
+      await this.legaMatchStatisticsRepository.upsertMany(rows);
+    }
+    this.logger.log(
+      `LegaVolley match statistics synchronized: ${rows.length} rows`,
     );
   }
 
@@ -316,10 +419,7 @@ export class LegaVolleyCatalogService {
     const matchesRepository = this.dataSource.getRepository(MatchEntity);
     const matches = [
       ...new Map(
-        (leagueCatalog.matches ?? []).map((match) => [
-          match.externalId,
-          match,
-        ]),
+        (leagueCatalog.matches ?? []).map((match) => [match.externalId, match]),
       ).values(),
     ];
     await matchesRepository.upsert(

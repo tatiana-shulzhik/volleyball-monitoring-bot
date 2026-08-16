@@ -9,6 +9,8 @@ import {
   ILegaDateRange,
   ILegaOption,
   ILegaPlayer,
+  ILegaMatchPlayerStatistic,
+  ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
 import { CHAMPIONSHIP_RULES, STAGE_RULES } from './consts/constants';
 import { ECompetitionType, EMatchStatus } from './enums';
@@ -132,9 +134,7 @@ export function readLegaMatches(
 ): ICevMatch[] {
   const matches = new Map<string, ICevMatch>();
 
-  for (const rowMatch of html.matchAll(
-    /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi,
-  )) {
+  for (const rowMatch of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const row = rowMatch[1];
     const teamMatches = [
       ...row.matchAll(
@@ -143,9 +143,9 @@ export function readLegaMatches(
     ];
     if (teamMatches.length < 2) continue;
 
-    const cells = [
-      ...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
-    ].map((match) => cleanLegaText(match[1]));
+    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (match) => cleanLegaText(match[1]),
+    );
     const matchNumber = cells[0]?.match(/^\d+$/)?.[0];
     if (!matchNumber) continue;
 
@@ -156,9 +156,7 @@ export function readLegaMatches(
       : /\b0\s*-\s*0\b/.test(rowText)
         ? EMatchStatus.Scheduled
         : EMatchStatus.Finished;
-    const scheduledAt = parseLegaMatchDate(
-      html.slice(0, rowMatch.index ?? 0),
-    );
+    const scheduledAt = parseLegaMatchDate(html.slice(0, rowMatch.index ?? 0));
 
     matches.set(externalId, {
       externalId,
@@ -186,6 +184,91 @@ export function parseLegaTeamPage(
     country: 'ITA',
     players: extractLegaPlayers(html, teamExternalId),
   };
+}
+
+export function parseLegaMatchStatistics(
+  html: string,
+  sourceMatchId: string,
+  leagueExternalId: number,
+  playedOn: Date | null,
+): ILegaMatchStatistics | null {
+  const tables = [
+    ...html.matchAll(
+      /<table\b[^>]*id=["']Tabellino["'][^>]*>[\s\S]*?<\/table>/gi,
+    ),
+  ];
+  const teamTables = tables.filter((table) => /Atleta=/i.test(table[0]));
+  if (teamTables.length < 2) return null;
+
+  const parseTeam = (table: string) => {
+    const title = table.match(
+      /class=["']HeadCol["'][^>]*>[\s\S]*?([^<]+?)\s*<\/td>/i,
+    )?.[1];
+    const players: ILegaMatchPlayerStatistic[] = [];
+    for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      const player = row[1].match(/Atleta=([^&"']+)/i)?.[1];
+      if (!player) continue;
+      const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+        (cell) => cleanLegaText(cell[1]),
+      );
+      const shirtNumber = parseLegaNumber(cells[0]);
+      const points = parseLegaNumber(cells[8]);
+      players.push({
+        externalId: player,
+        shirtNumber,
+        points,
+        played: cells.slice(3, 8).some((value) => value.length > 0),
+      });
+    }
+    return { name: title ? cleanLegaText(title) : '', players };
+  };
+
+  const home = parseTeam(teamTables[0][0]);
+  const away = parseTeam(teamTables[1][0]);
+  return home.name && away.name
+    ? {
+        sourceMatchId,
+        leagueExternalId,
+        playedOn,
+        homeTeamName: home.name,
+        awayTeamName: away.name,
+        home: home.players,
+        away: away.players,
+      }
+    : null;
+}
+
+export function readLegaMatchIds(html: string): string[] {
+  return [
+    ...new Set(
+      [...html.matchAll(/href=["']\/?match\/(\d+)/gi)].map((match) => match[1]),
+    ),
+  ];
+}
+
+export function parseLegaPostGaraDate(value: string): Date | null {
+  const match = value.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return match
+    ? new Date(
+        Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])),
+      )
+    : null;
+}
+
+export function createLegaMatchKey(
+  leagueExternalId: number,
+  homeTeamExternalId: string,
+  awayTeamExternalId: string,
+  scheduledAt: Date | null,
+): string {
+  return `${leagueExternalId}:${homeTeamExternalId}:${awayTeamExternalId}:${scheduledAt?.toISOString().slice(0, 10) ?? ''}`;
+}
+
+export function normalizeLegaName(value: string): string {
+  return value
+    .toLocaleLowerCase('it-IT')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
 }
 
 function extractLegaPlayers(
