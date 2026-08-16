@@ -34,6 +34,70 @@ export class LegaVolleyCatalogService {
     await this.synchronizeFrom(new Date().getFullYear(), false);
   }
 
+  async synchronizeCurrentAndFutureMatches(): Promise<void> {
+    const currentYear = new Date().getFullYear();
+    const source = await this.dataSource
+      .getRepository(SourcesEntity)
+      .findOneByOrFail({ code: ESourceCode.LegaVolley });
+    const leagues = await this.dataSource.getRepository(LeaguesEntity).find({
+      where: { stage: { championship: { source: { id: source.id } } } },
+      relations: { stage: { season: true } },
+    });
+    const schedules = leagues.flatMap((league) => {
+      const year = Number(league.stage.season?.name.slice(0, 4));
+      return Number.isInteger(year) && year >= currentYear
+        ? [{ year, leagueExternalId: league.externalId }]
+        : [];
+    });
+
+    if (!schedules.length) {
+      this.logger.log('No current LegaVolley leagues found for matches sync');
+      return;
+    }
+
+    const fetched = await this.gateway.fetchMatches(schedules);
+    const teams = await this.dataSource.getRepository(TeamEntity).find({
+      where: { source: { id: source.id } },
+    });
+    const leaguesByExternalId = new Map(
+      leagues.map((league) => [league.externalId, league]),
+    );
+    const teamsByExternalId = new Map(
+      teams.map((team) => [team.externalId, team]),
+    );
+    const matches = [
+      ...new Map(
+        fetched.matches.map((match) => [match.externalId, match]),
+      ).values(),
+    ];
+
+    await this.dataSource.getRepository(MatchEntity).upsert(
+      matches.flatMap((match) => {
+        const league = leaguesByExternalId.get(match.leagueExternalId);
+        const homeTeam = teamsByExternalId.get(match.homeTeamExternalId);
+        const awayTeam = teamsByExternalId.get(match.awayTeamExternalId);
+        return league && homeTeam && awayTeam
+          ? [
+              {
+                externalId: match.externalId,
+                league,
+                homeTeam,
+                awayTeam,
+                scheduledAt: match.scheduledAt,
+                status: match.status,
+              },
+            ]
+          : [];
+      }),
+      { conflictPaths: ['externalId'], skipUpdateIfNoValuesChanged: true },
+    );
+
+    this.logger.log(
+      `LegaVolley matches synchronized: ${matches.length} matches, ` +
+        `${fetched.isComplete ? 'complete' : 'partially complete'}`,
+    );
+  }
+
   private async synchronizeFrom(
     earliestYear: number,
     includeHistoricalTeams: boolean,

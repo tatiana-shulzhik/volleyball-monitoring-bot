@@ -33,7 +33,7 @@ export class CompetitionStagesRepository {
 
     return repository.find({
       where,
-      relations: { championship: true, season: true },
+      relations: { championship: { source: true }, season: true },
     });
   }
 

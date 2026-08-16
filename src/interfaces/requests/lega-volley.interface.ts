@@ -50,3 +50,8 @@ export interface IMapSettledParams<TInput, TOutput> {
   mapper: (item: TInput) => Promise<TOutput>;
   concurrency: number;
 }
+
+export interface ILegaLeagueSchedule {
+  year: number;
+  leagueExternalId: number;
+}

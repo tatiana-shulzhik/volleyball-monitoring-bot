@@ -10,8 +10,10 @@ import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface'
 import {
   ILegaCatalog,
   IMapSettledParams,
+  ILegaLeagueSchedule,
   ILegaPlayer,
 } from '../interfaces/requests/lega-volley.interface';
+import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import {
   LEGA_VOLLEY_HTTP_CONCURRENCY,
   LEGA_VOLLEY_BASE_URL,
@@ -197,6 +199,38 @@ export class LegaVolleyGateway {
         enrichedResults.every((result) => result.status === 'fulfilled'),
       players,
       matches,
+    };
+  }
+
+  async fetchMatches(
+    schedules: ILegaLeagueSchedule[],
+  ): Promise<IFetchedMatches> {
+    const results = await this.mapSettled({
+      items: schedules,
+      mapper: async ({ year, leagueExternalId }) =>
+        readLegaMatches(
+          await this.fetchLeagueSchedule(year, leagueExternalId),
+          leagueExternalId,
+          year,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const { year, leagueExternalId } = schedules[index];
+        this.logger.warn(
+          `League matches request failed for ${leagueExternalId} (${year}): ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return {
+      matches: results.flatMap((result) =>
+        result.status === 'fulfilled' ? result.value : [],
+      ),
+      isComplete: results.every((result) => result.status === 'fulfilled'),
     };
   }
 

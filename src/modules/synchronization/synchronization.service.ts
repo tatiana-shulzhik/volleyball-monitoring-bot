@@ -90,6 +90,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
   async synchronizeMatchesByCron(): Promise<void> {
     await this.runExclusive(async () => {
       await this.performMatchesSynchronization(true);
+      await this.legaVolleyCatalogService.synchronizeCurrentAndFutureMatches();
       await this.matchesService.startMonitoring();
     }, false);
   }
@@ -216,7 +217,11 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async performMatchesSynchronization(
     frequentOnly: boolean,
   ): Promise<void> {
-    const stages = await this.stagesRepository.getWhere({});
+    const stages = (
+      await this.stagesRepository.getWhere({})
+    ).filter(
+      ({ championship }) => championship.source?.code === ESourceCode.Cev,
+    );
 
     if (frequentOnly) {
       await this.matchesService.synchronizeFrequently(stages);
@@ -229,18 +234,22 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private async synchronizePlayerStatistics(): Promise<void> {
     const now = new Date();
     await this.loadPlayerStatistics(
-      await this.stagesRepository.getWhere({
-        startsAt: LessThanOrEqual(now),
-        endsAt: MoreThanOrEqual(now),
-      }),
+      this.filterCevStages(
+        await this.stagesRepository.getWhere({
+          startsAt: LessThanOrEqual(now),
+          endsAt: MoreThanOrEqual(now),
+        }),
+      ),
     );
   }
 
   private async synchronizeIncompletePlayerStatistics(): Promise<void> {
     await this.loadPlayerStatistics(
-      await this.stagesRepository.getWhere({
-        startsAt: LessThanOrEqual(new Date()),
-      }),
+      this.filterCevStages(
+        await this.stagesRepository.getWhere({
+          startsAt: LessThanOrEqual(new Date()),
+        }),
+      ),
     );
   }
 
@@ -257,7 +266,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
       `Repairing match attack statistics for ${stageIds.length} stages`,
     );
     await this.playerStatisticsService.synchronizePendingAttacks(
-      await this.stagesRepository.getWhere({ id: In(stageIds) }),
+      this.filterCevStages(
+        await this.stagesRepository.getWhere({ id: In(stageIds) }),
+      ),
     );
   }
 
@@ -265,6 +276,14 @@ export class SynchronizationService implements OnApplicationBootstrap {
     stages: CompetitionStagesEntity[],
   ): Promise<void> {
     await this.playerStatisticsService.synchronize(stages);
+  }
+
+  private filterCevStages(
+    stages: CompetitionStagesEntity[],
+  ): CompetitionStagesEntity[] {
+    return stages.filter(
+      ({ championship }) => championship.source?.code === ESourceCode.Cev,
+    );
   }
 
   private async runExclusive<T>(
