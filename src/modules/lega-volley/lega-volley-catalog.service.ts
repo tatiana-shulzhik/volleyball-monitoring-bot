@@ -7,6 +7,8 @@ import { SeasonsEntity } from '../../databases/entities/seasons.entity';
 import { SourcesEntity } from '../../databases/entities/sources.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { TeamLeagueEntity } from '../../databases/entities/team-league.entity';
+import { PlayersEntity } from '../../databases/entities/players.entity';
+import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
 import { ESourceCode } from '../../shared/enums';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
@@ -193,9 +195,63 @@ export class LegaVolleyCatalogService {
         skipUpdateIfNoValuesChanged: true,
       });
 
+    const uniquePlayers = [
+      ...new Map(
+        (leagueCatalog.players ?? []).map((player) => [
+          player.externalId,
+          player,
+        ]),
+      ).values(),
+    ];
+    const playersRepository = this.dataSource.getRepository(PlayersEntity);
+    await playersRepository.upsert(
+      uniquePlayers.map((player) => ({
+        externalId: player.externalId,
+        fullName: player.fullName,
+        birthYear: player.birthYear,
+        source,
+      })),
+      { conflictPaths: ['externalId'], skipUpdateIfNoValuesChanged: true },
+    );
+    const storedPlayers = await playersRepository.find({
+      where: { source: { id: source.id } },
+    });
+    const playersByExternalId = new Map(
+      storedPlayers.map((player) => [player.externalId, player]),
+    );
+    const playerTeamLeagueEntries = (leagueCatalog.players ?? []).flatMap(
+      (player) => {
+        const storedPlayer = playersByExternalId.get(player.externalId);
+        const storedTeam = teamsByExternalId.get(player.teamExternalId);
+        const league = leaguesByExternalId.get(player.leagueExternalId);
+        return storedPlayer && storedTeam && league
+          ? [
+              [
+                `${storedPlayer.id}:${storedTeam.id}:${league.id}`,
+                {
+                  player: storedPlayer,
+                  team: storedTeam,
+                  league,
+                  shirtNumber: player.shirtNumber,
+                  position: player.position,
+                },
+              ] as const,
+            ]
+          : [];
+      },
+    );
+    const playerTeamLeagues = [...new Map(playerTeamLeagueEntries).values()];
+    await this.dataSource
+      .getRepository(PlayerTeamLeagueEntity)
+      .upsert(playerTeamLeagues, {
+        conflictPaths: ['player', 'team', 'league'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+
     this.logger.log(
       `LegaVolley catalog synchronized: ${catalog.championships.length} championships, ` +
-        `${catalog.stages.length} stages, ${uniqueTeams.length} teams`,
+        `${catalog.stages.length} stages, ${uniqueTeams.length} teams, ` +
+        `${uniquePlayers.length} players`,
     );
   }
 }

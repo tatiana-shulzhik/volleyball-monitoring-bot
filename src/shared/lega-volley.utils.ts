@@ -7,6 +7,7 @@ import {
   ILegaCompetitionName,
   ILegaDateRange,
   ILegaOption,
+  ILegaPlayer,
 } from '../interfaces/requests/lega-volley.interface';
 import { CHAMPIONSHIP_RULES, STAGE_RULES } from './consts/constants';
 import { ECompetitionType } from './enums';
@@ -126,14 +127,73 @@ export function readLegaTeams(
 export function parseLegaTeamPage(
   html: string,
   fallbackName: string,
-): { name: string; country: string } {
+  teamExternalId = '',
+): { name: string; country: string; players: ILegaPlayer[] } {
   const title = html.match(
     /<(?:h1|h2|title)[^>]*>([\s\S]*?)<\/(?:h1|h2|title)>/i,
   )?.[1];
   return {
     name: title ? cleanLegaText(title) : fallbackName,
     country: 'ITA',
+    players: extractLegaPlayers(html, teamExternalId),
   };
+}
+
+function extractLegaPlayers(
+  html: string,
+  teamExternalId: string,
+): ILegaPlayer[] {
+  const players = new Map<string, ILegaPlayer>();
+
+  for (const rowMatch of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const row = rowMatch[1];
+    const playerMatch = row.match(
+      /<a\b[^>]*href=["'][^"']*\/player\/([^"'?#]+)[^>]*>([\s\S]*?)<\/a>/i,
+    );
+    if (!playerMatch) continue;
+
+    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (match) => cleanLegaText(match[1]),
+    );
+    const playerCellIndex = cells.findIndex((cell) =>
+      cell.includes(cleanLegaText(playerMatch[2])),
+    );
+    const shirtNumber = parseLegaNumber(
+      cells[playerCellIndex > 0 ? playerCellIndex - 1 : 0],
+    );
+    const birthYear = parseLegaYear(cells.join(' '));
+    const position =
+      playerCellIndex >= 0
+        ? (cells
+            .slice(playerCellIndex + 1)
+            .find((cell) => cell && !/^\d{4}$/.test(cell)) ?? null)
+        : null;
+    const fullName = cleanLegaText(playerMatch[2]);
+
+    if (fullName) {
+      players.set(playerMatch[1], {
+        externalId: playerMatch[1],
+        fullName,
+        shirtNumber,
+        position,
+        birthYear,
+        teamExternalId,
+        leagueExternalId: 0,
+      });
+    }
+  }
+
+  return [...players.values()];
+}
+
+function parseLegaNumber(value: string | undefined): number | null {
+  const number = value?.match(/^\d+$/)?.[0];
+  return number ? Number(number) : null;
+}
+
+function parseLegaYear(value: string): number | null {
+  const year = value.match(/\b(?:19|20)\d{2}\b/)?.[0];
+  return year ? Number(year) : null;
 }
 
 function getChampionshipName(name: string): string {

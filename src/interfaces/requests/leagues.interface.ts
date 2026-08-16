@@ -2,6 +2,7 @@ import { CompetitionStagesEntity } from '../../databases/entities/competition-st
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { EntityChanges } from '../responses/entity-changes.interface';
 import { ICevTeam } from './teams.interface';
+import { ILegaPlayer } from './lega-volley.interface';
 
 export interface ICevLeague {
   externalId: number;
@@ -13,6 +14,7 @@ export interface ICevLeague {
 export interface FetchedLeagueCatalog {
   leagues: ICevLeague[];
   teams: ICevTeam[];
+  players?: ILegaPlayer[];
   isComplete: boolean;
 }
 

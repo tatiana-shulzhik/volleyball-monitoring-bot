@@ -25,6 +25,16 @@ export interface ILegaCompetitionName {
   leagueName: string;
 }
 
+export interface ILegaPlayer {
+  externalId: string;
+  fullName: string;
+  shirtNumber: number | null;
+  position: string | null;
+  birthYear: number | null;
+  teamExternalId: string;
+  leagueExternalId: number;
+}
+
 export interface ILegaCompetitionRule {
   pattern: RegExp;
   name: string;

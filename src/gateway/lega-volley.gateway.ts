@@ -10,6 +10,7 @@ import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface'
 import {
   ILegaCatalog,
   IMapSettledParams,
+  ILegaPlayer,
 } from '../interfaces/requests/lega-volley.interface';
 import {
   LEGA_VOLLEY_HTTP_CONCURRENCY,
@@ -140,7 +141,10 @@ export class LegaVolleyGateway {
     const teamsToEnrich = [
       ...new Map(uniqueTeams.map((team) => [team.externalId, team])).values(),
     ];
-    const enrichedResults = await this.mapSettled({
+    const enrichedResults = await this.mapSettled<
+      ICevTeam,
+      ICevTeam & { players: ILegaPlayer[] }
+    >({
       items: teamsToEnrich,
       mapper: async (team) => {
         const html = await this.http.get(
@@ -151,6 +155,7 @@ export class LegaVolleyGateway {
           ...parseLegaTeamPage(
             html,
             teamNames.get(team.externalId) ?? team.name,
+            team.externalId,
           ),
         };
       },
@@ -163,11 +168,18 @@ export class LegaVolleyGateway {
         `Team page request failed for ${teamsToEnrich[index].externalId}: ` +
           getErrorMessage(result.reason),
       );
-      return teamsToEnrich[index];
+      return { ...teamsToEnrich[index], players: [] };
     });
     const enrichedById = new Map(
       enrichedTeams.map((team) => [team.externalId, team]),
     );
+    const players = uniqueTeams.flatMap((team) => {
+      const enrichedTeam = enrichedById.get(team.externalId);
+      return (enrichedTeam?.players ?? []).map((player) => ({
+        ...player,
+        leagueExternalId: team.leagueExternalId,
+      }));
+    });
 
     return {
       leagues: catalogLeagues.map(({ league }) => league),
@@ -178,6 +190,7 @@ export class LegaVolleyGateway {
       isComplete:
         teamResults.every((result) => result.status === 'fulfilled') &&
         enrichedResults.every((result) => result.status === 'fulfilled'),
+      players,
     };
   }
 
