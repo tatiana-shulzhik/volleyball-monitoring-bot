@@ -2,6 +2,7 @@ import { ICevChampionship } from '../interfaces/requests/championships.interface
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { ICevLeague } from '../interfaces/requests/leagues.interface';
 import { ICevTeam } from '../interfaces/requests/teams.interface';
+import { ICevMatch } from '../interfaces/requests/matches.interface';
 import {
   ILegaCatalog,
   ILegaCompetitionName,
@@ -10,7 +11,7 @@ import {
   ILegaPlayer,
 } from '../interfaces/requests/lega-volley.interface';
 import { CHAMPIONSHIP_RULES, STAGE_RULES } from './consts/constants';
-import { ECompetitionType } from './enums';
+import { ECompetitionType, EMatchStatus } from './enums';
 
 export function parseLegaSeason(
   year: number,
@@ -124,6 +125,54 @@ export function readLegaTeams(
     .filter(({ name }) => name.length > 0);
 }
 
+export function readLegaMatches(
+  html: string,
+  leagueExternalId: number,
+  year: number,
+): ICevMatch[] {
+  const matches = new Map<string, ICevMatch>();
+
+  for (const rowMatch of html.matchAll(
+    /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi,
+  )) {
+    const row = rowMatch[1];
+    const teamMatches = [
+      ...row.matchAll(
+        /href=["'][^"']*(?:\/|^)team\/(\d+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi,
+      ),
+    ];
+    if (teamMatches.length < 2) continue;
+
+    const cells = [
+      ...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
+    ].map((match) => cleanLegaText(match[1]));
+    const matchNumber = cells[0]?.match(/^\d+$/)?.[0];
+    if (!matchNumber) continue;
+
+    const externalId = `legavolley:${year}:${leagueExternalId}:${matchNumber}`;
+    const rowText = cleanLegaText(row);
+    const status = /annullat|cancel/i.test(rowText)
+      ? EMatchStatus.Cancelled
+      : /\b0\s*-\s*0\b/.test(rowText)
+        ? EMatchStatus.Scheduled
+        : EMatchStatus.Finished;
+    const scheduledAt = parseLegaMatchDate(
+      html.slice(0, rowMatch.index ?? 0),
+    );
+
+    matches.set(externalId, {
+      externalId,
+      leagueExternalId,
+      homeTeamExternalId: teamMatches[0][1],
+      awayTeamExternalId: teamMatches[1][1],
+      scheduledAt,
+      status,
+    });
+  }
+
+  return [...matches.values()];
+}
+
 export function parseLegaTeamPage(
   html: string,
   fallbackName: string,
@@ -194,6 +243,43 @@ function parseLegaNumber(value: string | undefined): number | null {
 function parseLegaYear(value: string): number | null {
   const year = value.match(/\b(?:19|20)\d{2}\b/)?.[0];
   return year ? Number(year) : null;
+}
+
+function parseLegaMatchDate(value: string): Date | null {
+  const months: Record<string, number> = {
+    gennaio: 0,
+    febbraio: 1,
+    marzo: 2,
+    aprile: 3,
+    maggio: 4,
+    giugno: 5,
+    luglio: 6,
+    agosto: 7,
+    settembre: 8,
+    ottobre: 9,
+    novembre: 10,
+    dicembre: 11,
+  };
+  const matches = [
+    ...cleanLegaText(value).matchAll(
+      /Giornata[\s\S]{0,120}?\b(\d{1,2})\s+([A-Za-zàèéìòù]+)\s+(\d{4})(?:\s+Ore\s+(\d{1,2}):(\d{2}))?/gi,
+    ),
+  ];
+  const match = matches.at(-1);
+  if (!match) return null;
+
+  const month = months[match[2].toLocaleLowerCase('it-IT')];
+  return month === undefined
+    ? null
+    : new Date(
+        Date.UTC(
+          Number(match[3]),
+          month,
+          Number(match[1]),
+          Number(match[4] ?? 0),
+          Number(match[5] ?? 0),
+        ),
+      );
 }
 
 function getChampionshipName(name: string): string {

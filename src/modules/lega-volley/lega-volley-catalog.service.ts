@@ -9,6 +9,7 @@ import { TeamEntity } from '../../databases/entities/team.entity';
 import { TeamLeagueEntity } from '../../databases/entities/team-league.entity';
 import { PlayersEntity } from '../../databases/entities/players.entity';
 import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
+import { MatchEntity } from '../../databases/entities/match.entity';
 import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
 import { ESourceCode } from '../../shared/enums';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
@@ -248,10 +249,40 @@ export class LegaVolleyCatalogService {
         skipUpdateIfNoValuesChanged: true,
       });
 
+    const matchesRepository = this.dataSource.getRepository(MatchEntity);
+    const matches = [
+      ...new Map(
+        (leagueCatalog.matches ?? []).map((match) => [
+          match.externalId,
+          match,
+        ]),
+      ).values(),
+    ];
+    await matchesRepository.upsert(
+      matches.flatMap((match) => {
+        const league = leaguesByExternalId.get(match.leagueExternalId);
+        const homeTeam = teamsByExternalId.get(match.homeTeamExternalId);
+        const awayTeam = teamsByExternalId.get(match.awayTeamExternalId);
+        return league && homeTeam && awayTeam
+          ? [
+              {
+                externalId: match.externalId,
+                league,
+                homeTeam,
+                awayTeam,
+                scheduledAt: match.scheduledAt,
+                status: match.status,
+              },
+            ]
+          : [];
+      }),
+      { conflictPaths: ['externalId'], skipUpdateIfNoValuesChanged: true },
+    );
+
     this.logger.log(
       `LegaVolley catalog synchronized: ${catalog.championships.length} championships, ` +
         `${catalog.stages.length} stages, ${uniqueTeams.length} teams, ` +
-        `${uniquePlayers.length} players`,
+        `${uniquePlayers.length} players, ${matches.length} matches`,
     );
   }
 }

@@ -20,6 +20,7 @@ import {
   normalizeLegaSeasonName,
   parseLegaTeamPage,
   parseLegaSeason,
+  readLegaMatches,
   readLegaOptions,
   readLegaTeams,
 } from '../shared/lega-volley.utils';
@@ -110,15 +111,16 @@ export class LegaVolleyGateway {
     const teamResults = await this.mapSettled({
       items: catalogLeagues,
       mapper: async ({ league, year }) => {
-        return readLegaTeams(
-          await this.fetchLeagueSchedule(year, league.externalId),
-          league.externalId,
-        );
+        const html = await this.fetchLeagueSchedule(year, league.externalId);
+        return {
+          teams: readLegaTeams(html, league.externalId),
+          matches: readLegaMatches(html, league.externalId, year),
+        };
       },
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
     const teams: ICevTeam[] = teamResults.flatMap((result, index) => {
-      if (result.status === 'fulfilled') return result.value;
+      if (result.status === 'fulfilled') return result.value.teams;
 
       const { league, year } = catalogLeagues[index];
       this.logger.warn(
@@ -127,6 +129,9 @@ export class LegaVolleyGateway {
       );
       return [];
     });
+    const matches = teamResults.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value.matches : [],
+    );
     const uniqueTeams = [
       ...new Map(
         teams.map((team) => [
@@ -191,6 +196,7 @@ export class LegaVolleyGateway {
         teamResults.every((result) => result.status === 'fulfilled') &&
         enrichedResults.every((result) => result.status === 'fulfilled'),
       players,
+      matches,
     };
   }
 

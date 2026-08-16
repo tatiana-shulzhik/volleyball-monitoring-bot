@@ -11,6 +11,7 @@ import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
 import { TeamEntity } from '../databases/entities/team.entity';
 import { SynchronizationStateEntity } from '../databases/entities/synchronization-state.entity';
 import { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
+import { LegaMatchPlayerStatisticsEntity } from '../databases/entities/lega-match-stats.entity';
 import { SourcesEntity } from '../databases/entities/sources.entity';
 import { CreateSources1760000000000 } from '../databases/migrations/1760000000000-CreateSources';
 import { CreateSeasons1760000001000 } from '../databases/migrations/1760000001000-CreateSeasons';
@@ -28,6 +29,7 @@ import { AddSourceColumns1760000011500 } from '../databases/migrations/176000001
 import { MarkExistingCevData1760000012000 } from '../databases/migrations/1760000012000-MarkExistingCevData';
 import { SeedLegaVolleySource1760000013000 } from '../databases/migrations/1760000013000-SeedLegaVolleySource';
 import { ScopeLeagueExternalIdByStage1760000014000 } from '../databases/migrations/1760000014000-ScopeLeagueExternalIdByStage';
+import { CreateLegaMatchPlayerStatistics1760000015000 } from '../databases/migrations/1760000015000-CreateLegaMatchStats';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -68,6 +70,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         PlayerTeamLeagueEntity,
         MatchEntity,
         MatchPlayerAttackStatisticsEntity,
+        LegaMatchPlayerStatisticsEntity,
         SynchronizationStateEntity,
         SourcesEntity,
       ],
@@ -88,6 +91,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         MarkExistingCevData1760000012000,
         SeedLegaVolleySource1760000013000,
         ScopeLeagueExternalIdByStage1760000014000,
+        CreateLegaMatchPlayerStatistics1760000015000,
       ],
     };
   }
