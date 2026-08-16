@@ -5,6 +5,8 @@ import { CompetitionStagesEntity } from '../../databases/entities/competition-st
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { SeasonsEntity } from '../../databases/entities/seasons.entity';
 import { SourcesEntity } from '../../databases/entities/sources.entity';
+import { TeamEntity } from '../../databases/entities/team.entity';
+import { TeamLeagueEntity } from '../../databases/entities/team-league.entity';
 import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
 import { ESourceCode } from '../../shared/enums';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
@@ -19,15 +21,20 @@ export class LegaVolleyCatalogService {
   ) {}
 
   async synchronizeStoredRange(): Promise<void> {
-    const earliestYear = new Date().getFullYear() - PREVIOUS_YEARS_COUNT;
-    await this.synchronizeFrom(earliestYear);
+    await this.synchronizeFrom(
+      new Date().getFullYear() - PREVIOUS_YEARS_COUNT,
+      true,
+    );
   }
 
   async synchronizeCurrentAndFuture(): Promise<void> {
-    await this.synchronizeFrom(new Date().getFullYear());
+    await this.synchronizeFrom(new Date().getFullYear(), false);
   }
 
-  private async synchronizeFrom(earliestYear: number): Promise<void> {
+  private async synchronizeFrom(
+    earliestYear: number,
+    includeHistoricalTeams: boolean,
+  ): Promise<void> {
     const catalog = await this.gateway.fetchSeasonCatalogSince(earliestYear);
     const source = await this.dataSource
       .getRepository(SourcesEntity)
@@ -101,25 +108,94 @@ export class LegaVolleyCatalogService {
       ]),
     );
 
+    const currentYear = new Date().getFullYear();
+    const teamStages = includeHistoricalTeams
+      ? catalog.stages
+      : catalog.stages.filter(({ seasonName }) => {
+          const seasonStartYear = Number(seasonName?.slice(0, 4));
+          return (
+            Number.isInteger(seasonStartYear) && seasonStartYear >= currentYear
+          );
+        });
+    const leagueCatalog = await this.gateway.fetchLeagueCatalog(teamStages);
+    const uniqueLeagues = [
+      ...new Map(
+        leagueCatalog.leagues.map((league) => [
+          `${league.externalId}:${league.championshipExternalId}:${league.stageExternalId}`,
+          league,
+        ]),
+      ).values(),
+    ];
     await leaguesRepository.upsert(
-      (await this.gateway.fetchLeagueCatalog(catalog.stages)).leagues.map(
-        (league) => ({
-          externalId: league.externalId,
-          name: league.name,
-          stage: stageByKey.get(
-            `${league.championshipExternalId}:${league.stageExternalId}`,
-          ),
-        }),
-      ),
+      uniqueLeagues.map((league) => ({
+        externalId: league.externalId,
+        name: league.name,
+        stage: stageByKey.get(
+          `${league.championshipExternalId}:${league.stageExternalId}`,
+        ),
+      })),
       {
         conflictPaths: ['externalId', 'stage'],
         skipUpdateIfNoValuesChanged: true,
       },
     );
 
+    const storedLeagues = await leaguesRepository.find({
+      where: { stage: { championship: { source: { id: source.id } } } },
+      relations: { stage: true },
+    });
+    const leaguesByExternalId = new Map(
+      storedLeagues.map((league) => [league.externalId, league]),
+    );
+    const teamsRepository = this.dataSource.getRepository(TeamEntity);
+    const uniqueTeams = [
+      ...new Map(
+        leagueCatalog.teams.map((team) => [team.externalId, team]),
+      ).values(),
+    ];
+    await teamsRepository.upsert(
+      uniqueTeams.map((team) => ({
+        externalId: team.externalId,
+        name: team.name,
+        country: team.country ?? 'ITA',
+        source,
+      })),
+      { conflictPaths: ['externalId'], skipUpdateIfNoValuesChanged: true },
+    );
+    const storedTeams = await teamsRepository.find({
+      where: { source: { id: source.id } },
+    });
+    const teamsByExternalId = new Map(
+      storedTeams.map((team) => [team.externalId, team]),
+    );
+    const uniqueTeamLeagues = [
+      ...new Map(
+        leagueCatalog.teams
+          .map((team) => {
+            const storedTeam = teamsByExternalId.get(team.externalId);
+            const league = leaguesByExternalId.get(team.leagueExternalId);
+            return storedTeam && league
+              ? [`${storedTeam.id}:${league.id}`, { team: storedTeam, league }]
+              : null;
+          })
+          .filter(
+            (
+              value,
+            ): value is [string, { team: TeamEntity; league: LeaguesEntity }] =>
+              value !== null,
+          ),
+      ).values(),
+    ];
+    await this.dataSource
+      .getRepository(TeamLeagueEntity)
+      .upsert([...uniqueTeamLeagues], {
+        conflictPaths: ['team', 'league'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+
     this.logger.log(
       `LegaVolley catalog synchronized: ${catalog.championships.length} championships, ` +
-        `${catalog.stages.length} stages`,
+        `${catalog.stages.length} stages, ${uniqueTeams.length} teams`,
     );
   }
 }

@@ -1,22 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import {
   FetchedCompetitionStages,
   ICevCompetitionStage,
 } from '../interfaces/requests/competition-stages.interface';
 import { FetchedLeagueCatalog } from '../interfaces/requests/leagues.interface';
+import { ICevTeam } from '../interfaces/requests/teams.interface';
 import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
-import { ILegaCatalog } from '../interfaces/requests/lega-volley.interface';
-import { LEGA_VOLLEY_BASE_URL } from '../shared/consts/constants';
+import {
+  ILegaCatalog,
+  IMapSettledParams,
+} from '../interfaces/requests/lega-volley.interface';
+import {
+  LEGA_VOLLEY_HTTP_CONCURRENCY,
+  LEGA_VOLLEY_BASE_URL,
+} from '../shared/consts/constants';
 import {
   normalizeLegaSeasonName,
+  parseLegaTeamPage,
   parseLegaSeason,
   readLegaOptions,
+  readLegaTeams,
 } from '../shared/lega-volley.utils';
 import { HttpService } from '../shared/http/http.service';
+import { getErrorMessage } from '../shared/error.utils';
 
 @Injectable()
 export class LegaVolleyGateway {
+  private readonly logger = new Logger(LegaVolleyGateway.name);
   private readonly catalogs = new Map<number, ILegaCatalog>();
 
   constructor(private readonly http: HttpService) {}
@@ -88,20 +99,129 @@ export class LegaVolleyGateway {
       ),
     );
 
-    return {
-      leagues: [...this.catalogs.values()].flatMap(({ leagues }) =>
-        leagues.filter(({ championshipExternalId, stageExternalId }) =>
+    const catalogLeagues = [...this.catalogs.values()].flatMap((catalog) =>
+      catalog.leagues
+        .filter(({ championshipExternalId, stageExternalId }) =>
           keys.has(`${championshipExternalId}:${stageExternalId}`),
-        ),
-      ),
-      teams: [],
-      isComplete: true,
+        )
+        .map((league) => ({ league, year: catalog.year })),
+    );
+    const teamResults = await this.mapSettled({
+      items: catalogLeagues,
+      mapper: async ({ league, year }) => {
+        return readLegaTeams(
+          await this.fetchLeagueSchedule(year, league.externalId),
+          league.externalId,
+        );
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+    const teams: ICevTeam[] = teamResults.flatMap((result, index) => {
+      if (result.status === 'fulfilled') return result.value;
+
+      const { league, year } = catalogLeagues[index];
+      this.logger.warn(
+        `League schedule request failed for ${league.externalId} ` +
+          `(${year}): ${getErrorMessage(result.reason)}`,
+      );
+      return [];
+    });
+    const uniqueTeams = [
+      ...new Map(
+        teams.map((team) => [
+          `${team.externalId}:${team.leagueExternalId}`,
+          team,
+        ]),
+      ).values(),
+    ];
+    const teamNames = new Map(
+      teams.map((team) => [team.externalId, team.name]),
+    );
+    const teamsToEnrich = [
+      ...new Map(uniqueTeams.map((team) => [team.externalId, team])).values(),
+    ];
+    const enrichedResults = await this.mapSettled({
+      items: teamsToEnrich,
+      mapper: async (team) => {
+        const html = await this.http.get(
+          `${LEGA_VOLLEY_BASE_URL}/team/${team.externalId}`,
+        );
+        return {
+          ...team,
+          ...parseLegaTeamPage(
+            html,
+            teamNames.get(team.externalId) ?? team.name,
+          ),
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+    const enrichedTeams = enrichedResults.map((result, index) => {
+      if (result.status === 'fulfilled') return result.value;
+
+      this.logger.warn(
+        `Team page request failed for ${teamsToEnrich[index].externalId}: ` +
+          getErrorMessage(result.reason),
+      );
+      return teamsToEnrich[index];
+    });
+    const enrichedById = new Map(
+      enrichedTeams.map((team) => [team.externalId, team]),
+    );
+
+    return {
+      leagues: catalogLeagues.map(({ league }) => league),
+      teams: uniqueTeams.map((team) => ({
+        ...team,
+        ...enrichedById.get(team.externalId),
+      })),
+      isComplete:
+        teamResults.every((result) => result.status === 'fulfilled') &&
+        enrichedResults.every((result) => result.status === 'fulfilled'),
     };
+  }
+
+  private fetchLeagueSchedule(
+    year: number,
+    leagueExternalId: number,
+  ): Promise<string> {
+    return this.http.get(
+      `${LEGA_VOLLEY_BASE_URL}/schedule?stagione=${year}&campionato=${leagueExternalId}&fase=&AllMatches=true`,
+    );
   }
 
   private fetchSchedule(year: number): Promise<string> {
     return this.http.get(
       `${LEGA_VOLLEY_BASE_URL}/schedule?stagione=${year}&campionato=-1&fase=&AllMatches=true`,
     );
+  }
+
+  private async mapSettled<TInput, TOutput>(
+    data: IMapSettledParams<TInput, TOutput>,
+  ): Promise<PromiseSettledResult<TOutput>[]> {
+    const { items, mapper, concurrency } = data;
+    const results = new Array<PromiseSettledResult<TOutput>>(items.length);
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex++;
+
+        try {
+          results[index] = {
+            status: 'fulfilled',
+            value: await mapper(items[index]),
+          };
+        } catch (reason: unknown) {
+          results[index] = { status: 'rejected', reason };
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, items.length) }, worker),
+    );
+
+    return results;
   }
 }

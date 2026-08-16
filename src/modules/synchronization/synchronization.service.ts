@@ -69,7 +69,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.synchronizeCatalog(
         await this.seasonsService.discoverCurrentAndFutureSeasons(),
       );
-      await this.legaVolleyCatalogService.synchronizeStoredRange();
+      await this.legaVolleyCatalogService.synchronizeCurrentAndFuture();
     }, false);
   }
 
@@ -154,7 +154,6 @@ export class SynchronizationService implements OnApplicationBootstrap {
         await this.synchronizeCatalog(
           await this.seasonsService.synchronizeStoredRange(),
         );
-        await this.legaVolleyCatalogService.synchronizeCurrentAndFuture();
         await this.performMatchesSynchronization(false);
       });
       this.logger.log('Full catalog synchronization completed');

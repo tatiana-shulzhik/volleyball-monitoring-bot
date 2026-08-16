@@ -1,11 +1,14 @@
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { ICevLeague } from '../interfaces/requests/leagues.interface';
+import { ICevTeam } from '../interfaces/requests/teams.interface';
 import {
   ILegaCatalog,
+  ILegaCompetitionName,
   ILegaDateRange,
   ILegaOption,
 } from '../interfaces/requests/lega-volley.interface';
+import { CHAMPIONSHIP_RULES, STAGE_RULES } from './consts/constants';
 import { ECompetitionType } from './enums';
 
 export function parseLegaSeason(
@@ -19,13 +22,14 @@ export function parseLegaSeason(
   const range = extractLegaDateRange(html);
 
   for (const option of readLegaOptions(html, 'campionato')) {
-    const competitionName = getLegaCompetitionName(option.label);
-    const stageName = getLegaStageName(option.label);
+    const parsedName = parseCompetitionName(option.label);
+    const competitionName = parsedName.championshipName;
+    const stageName = parsedName.stageName;
     const championshipExternalId = hashLegaId(
-      `legavolley:championship:${competitionName}`,
+      `legavolley:championship:${toLegaKey(competitionName)}`,
     );
     const stageExternalId = hashLegaId(
-      `legavolley:stage:${year}:${competitionName}:${stageName}`,
+      `legavolley:stage:${year}:${toLegaKey(competitionName)}:${toLegaKey(stageName)}`,
     );
 
     championships.set(championshipExternalId, {
@@ -47,7 +51,7 @@ export function parseLegaSeason(
 
     leagues.push({
       externalId: Number(option.value),
-      name: option.label,
+      name: parsedName.leagueName,
       championshipExternalId,
       stageExternalId,
     });
@@ -61,6 +65,18 @@ export function parseLegaSeason(
   };
 }
 
+export function parseCompetitionName(name: string): ILegaCompetitionName {
+  const cleanName = name.trim();
+  const championshipName = getChampionshipName(cleanName);
+  const stageName = getStageName(cleanName);
+
+  return {
+    championshipName,
+    stageName,
+    leagueName: cleanName,
+  };
+}
+
 export function readLegaOptions(
   html: string,
   selectName: string,
@@ -68,7 +84,7 @@ export function readLegaOptions(
   const select =
     html.match(
       new RegExp(
-        `<select[^>]*name=["']${selectName}["'][^>]*>[\\s\\S]*?<\\/select>`,
+        `<select[^>]*(?:name|id)=["']${selectName}["'][^>]*>[\\s\\S]*?<\\/select>`,
         'i',
       ),
     )?.[0] ?? '';
@@ -87,21 +103,49 @@ export function normalizeLegaSeasonName(name: string): string {
   return match ? `${match[1]}/${match[2].slice(-2)}` : name;
 }
 
-function getLegaCompetitionName(name: string): string {
-  if (/SuperLega/i.test(name)) return 'SuperLega';
-  if (/Serie A2/i.test(name)) return 'Serie A2';
-  if (/Serie A3/i.test(name)) return 'Serie A3';
-  return name
-    .replace(/^(Regular Season|Play Off|Coppa Italia|Supercoppa)\s*/i, '')
-    .trim();
+export function readLegaTeams(
+  html: string,
+  leagueExternalId: number,
+): ICevTeam[] {
+  const select =
+    html.match(/<select[^>]*id=["']sq["'][^>]*>[\s\S]*?<\/select>/i)?.[0] ?? '';
+
+  return [
+    ...select.matchAll(
+      /<option[^>]*value=["'](\d+)["'][^>]*>([\s\S]*?)<\/option>/gi,
+    ),
+  ]
+    .map(([, externalId, name]) => ({
+      externalId,
+      name: cleanLegaText(name),
+      leagueExternalId,
+    }))
+    .filter(({ name }) => name.length > 0);
 }
 
-function getLegaStageName(name: string): string {
-  if (/^Regular Season/i.test(name)) return 'Regular Season';
-  if (/^Play Off/i.test(name)) return 'Play Off';
-  if (/^Coppa Italia/i.test(name)) return 'Coppa Italia';
-  if (/^Supercoppa/i.test(name)) return 'Supercoppa';
-  return 'Main stage';
+export function parseLegaTeamPage(
+  html: string,
+  fallbackName: string,
+): { name: string; country: string } {
+  const title = html.match(
+    /<(?:h1|h2|title)[^>]*>([\s\S]*?)<\/(?:h1|h2|title)>/i,
+  )?.[1];
+  return {
+    name: title ? cleanLegaText(title) : fallbackName,
+    country: 'ITA',
+  };
+}
+
+function getChampionshipName(name: string): string {
+  return (
+    CHAMPIONSHIP_RULES.find(({ pattern }) => pattern.test(name))?.name ?? name
+  );
+}
+
+function getStageName(name: string): string {
+  return (
+    STAGE_RULES.find(({ pattern }) => pattern.test(name))?.name ?? 'Main Stage'
+  );
 }
 
 function cleanLegaText(value: string): string {
@@ -147,4 +191,11 @@ function hashLegaId(value: string): number {
     hash = (hash * 31 + value.charCodeAt(index)) | 0;
   }
   return 1_000_000_000 + Math.abs(hash % 900_000_000);
+}
+
+function toLegaKey(value: string): string {
+  return value
+    .toLocaleLowerCase('en-US')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
