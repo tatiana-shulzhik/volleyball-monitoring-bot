@@ -9,7 +9,7 @@ import { CompetitionStagesRepository } from '../../databases/repositories/compet
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
-import { ECompetitionType } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from '../../shared/enums';
 
 @Injectable()
 export class TelegramStatisticsQueryService {
@@ -22,18 +22,24 @@ export class TelegramStatisticsQueryService {
 
   async findCurrentSeasons(
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
   ): Promise<SeasonsEntity[]> {
-    const season = await this.findCurrentSeason(competitionType);
+    const season = await this.findCurrentSeason(competitionType, sourceCode);
 
     return season ? [season] : [];
   }
 
   async findFinishedSeasons(
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
   ): Promise<SeasonsEntity[]> {
     const [currentSeason, finishedSeasons] = await Promise.all([
-      this.findCurrentSeason(competitionType),
-      this.seasonsRepository.findFinished(new Date(), competitionType),
+      this.findCurrentSeason(competitionType, sourceCode),
+      this.seasonsRepository.findFinished(
+        new Date(),
+        competitionType,
+        sourceCode,
+      ),
     ]);
 
     return finishedSeasons
@@ -43,9 +49,12 @@ export class TelegramStatisticsQueryService {
 
   async findRecentSeasons(
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
   ): Promise<SeasonsEntity[]> {
     const seasons = await this.seasonsRepository.getWhere({
-      stages: { championship: { competitionType } },
+      stages: {
+        championship: { competitionType, source: { code: sourceCode } },
+      },
     });
 
     return seasons
@@ -55,10 +64,12 @@ export class TelegramStatisticsQueryService {
 
   async findChampionships(
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
     seasonId?: number,
   ): Promise<ChampionshipsEntity[]> {
     const selectedSeasonId =
-      seasonId ?? (await this.findCurrentSeason(competitionType))?.id;
+      seasonId ??
+      (await this.findCurrentSeason(competitionType, sourceCode))?.id;
 
     if (selectedSeasonId === undefined) {
       return [];
@@ -66,6 +77,7 @@ export class TelegramStatisticsQueryService {
 
     const championships = await this.championshipsRepository.getWhere({
       competitionType,
+      source: { code: sourceCode },
       stages: {
         season: { id: selectedSeasonId },
         ...(seasonId === undefined ? {} : { endsAt: LessThan(new Date()) }),
@@ -80,17 +92,19 @@ export class TelegramStatisticsQueryService {
   async findStages(
     championshipId: number,
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
     seasonId?: number,
   ): Promise<CompetitionStagesEntity[]> {
     const selectedSeasonId =
-      seasonId ?? (await this.findCurrentSeason(competitionType))?.id;
+      seasonId ??
+      (await this.findCurrentSeason(competitionType, sourceCode))?.id;
 
     if (selectedSeasonId === undefined) {
       return [];
     }
 
     const stages = await this.stagesRepository.getWhere({
-      championship: { id: championshipId },
+      championship: { id: championshipId, source: { code: sourceCode } },
       season: { id: selectedSeasonId },
     });
 
@@ -118,10 +132,12 @@ export class TelegramStatisticsQueryService {
 
   private findCurrentSeason(
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
   ): Promise<SeasonsEntity | null> {
     return this.seasonsRepository.findLatestWithActiveMatches(
       new Date(),
       competitionType,
+      sourceCode,
     );
   }
 }

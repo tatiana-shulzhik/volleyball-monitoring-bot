@@ -1,4 +1,4 @@
-import { ECompetitionType } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from '../../shared/enums';
 
 export const COMPETITION_TYPE_BUTTONS: Record<ECompetitionType, string> = {
   [ECompetitionType.Club]: '🏐 Клубные',
@@ -13,8 +13,16 @@ export const MENU_BUTTONS = [
   '🔴 Лайв',
 ] as const;
 
+export const SOURCE_BUTTONS: Record<ESourceCode, string> = {
+  [ESourceCode.Cev]: '🇪🇺 CEV',
+  [ESourceCode.LegaVolley]: '🇮🇹 Lega Volley',
+  [ESourceCode.LegaVolleyFemminile]: '🇮🇹 Lega Volley Femminile',
+};
+
 export const TELEGRAM_MESSAGES = {
-  menu: 'Выберите раздел:',
+  sources: {
+    select: 'Выберите источник:',
+  },
   competitionTypes: {
     select: 'Выберите вид соревнований:',
   },
