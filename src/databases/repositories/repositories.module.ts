@@ -15,6 +15,7 @@ import { SynchronizationStateEntity } from '../entities/synchronization-state.en
 import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
 import { SourcesEntity } from '../entities/sources.entity';
 import { LegaMatchPlayerStatisticsEntity } from '../entities/lega-match-stats.entity';
+import { TelegramAccessEntity } from '../entities/telegram-access.entity';
 
 @Global()
 @Module({
@@ -38,6 +39,7 @@ import { LegaMatchPlayerStatisticsEntity } from '../entities/lega-match-stats.en
       SynchronizationStateEntity,
       SourcesEntity,
       LegaMatchPlayerStatisticsEntity,
+      TelegramAccessEntity,
     ]),
   ],
   exports: [TypeOrmModule],

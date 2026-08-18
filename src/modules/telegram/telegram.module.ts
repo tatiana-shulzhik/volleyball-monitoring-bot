@@ -7,6 +7,8 @@ import { PlayersModule } from '../players/players.module';
 import { TelegramStatisticsQueryService } from './telegram-statistics-query.service';
 import { TelegramService } from './telegram.service';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
+import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
+import { TelegramAccessService } from './telegram-access.service';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
     TelegramService,
     TelegramStatisticsHandlers,
     TelegramStatisticsQueryService,
+    TelegramAccessRepository,
+    TelegramAccessService,
   ],
 })
 export class TelegramModule {}
