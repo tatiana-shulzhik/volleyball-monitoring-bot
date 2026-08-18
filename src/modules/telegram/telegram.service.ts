@@ -7,6 +7,7 @@ import {
 import { Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { getErrorMessage } from '../../shared/error.utils';
+import { isTelegramMenuCommand } from '../../shared/telegram.utils';
 import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
@@ -14,6 +15,7 @@ import {
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { SOURCE_MENU } from './telegram-menu.utils';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
+import { TelegramAccessService } from './telegram-access.service';
 
 @Injectable()
 export class TelegramService
@@ -26,6 +28,7 @@ export class TelegramService
   constructor(
     private readonly config: TelegramConfig,
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
+    private readonly accessService: TelegramAccessService,
   ) {
     this.bot = new Telegraf(config.token);
     this.registerHandlers();
@@ -55,8 +58,21 @@ export class TelegramService
 
   private registerHandlers(): void {
     this.bot.use(async (context, next) => {
-      if (context.chat?.id === this.config.groupId) {
+      if (context.chat?.type !== 'private') {
+        return;
+      }
+
+      if (await this.accessService.isAllowed(context.from?.username)) {
         await next();
+        return;
+      }
+
+      if (context.callbackQuery) {
+        await context.answerCbQuery(TELEGRAM_MESSAGES.access.denied, {
+          show_alert: true,
+        });
+      } else if (isTelegramMenuCommand(context)) {
+        await context.reply(TELEGRAM_MESSAGES.access.denied);
       }
     });
 

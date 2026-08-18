@@ -4,14 +4,16 @@ import { ESourceCode } from '../../shared/enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
 import { MENU_BUTTONS, SOURCE_BUTTONS } from './telegram.constants';
 
-export const SOURCE_MENU = Markup.inlineKeyboard(
-  Object.values(ESourceCode).map((source) => [
+function createSourceButtons() {
+  return Object.values(ESourceCode).map((source) => [
     Markup.button.callback(
       SOURCE_BUTTONS[source],
       TELEGRAM_CALLBACKS.menu.selectSource(source),
     ),
-  ]),
-);
+  ]);
+}
+
+export const SOURCE_MENU = Markup.inlineKeyboard(createSourceButtons());
 
 export function createMainMenu(source: ESourceCode) {
   return Markup.inlineKeyboard([
@@ -32,8 +34,6 @@ export function createMainMenu(source: ESourceCode) {
         MENU_BUTTONS[2],
         TELEGRAM_CALLBACKS.menu.monitoring,
       ),
-    ],
-    [
       Markup.button.callback(
         MENU_BUTTONS[3],
         TELEGRAM_CALLBACKS.menu.currentMonitoring,
@@ -42,7 +42,7 @@ export function createMainMenu(source: ESourceCode) {
     [Markup.button.callback(MENU_BUTTONS[4], TELEGRAM_CALLBACKS.menu.live)],
     [
       Markup.button.callback(
-        '🌐 Сменить источник',
+        '⬅️ Сменить источник',
         TELEGRAM_CALLBACKS.menu.source,
       ),
     ],
@@ -50,7 +50,7 @@ export function createMainMenu(source: ESourceCode) {
 }
 
 export function formatMainMenuMessage(source: ESourceCode): string {
-  return `Источник: ${SOURCE_BUTTONS[source]}\nВыберите раздел:`;
+  return `${SOURCE_BUTTONS[source]}\n\nВыберите раздел:`;
 }
 
 export function formatChampionshipButton(name: string): string {

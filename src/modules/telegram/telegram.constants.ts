@@ -45,5 +45,8 @@ export const TELEGRAM_MESSAGES = {
     back: '⬅️ К командам',
   },
   inDevelopment: 'Раздел находится в разработке 🛠',
+  access: {
+    denied: 'Доступ к боту запрещён.',
+  },
   error: 'Не удалось загрузить данные. Попробуйте позже.',
 } as const;
