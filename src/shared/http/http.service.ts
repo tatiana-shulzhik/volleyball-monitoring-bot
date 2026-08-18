@@ -21,9 +21,9 @@ export class HttpService {
     });
   }
 
-  async get(url: string): Promise<string> {
+  async get(url: string, timeout?: number): Promise<string> {
     return this.withRetry(async () => {
-      const { data } = await this.client.get<string>(url);
+      const { data } = await this.client.get<string>(url, { timeout });
       return data;
     });
   }

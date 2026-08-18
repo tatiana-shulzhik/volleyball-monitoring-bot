@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import { splitIntoBatches } from '../../shared/array.utils';
 import { LegaMatchPlayerStatisticsEntity } from '../entities/lega-match-stats.entity';
 
 @Injectable()
@@ -10,15 +11,19 @@ export class LegaMatchPlayerStatisticsRepository {
     private readonly repository: Repository<LegaMatchPlayerStatisticsEntity>,
   ) {}
 
-  upsertMany(
+  async upsertMany(
     rows: Partial<LegaMatchPlayerStatisticsEntity>[],
     manager?: EntityManager,
-  ) {
-    return (
-      manager?.getRepository(LegaMatchPlayerStatisticsEntity) ?? this.repository
-    ).upsert(rows, {
-      conflictPaths: ['match', 'player', 'team'],
-      skipUpdateIfNoValuesChanged: true,
-    });
+  ): Promise<void> {
+    const repository =
+      manager?.getRepository(LegaMatchPlayerStatisticsEntity) ??
+      this.repository;
+
+    for (const batch of splitIntoBatches(rows)) {
+      await repository.upsert(batch, {
+        conflictPaths: ['match', 'player', 'team'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+    }
   }
 }

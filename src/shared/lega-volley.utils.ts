@@ -72,7 +72,8 @@ export function parseLegaSeason(
 export function parseCompetitionName(name: string): ILegaCompetitionName {
   const cleanName = name.trim();
   const championshipName = getChampionshipName(cleanName);
-  const stageName = getStageName(cleanName);
+  const stageRule = STAGE_RULES.find(({ pattern }) => pattern.test(cleanName));
+  const stageName = stageRule?.name ?? cleanName;
 
   return {
     championshipName,
@@ -368,12 +369,6 @@ function parseLegaMatchDate(value: string): Date | null {
 function getChampionshipName(name: string): string {
   return (
     CHAMPIONSHIP_RULES.find(({ pattern }) => pattern.test(name))?.name ?? name
-  );
-}
-
-function getStageName(name: string): string {
-  return (
-    STAGE_RULES.find(({ pattern }) => pattern.test(name))?.name ?? 'Main Stage'
   );
 }
 

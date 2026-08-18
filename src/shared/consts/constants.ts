@@ -19,6 +19,8 @@ export const STAGE_RULES: ILegaStageRule[] = [
   { pattern: /Regular Season/i, name: 'Regular Season' },
   { pattern: /Main Phase/i, name: 'Main Phase' },
   { pattern: /Early Round/i, name: 'Early Round' },
+  { pattern: /1st Round/i, name: '1st Round' },
+  { pattern: /2nd Round/i, name: '2nd Round' },
   { pattern: /Play Off 5° Posto/i, name: 'Play Off 5° Posto' },
   { pattern: /Play Off/i, name: 'Play Off' },
   { pattern: /Coppa Italia/i, name: 'Coppa Italia' },

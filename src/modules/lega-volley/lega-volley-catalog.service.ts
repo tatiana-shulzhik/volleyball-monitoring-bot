@@ -18,6 +18,7 @@ import {
   createLegaMatchKey,
   normalizeLegaName,
 } from '../../shared/lega-volley.utils';
+import { splitIntoBatches } from '../../shared/array.utils';
 
 @Injectable()
 export class LegaVolleyCatalogService {
@@ -409,12 +410,15 @@ export class LegaVolleyCatalogService {
       },
     );
     const playerTeamLeagues = [...new Map(playerTeamLeagueEntries).values()];
-    await this.dataSource
-      .getRepository(PlayerTeamLeagueEntity)
-      .upsert(playerTeamLeagues, {
+    const playerTeamLeaguesRepository = this.dataSource.getRepository(
+      PlayerTeamLeagueEntity,
+    );
+    for (const batch of splitIntoBatches(playerTeamLeagues)) {
+      await playerTeamLeaguesRepository.upsert(batch, {
         conflictPaths: ['player', 'team', 'league'],
         skipUpdateIfNoValuesChanged: true,
       });
+    }
 
     const matchesRepository = this.dataSource.getRepository(MatchEntity);
     const matches = [
