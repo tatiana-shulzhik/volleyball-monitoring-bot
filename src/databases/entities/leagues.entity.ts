@@ -4,10 +4,12 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { CompetitionStagesEntity } from './competition-stages.entity';
 
 @Entity({ name: 'leagues' })
+@Unique(['externalId', 'stage'])
 export class LeaguesEntity {
   @PrimaryGeneratedColumn()
   id: number;

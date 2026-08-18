@@ -12,7 +12,7 @@ import {
   TELEGRAM_CALLBACKS,
 } from './telegram-callbacks';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
-import { MAIN_MENU } from './telegram-menu.utils';
+import { SOURCE_MENU } from './telegram-menu.utils';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 
 @Injectable()
@@ -61,7 +61,7 @@ export class TelegramService
     });
 
     this.bot.command(['start', 'menu'], async (context) => {
-      await context.reply(TELEGRAM_MESSAGES.menu, MAIN_MENU);
+      await context.reply(TELEGRAM_MESSAGES.sources.select, SOURCE_MENU);
     });
 
     this.statisticsHandlers.register(this.bot);
@@ -70,11 +70,6 @@ export class TelegramService
       await context.answerCbQuery(TELEGRAM_MESSAGES.inDevelopment, {
         show_alert: true,
       });
-    });
-
-    this.bot.action(TELEGRAM_CALLBACKS.menu.back, async (context) => {
-      await context.answerCbQuery();
-      await context.editMessageText(TELEGRAM_MESSAGES.menu, MAIN_MENU);
     });
 
     this.bot.catch(async (error, context) => {

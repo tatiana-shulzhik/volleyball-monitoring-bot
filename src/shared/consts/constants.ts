@@ -1,10 +1,39 @@
+import type {
+  ILegaCompetitionRule,
+  ILegaStageRule,
+} from '../../interfaces/requests/lega-volley.interface';
+
 export const CEV_BASE_URL = 'https://www-old.cev.eu';
+export const LEGA_VOLLEY_BASE_URL = 'https://www.legavolley.it';
+
+export const CHAMPIONSHIP_RULES: ILegaCompetitionRule[] = [
+  { pattern: /SuperLega/i, name: 'SuperLega' },
+  { pattern: /Serie A2/i, name: 'Serie A2' },
+  { pattern: /Serie A3/i, name: 'Serie A3' },
+  { pattern: /Champions League/i, name: 'Champions League' },
+  { pattern: /CEV Cup/i, name: 'CEV Cup' },
+  { pattern: /Challenge Cup/i, name: 'Challenge Cup' },
+];
+
+export const STAGE_RULES: ILegaStageRule[] = [
+  { pattern: /Regular Season/i, name: 'Regular Season' },
+  { pattern: /Main Phase/i, name: 'Main Phase' },
+  { pattern: /Early Round/i, name: 'Early Round' },
+  { pattern: /1st Round/i, name: '1st Round' },
+  { pattern: /2nd Round/i, name: '2nd Round' },
+  { pattern: /Play Off 5° Posto/i, name: 'Play Off 5° Posto' },
+  { pattern: /Play Off/i, name: 'Play Off' },
+  { pattern: /Coppa Italia/i, name: 'Coppa Italia' },
+  { pattern: /Supercoppa/i, name: 'Supercoppa' },
+];
 
 export const CEV_CALENDAR_URL = `${CEV_BASE_URL}/calendar.aspx`;
 
 export const MAX_ATTEMPTS = 3;
 
 export const CEV_HTTP_CONCURRENCY = 50;
+
+export const LEGA_VOLLEY_HTTP_CONCURRENCY = 16;
 
 export const PREVIOUS_YEARS_COUNT = 4;
 
@@ -15,8 +44,6 @@ export const WRITE_BATCH_SIZE = 5000;
 export const MATCH_MONITORING_WINDOW_HOURS = 36;
 
 export const MOSCOW_TIME_ZONE = 'Europe/Moscow';
-
-export const INITIAL_SYNCHRONIZATION_KEY = 'initial-catalog-country';
 
 export const CEV_COUNTRIES: Record<string, string> = {
   ALB: 'Albania',

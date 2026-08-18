@@ -7,6 +7,8 @@ import {
   Repository,
 } from 'typeorm';
 import { TeamEntity } from '../entities/team.entity';
+import { SourcesEntity } from '../entities/sources.entity';
+import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
 export class TeamsRepository {
@@ -33,15 +35,31 @@ export class TeamsRepository {
     return repository.find({ where });
   }
 
-  insertMany(teams: Partial<TeamEntity>[], manager?: EntityManager) {
+  async insertMany(teams: Partial<TeamEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: ESourceCode.Cev });
 
-    return repository.insert(teams);
+    return repository.insert(teams.map((team) => ({ ...team, source })));
   }
 
-  updateMany(teams: TeamEntity[], manager?: EntityManager) {
+  async updateMany(
+    teams: Array<Pick<TeamEntity, 'externalId' | 'name'>>,
+    manager?: EntityManager,
+    sourceCode = ESourceCode.Cev,
+  ) {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
-    const values = teams.map(({ externalId, name }) => ({ externalId, name }));
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: sourceCode });
+    const values = teams.map(({ externalId, name }) => ({
+      externalId,
+      name,
+      source,
+    }));
 
     return repository.upsert(values, {
       conflictPaths: ['externalId'],

@@ -1,25 +1,57 @@
 import { Context, Markup } from 'telegraf';
 import { ListMenu } from '../../interfaces/telegram/menu.models';
+import { ESourceCode } from '../../shared/enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
-import { MENU_BUTTONS } from './telegram.constants';
+import { MENU_BUTTONS, SOURCE_BUTTONS } from './telegram.constants';
 
-export const MAIN_MENU = Markup.inlineKeyboard([
-  [Markup.button.callback(MENU_BUTTONS[0], TELEGRAM_CALLBACKS.menu.statistics)],
-  [
+export const SOURCE_MENU = Markup.inlineKeyboard(
+  Object.values(ESourceCode).map((source) => [
     Markup.button.callback(
-      MENU_BUTTONS[1],
-      TELEGRAM_CALLBACKS.menu.retroStatistics,
+      SOURCE_BUTTONS[source],
+      TELEGRAM_CALLBACKS.menu.selectSource(source),
     ),
-  ],
-  [
-    Markup.button.callback(MENU_BUTTONS[2], TELEGRAM_CALLBACKS.menu.monitoring),
-    Markup.button.callback(
-      MENU_BUTTONS[3],
-      TELEGRAM_CALLBACKS.menu.currentMonitoring,
-    ),
-  ],
-  [Markup.button.callback(MENU_BUTTONS[4], TELEGRAM_CALLBACKS.menu.live)],
-]);
+  ]),
+);
+
+export function createMainMenu(source: ESourceCode) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        MENU_BUTTONS[0],
+        TELEGRAM_CALLBACKS.menu.statistics,
+      ),
+    ],
+    [
+      Markup.button.callback(
+        MENU_BUTTONS[1],
+        TELEGRAM_CALLBACKS.menu.retroStatistics,
+      ),
+    ],
+    [
+      Markup.button.callback(
+        MENU_BUTTONS[2],
+        TELEGRAM_CALLBACKS.menu.monitoring,
+      ),
+    ],
+    [
+      Markup.button.callback(
+        MENU_BUTTONS[3],
+        TELEGRAM_CALLBACKS.menu.currentMonitoring,
+      ),
+    ],
+    [Markup.button.callback(MENU_BUTTONS[4], TELEGRAM_CALLBACKS.menu.live)],
+    [
+      Markup.button.callback(
+        '🌐 Сменить источник',
+        TELEGRAM_CALLBACKS.menu.source,
+      ),
+    ],
+  ]);
+}
+
+export function formatMainMenuMessage(source: ESourceCode): string {
+  return `Источник: ${SOURCE_BUTTONS[source]}\nВыберите раздел:`;
+}
 
 export function formatChampionshipButton(name: string): string {
   return name

@@ -5,28 +5,12 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
-import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
-import { PlayersRepository } from '../../databases/repositories/players.repository';
-import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
-import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
-import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
-import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
-import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
-import {
-  INITIAL_SYNCHRONIZATION_KEY,
-  MOSCOW_TIME_ZONE,
-  PREVIOUS_YEARS_COUNT,
-} from '../../shared/consts/constants';
+import { MOSCOW_TIME_ZONE } from '../../shared/consts/constants';
 import { ECronExpression } from '../../shared/enums';
-import { ChampionshipsService } from '../championships/championships.service';
-import { LeaguesService } from '../leagues/leagues.service';
-import { MatchesService } from '../matches/matches.service';
-import { PlayersService } from '../players/players.service';
-import { PlayerStatisticsService } from '../players/player-statistics.service';
-import { SeasonsService } from '../seasons/seasons.service';
-import { TeamsService } from '../teams/teams.service';
+import { CevCatalogService } from '../cev/cev-catalog.service';
+import { LegaVolleyCatalogService } from '../lega-volley/lega-volley-catalog.service';
+import { ESourceCode, ESynchronizationKey } from '../../shared/enums';
 
 @Injectable()
 export class SynchronizationService implements OnApplicationBootstrap {
@@ -34,22 +18,18 @@ export class SynchronizationService implements OnApplicationBootstrap {
   private isRunning = false;
 
   constructor(
-    private readonly seasonsService: SeasonsService,
-    private readonly championshipsService: ChampionshipsService,
-    private readonly leaguesService: LeaguesService,
-    private readonly teamsService: TeamsService,
-    private readonly playersService: PlayersService,
-    private readonly playerStatisticsService: PlayerStatisticsService,
-    private readonly matchesService: MatchesService,
-    private readonly seasonsRepository: SeasonsRepository,
-    private readonly stagesRepository: CompetitionStagesRepository,
-    private readonly playersRepository: PlayersRepository,
-    private readonly teamsRepository: TeamsRepository,
     private readonly synchronizationStateRepository: SynchronizationStateRepository,
+    private readonly cevCatalogService: CevCatalogService,
+    private readonly legaVolleyCatalogService: LegaVolleyCatalogService,
   ) {}
 
   onApplicationBootstrap(): void {
-    void this.initializeEmptyCatalog();
+    void this.initializeCatalogs();
+  }
+
+  private async initializeCatalogs(): Promise<void> {
+    await this.initializeEmptyCatalog();
+    await this.initializeLegaVolleyCatalog();
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
@@ -58,13 +38,11 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async synchronizeCurrentCatalogByCron(): Promise<void> {
-    await this.runExclusive(
-      async () =>
-        this.synchronizeCatalog(
-          await this.seasonsService.discoverCurrentAndFutureSeasons(),
-        ),
-      false,
-    );
+    await this.runExclusive(async () => {
+      await this.cevCatalogService.synchronizeCurrentAndFuture();
+      await this.legaVolleyCatalogService.synchronizeCurrentAndFuture();
+      await this.legaVolleyCatalogService.synchronizeCurrentMatchStatistics();
+    }, false);
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM, {
@@ -73,7 +51,10 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async deleteOutdatedCatalogByCron(): Promise<void> {
-    await this.runExclusive(() => this.removeOutdatedCatalog(), false);
+    await this.runExclusive(
+      () => this.cevCatalogService.removeOutdatedCatalog(),
+      false,
+    );
   }
 
   @Cron(ECronExpression.Every3HoursAtMinute30, {
@@ -83,8 +64,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
   })
   async synchronizeMatchesByCron(): Promise<void> {
     await this.runExclusive(async () => {
-      await this.performMatchesSynchronization(true);
-      await this.matchesService.startMonitoring();
+      await this.cevCatalogService.synchronizeCurrentAndFutureMatches();
+      await this.legaVolleyCatalogService.synchronizeCurrentAndFutureMatches();
+      await this.cevCatalogService.startMonitoring();
     }, false);
   }
 
@@ -94,7 +76,10 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async synchronizePlayerStatisticsByCron(): Promise<void> {
-    await this.runExclusive(() => this.synchronizePlayerStatistics(), false);
+    await this.runExclusive(
+      () => this.cevCatalogService.synchronizeCurrentPlayerStatistics(),
+      false,
+    );
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM, {
@@ -104,37 +89,16 @@ export class SynchronizationService implements OnApplicationBootstrap {
   })
   async repairIncompletePlayerStatisticsByCron(): Promise<void> {
     await this.runExclusive(
-      () => this.repairIncompletePlayerStatistics(),
+      () => this.cevCatalogService.repairIncompletePlayerStatistics(),
       false,
     );
-  }
-
-  private async removeOutdatedCatalog(): Promise<CleanupResult> {
-    const beforeYear = new Date().getFullYear() - PREVIOUS_YEARS_COUNT;
-
-    return this.seasonsRepository.useTransaction(undefined, async (manager) => {
-      const seasons = await this.seasonsRepository.deleteOutdated(
-        beforeYear,
-        manager,
-      );
-      const players = await this.playersRepository.deleteOrphans(manager);
-      const teams = await this.teamsRepository.deleteOrphans(manager);
-      const result = { seasons, players, teams };
-
-      this.logger.log(
-        `Outdated catalog deleted: ${seasons} seasons, ` +
-          `${players} orphan players, ${teams} orphan teams`,
-      );
-
-      return result;
-    });
   }
 
   private async initializeEmptyCatalog(): Promise<void> {
     try {
       if (
         await this.synchronizationStateRepository.hasCompleted(
-          INITIAL_SYNCHRONIZATION_KEY,
+          ESynchronizationKey.CevInitialCatalog,
         )
       ) {
         this.logger.log(
@@ -145,18 +109,15 @@ export class SynchronizationService implements OnApplicationBootstrap {
 
       this.logger.log('Starting full catalog synchronization');
       await this.runExclusive(async () => {
-        await this.synchronizeCatalog(
-          await this.seasonsService.synchronizeStoredRange(),
-        );
-        await this.performMatchesSynchronization(false);
+        await this.cevCatalogService.synchronizeStoredRange();
       });
       this.logger.log('Full catalog synchronization completed');
 
       await this.runExclusive(() =>
-        this.synchronizeIncompletePlayerStatistics(),
+        this.cevCatalogService.synchronizeIncompletePlayerStatistics(),
       );
       await this.synchronizationStateRepository.markCompleted(
-        INITIAL_SYNCHRONIZATION_KEY,
+        ESynchronizationKey.CevInitialCatalog,
       );
     } catch (error) {
       this.logger.error(
@@ -166,68 +127,38 @@ export class SynchronizationService implements OnApplicationBootstrap {
     }
   }
 
-  private async synchronizeCatalog(
-    seasonCatalog: SynchronizedSeasonCatalog,
-  ): Promise<void> {
-    const stages = await this.championshipsService.synchronize(seasonCatalog);
-    const leagueCatalog = await this.leaguesService.synchronize(stages);
-    const teams = await this.teamsService.synchronize(leagueCatalog);
+  private async initializeLegaVolleyCatalog(): Promise<void> {
+    try {
+      if (
+        await this.synchronizationStateRepository.hasCompleted(
+          ESynchronizationKey.LegaVolleyInitialCatalog,
+          ESourceCode.LegaVolley,
+        )
+      ) {
+        this.logger.log(
+          'LegaVolley catalog is already initialized; startup synchronization skipped',
+        );
+        return;
+      }
 
-    await this.playersService.synchronize(teams.rosterSources);
-  }
-
-  private async performMatchesSynchronization(
-    frequentOnly: boolean,
-  ): Promise<void> {
-    const stages = await this.stagesRepository.getWhere({});
-
-    if (frequentOnly) {
-      await this.matchesService.synchronizeFrequently(stages);
-      return;
+      this.logger.log('Starting LegaVolley catalog synchronization');
+      await this.runExclusive(() =>
+        this.legaVolleyCatalogService.synchronizeStoredRange(),
+      );
+      await this.runExclusive(() =>
+        this.legaVolleyCatalogService.synchronizeMatchStatisticsStoredRange(),
+      );
+      await this.synchronizationStateRepository.markCompleted(
+        ESynchronizationKey.LegaVolleyInitialCatalog,
+        ESourceCode.LegaVolley,
+      );
+      this.logger.log('LegaVolley catalog synchronization completed');
+    } catch (error) {
+      this.logger.error(
+        'LegaVolley catalog synchronization failed',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
-
-    await this.matchesService.synchronize(stages);
-  }
-
-  private async synchronizePlayerStatistics(): Promise<void> {
-    const now = new Date();
-    await this.loadPlayerStatistics(
-      await this.stagesRepository.getWhere({
-        startsAt: LessThanOrEqual(now),
-        endsAt: MoreThanOrEqual(now),
-      }),
-    );
-  }
-
-  private async synchronizeIncompletePlayerStatistics(): Promise<void> {
-    await this.loadPlayerStatistics(
-      await this.stagesRepository.getWhere({
-        startsAt: LessThanOrEqual(new Date()),
-      }),
-    );
-  }
-
-  private async repairIncompletePlayerStatistics(): Promise<void> {
-    const stageIds =
-      await this.playerStatisticsService.findPendingAttackStageIds();
-
-    if (!stageIds.length) {
-      this.logger.log('No incomplete match attack statistics found');
-      return;
-    }
-
-    this.logger.log(
-      `Repairing match attack statistics for ${stageIds.length} stages`,
-    );
-    await this.playerStatisticsService.synchronizePendingAttacks(
-      await this.stagesRepository.getWhere({ id: In(stageIds) }),
-    );
-  }
-
-  private async loadPlayerStatistics(
-    stages: CompetitionStagesEntity[],
-  ): Promise<void> {
-    await this.playerStatisticsService.synchronize(stages);
   }
 
   private async runExclusive<T>(

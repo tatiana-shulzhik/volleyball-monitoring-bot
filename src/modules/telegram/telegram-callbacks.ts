@@ -1,4 +1,4 @@
-import { ECompetitionType } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from '../../shared/enums';
 
 const COMPETITION_TYPE_CODES: Record<ECompetitionType, string> = {
   [ECompetitionType.Club]: 'c',
@@ -19,6 +19,8 @@ export const TELEGRAM_CALLBACKS = {
     currentMonitoring: 'menu:current-monitoring',
     live: 'menu:live',
     back: 'menu:back',
+    source: 'menu:source',
+    selectSource: (source: ESourceCode) => `menu:source:${source}`,
   },
   statistics: {
     competitionType: (competitionType: ECompetitionType) =>
@@ -133,4 +135,5 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
     ),
   },
   development: /^menu:(?!back|statistics|retro-statistics)/,
+  source: new RegExp(`^menu:source:(${Object.values(ESourceCode).join('|')})$`),
 } as const;

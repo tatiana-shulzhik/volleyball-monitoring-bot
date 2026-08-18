@@ -3,27 +3,84 @@ import { In } from 'typeorm';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
-import { CevGateway } from '../../gateway/cev.gateway';
+import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
+import { LeaguesEntity } from '../../databases/entities/leagues.entity';
+import { TeamEntity } from '../../databases/entities/team.entity';
+import { ICevMatch } from '../../interfaces/requests/matches.interface';
+import { IFetchedMatches } from '../../interfaces/requests/matches.interface';
 import { MATCH_MONITORING_WINDOW_HOURS } from '../../shared/consts/constants';
 import { calculateMatchChanges } from '../../shared/matches.utils';
 import {
   applyEntityChanges,
   logEntityChanges,
 } from '../../shared/synchronization.utils';
+import { uniqueBy } from '../../shared/array.utils';
 
 @Injectable()
 export class MatchesService {
   private readonly logger = new Logger(MatchesService.name);
 
   constructor(
-    private readonly gateway: CevGateway,
     private readonly matchesRepository: MatchesRepository,
     private readonly leaguesRepository: LeaguesRepository,
     private readonly teamsRepository: TeamsRepository,
+    private readonly teamLeaguesRepository: TeamLeaguesRepository,
   ) {}
 
-  async synchronize(stages: CompetitionStagesEntity[]): Promise<void> {
+  async upsertCatalogMatches(
+    incoming: ICevMatch[],
+    leaguesByExternalId: Map<number, LeaguesEntity>,
+    teamsByExternalId: Map<string, TeamEntity>,
+  ): Promise<number> {
+    const matches = uniqueBy(incoming, (match) => match.externalId);
+    await this.matchesRepository.updateMany(
+      matches.flatMap((match) => {
+        const league = leaguesByExternalId.get(match.leagueExternalId);
+        const homeTeam = teamsByExternalId.get(match.homeTeamExternalId);
+        const awayTeam = teamsByExternalId.get(match.awayTeamExternalId);
+
+        return league && homeTeam && awayTeam
+          ? [
+              {
+                externalId: match.externalId,
+                league,
+                homeTeam,
+                awayTeam,
+                scheduledAt: match.scheduledAt,
+                status: match.status,
+              },
+            ]
+          : [];
+      }),
+      undefined,
+      false,
+    );
+    const teamLeagues = uniqueBy(
+      matches.flatMap((match) => {
+        const league = leaguesByExternalId.get(match.leagueExternalId);
+        const teams = [
+          teamsByExternalId.get(match.homeTeamExternalId),
+          teamsByExternalId.get(match.awayTeamExternalId),
+        ];
+
+        return league
+          ? teams.flatMap((team) => (team ? [{ team, league }] : []))
+          : [];
+      }),
+      ({ team, league }) => `${team.id}:${league.id}`,
+    );
+    if (teamLeagues.length) {
+      await this.teamLeaguesRepository.updateMany(teamLeagues);
+    }
+
+    return matches.length;
+  }
+
+  async synchronize(
+    stages: CompetitionStagesEntity[],
+    fetched: IFetchedMatches,
+  ): Promise<void> {
     if (!stages.length) {
       this.logger.warn('No current championships found; matches sync skipped');
       return;
@@ -33,7 +90,6 @@ export class MatchesService {
       `Starting matches synchronization for ${stages.length} stages`,
     );
 
-    const fetched = await this.gateway.fetchMatches(stages);
     const leagueExternalIds = [
       ...new Set(
         fetched.matches.map(({ leagueExternalId }) => leagueExternalId),
@@ -82,9 +138,9 @@ export class MatchesService {
     });
   }
 
-  async synchronizeFrequently(
+  async getFrequentlyRelevantStages(
     stages: CompetitionStagesEntity[],
-  ): Promise<void> {
+  ): Promise<CompetitionStagesEntity[]> {
     const now = new Date();
     const currentStages = stages.filter(
       ({ startsAt, endsAt }) =>
@@ -112,7 +168,7 @@ export class MatchesService {
         `${stages.length} stages require refresh`,
     );
 
-    await this.synchronize(relevant);
+    return relevant;
   }
 
   async startMonitoring(): Promise<number> {

@@ -12,3 +12,7 @@ export function splitIntoBatches<T>(
 
   return batches;
 }
+
+export function uniqueBy<T, TKey>(items: T[], getKey: (item: T) => TKey): T[] {
+  return [...new Map(items.map((item) => [getKey(item), item])).values()];
+}

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { TEAM_STATISTICS_CACHE_TTL_SECONDS } from '../../shared/consts/constants';
-import { ECompetitionType } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import {
   formatTeamStatistics,
   formatTeamStatisticsPages,
@@ -18,10 +18,18 @@ import {
   COMPETITION_TYPE_BUTTONS,
   TELEGRAM_MESSAGES,
 } from './telegram.constants';
-import { formatChampionshipButton, showList } from './telegram-menu.utils';
+import {
+  createMainMenu,
+  formatChampionshipButton,
+  formatMainMenuMessage,
+  showList,
+  SOURCE_MENU,
+} from './telegram-menu.utils';
 
 @Injectable()
 export class TelegramStatisticsHandlers {
+  private readonly selectedSources = new Map<number, ESourceCode>();
+
   constructor(
     private readonly queries: TelegramStatisticsQueryService,
     private readonly playersService: PlayersService,
@@ -29,9 +37,53 @@ export class TelegramStatisticsHandlers {
   ) {}
 
   register(bot: Telegraf): void {
+    this.registerSourceSelection(bot);
     this.registerCurrentStatistics(bot);
     this.registerRetroStatistics(bot);
     this.registerCatalogNavigation(bot);
+  }
+
+  private registerSourceSelection(bot: Telegraf): void {
+    bot.action(TELEGRAM_CALLBACKS.menu.source, async (context) => {
+      await context.answerCbQuery();
+      await context.editMessageText(
+        TELEGRAM_MESSAGES.sources.select,
+        SOURCE_MENU,
+      );
+    });
+
+    bot.action(TELEGRAM_CALLBACK_PATTERNS.source, async (context) => {
+      const source = context.match[1] as ESourceCode;
+
+      if (source !== ESourceCode.Cev) {
+        await context.answerCbQuery(TELEGRAM_MESSAGES.inDevelopment, {
+          show_alert: true,
+        });
+        return;
+      }
+
+      const chatId = context.chat?.id;
+
+      if (chatId !== undefined) {
+        this.selectedSources.set(chatId, source);
+      }
+
+      await context.answerCbQuery();
+      await context.editMessageText(
+        formatMainMenuMessage(source),
+        createMainMenu(source),
+      );
+    });
+
+    bot.action(TELEGRAM_CALLBACKS.menu.back, async (context) => {
+      const source = this.getSource(context.chat?.id);
+
+      await context.answerCbQuery();
+      await context.editMessageText(
+        formatMainMenuMessage(source),
+        createMainMenu(source),
+      );
+    });
   }
 
   private registerCurrentStatistics(bot: Telegraf): void {
@@ -53,7 +105,10 @@ export class TelegramStatisticsHandlers {
       TELEGRAM_CALLBACK_PATTERNS.statistics.competitionType,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
-        const seasons = await this.queries.findCurrentSeasons(competitionType);
+        const seasons = await this.queries.findCurrentSeasons(
+          competitionType,
+          this.getSource(context.chat?.id),
+        );
 
         await showList(context, {
           items: seasons.map(({ name }) => ({
@@ -72,8 +127,10 @@ export class TelegramStatisticsHandlers {
       TELEGRAM_CALLBACK_PATTERNS.statistics.season,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
-        const championships =
-          await this.queries.findChampionships(competitionType);
+        const championships = await this.queries.findChampionships(
+          competitionType,
+          this.getSource(context.chat?.id),
+        );
 
         await showList(context, {
           items: championships.map(({ id, name }) => ({
@@ -112,7 +169,10 @@ export class TelegramStatisticsHandlers {
       TELEGRAM_CALLBACK_PATTERNS.retroStatistics.competitionType,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
-        const seasons = await this.queries.findFinishedSeasons(competitionType);
+        const seasons = await this.queries.findFinishedSeasons(
+          competitionType,
+          this.getSource(context.chat?.id),
+        );
 
         await showList(context, {
           items: seasons.map(({ id, name }) => ({
@@ -137,6 +197,7 @@ export class TelegramStatisticsHandlers {
         const competitionType = parseCompetitionType(context.match[2]);
         const championships = await this.queries.findChampionships(
           competitionType,
+          this.getSource(context.chat?.id),
           seasonId,
         );
 
@@ -175,6 +236,7 @@ export class TelegramStatisticsHandlers {
         const stages = await this.queries.findStages(
           championshipId,
           competitionType,
+          this.getSource(context.chat?.id),
           seasonId,
         );
 
@@ -280,7 +342,8 @@ export class TelegramStatisticsHandlers {
         const requestedPage = isSummary
           ? Number(context.match[isRetro ? 7 : 6] ?? 0)
           : 0;
-        const cacheKey = `team-statistics:v2:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
+        const source = this.getSource(context.chat?.id);
+        const cacheKey = `team-statistics:${source}:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
         let pages = (await this.cache.get<string[]>(cacheKey)) ?? undefined;
 
         if (pages === undefined) {
@@ -288,7 +351,7 @@ export class TelegramStatisticsHandlers {
             teamId,
             leagueId,
             isSummary
-              ? await this.queries.findRecentSeasons(competitionType)
+              ? await this.queries.findRecentSeasons(competitionType, source)
               : undefined,
           );
 
@@ -423,5 +486,11 @@ export class TelegramStatisticsHandlers {
         });
       },
     );
+  }
+
+  private getSource(chatId: number | undefined): ESourceCode {
+    return chatId === undefined
+      ? ESourceCode.Cev
+      : (this.selectedSources.get(chatId) ?? ESourceCode.Cev);
   }
 }

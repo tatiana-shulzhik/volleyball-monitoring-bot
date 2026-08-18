@@ -8,6 +8,7 @@ export interface ICevTeam {
   externalId: string;
   name: string;
   leagueExternalId: number;
+  country?: string;
 }
 
 export interface FetchedTeams {

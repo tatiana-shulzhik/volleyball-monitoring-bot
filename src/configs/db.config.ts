@@ -11,6 +11,25 @@ import { TeamLeagueEntity } from '../databases/entities/team-league.entity';
 import { TeamEntity } from '../databases/entities/team.entity';
 import { SynchronizationStateEntity } from '../databases/entities/synchronization-state.entity';
 import { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
+import { LegaMatchPlayerStatisticsEntity } from '../databases/entities/lega-match-stats.entity';
+import { SourcesEntity } from '../databases/entities/sources.entity';
+import { CreateSources1760000000000 } from '../databases/migrations/1760000000000-CreateSources';
+import { CreateSeasons1760000001000 } from '../databases/migrations/1760000001000-CreateSeasons';
+import { CreateChampionships1760000002000 } from '../databases/migrations/1760000002000-CreateChampionships';
+import { CreateCompetitionStages1760000003000 } from '../databases/migrations/1760000003000-CreateCompetitionStages';
+import { CreateLeagues1760000004000 } from '../databases/migrations/1760000004000-CreateLeagues';
+import { CreateTeams1760000005000 } from '../databases/migrations/1760000005000-CreateTeams';
+import { CreateTeamLeagues1760000006000 } from '../databases/migrations/1760000006000-CreateTeamLeagues';
+import { CreatePlayers1760000007000 } from '../databases/migrations/1760000007000-CreatePlayers';
+import { CreatePlayerTeamLeagues1760000008000 } from '../databases/migrations/1760000008000-CreatePlayerTeamLeagues';
+import { CreateMatches1760000009000 } from '../databases/migrations/1760000009000-CreateMatches';
+import { CreateMatchPlayerAttackStatistics1760000010000 } from '../databases/migrations/1760000010000-CreateMatchPlayerAttackStatistics';
+import { CreateSynchronizationState1760000011000 } from '../databases/migrations/1760000011000-CreateSynchronizationState';
+import { AddSourceColumns1760000011500 } from '../databases/migrations/1760000011500-AddSourceColumns';
+import { MarkExistingCevData1760000012000 } from '../databases/migrations/1760000012000-MarkExistingCevData';
+import { SeedLegaVolleySource1760000013000 } from '../databases/migrations/1760000013000-SeedLegaVolleySource';
+import { ScopeLeagueExternalIdByStage1760000014000 } from '../databases/migrations/1760000014000-ScopeLeagueExternalIdByStage';
+import { CreateLegaMatchPlayerStatistics1760000015000 } from '../databases/migrations/1760000015000-CreateLegaMatchStats';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -38,8 +57,8 @@ export class DbConfig implements TypeOrmOptionsFactory {
       password: this.dbPassword,
       database: this.dbDatabase,
       migrationsTableName: 'migrations',
-      migrationsRun: false,
-      synchronize: true,
+      migrationsRun: true,
+      synchronize: false,
       entities: [
         SeasonsEntity,
         ChampionshipsEntity,
@@ -51,9 +70,29 @@ export class DbConfig implements TypeOrmOptionsFactory {
         PlayerTeamLeagueEntity,
         MatchEntity,
         MatchPlayerAttackStatisticsEntity,
+        LegaMatchPlayerStatisticsEntity,
         SynchronizationStateEntity,
+        SourcesEntity,
       ],
-      migrations: [],
+      migrations: [
+        CreateSources1760000000000,
+        CreateSeasons1760000001000,
+        CreateChampionships1760000002000,
+        CreateCompetitionStages1760000003000,
+        CreateLeagues1760000004000,
+        CreateTeams1760000005000,
+        CreateTeamLeagues1760000006000,
+        CreatePlayers1760000007000,
+        CreatePlayerTeamLeagues1760000008000,
+        CreateMatches1760000009000,
+        CreateMatchPlayerAttackStatistics1760000010000,
+        CreateSynchronizationState1760000011000,
+        AddSourceColumns1760000011500,
+        MarkExistingCevData1760000012000,
+        SeedLegaVolleySource1760000013000,
+        ScopeLeagueExternalIdByStage1760000014000,
+        CreateLegaMatchPlayerStatistics1760000015000,
+      ],
     };
   }
 }

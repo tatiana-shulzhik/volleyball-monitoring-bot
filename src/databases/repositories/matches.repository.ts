@@ -49,7 +49,11 @@ export class MatchesRepository {
     return repository.insert(matches);
   }
 
-  updateMany(matches: MatchEntity[], manager?: EntityManager) {
+  updateMany(
+    matches: Partial<MatchEntity>[],
+    manager?: EntityManager,
+    resetAttackStatistics = true,
+  ) {
     const repository = manager?.getRepository(MatchEntity) ?? this.repository;
     const values = matches.map(
       ({ externalId, league, homeTeam, awayTeam, scheduledAt, status }) => ({
@@ -59,7 +63,7 @@ export class MatchesRepository {
         awayTeam,
         scheduledAt,
         status,
-        attackStatisticsUpdatedAt: null,
+        ...(resetAttackStatistics ? { attackStatisticsUpdatedAt: null } : {}),
       }),
     );
 

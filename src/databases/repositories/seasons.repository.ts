@@ -7,7 +7,11 @@ import {
   Repository,
 } from 'typeorm';
 import { ISeason } from '../../interfaces/requests/seasons.interface';
-import { ECompetitionType, EMatchStatus } from '../../shared/enums';
+import {
+  ECompetitionType,
+  EMatchStatus,
+  ESourceCode,
+} from '../../shared/enums';
 import { SeasonsEntity } from '../entities/seasons.entity';
 
 @Injectable()
@@ -38,6 +42,7 @@ export class SeasonsRepository {
   findFinished(
     now: Date,
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
   ): Promise<SeasonsEntity[]> {
     return this.repository
       .createQueryBuilder('season')
@@ -45,18 +50,22 @@ export class SeasonsRepository {
         'EXISTS (SELECT 1 FROM competition_stages stage ' +
           'INNER JOIN championships championship ' +
           'ON championship.id = stage.championship_id ' +
+          'INNER JOIN sources source ON source.id = championship.source_id ' +
           'WHERE stage.season_id = season.id ' +
-          'AND championship.competition_type = :competitionType)',
-        { competitionType },
+          'AND championship.competition_type = :competitionType ' +
+          'AND source.code = :sourceCode)',
+        { competitionType, sourceCode },
       )
       .andWhere(
         'NOT EXISTS (SELECT 1 FROM competition_stages stage ' +
           'INNER JOIN championships championship ' +
           'ON championship.id = stage.championship_id ' +
+          'INNER JOIN sources source ON source.id = championship.source_id ' +
           'WHERE stage.season_id = season.id ' +
           'AND championship.competition_type = :competitionType ' +
-          'AND stage.ends_at >= :now)',
-        { now, competitionType },
+          'AND stage.ends_at >= :now ' +
+          'AND source.code = :sourceCode)',
+        { now, competitionType, sourceCode },
       )
       .orderBy('season.name', 'DESC')
       .getMany();
@@ -65,6 +74,7 @@ export class SeasonsRepository {
   findLatestWithActiveMatches(
     now: Date,
     competitionType: ECompetitionType,
+    sourceCode: ESourceCode,
   ): Promise<SeasonsEntity | null> {
     return this.repository
       .createQueryBuilder('season')
@@ -72,15 +82,18 @@ export class SeasonsRepository {
         'EXISTS (SELECT 1 FROM competition_stages stage ' +
           'INNER JOIN championships championship ' +
           'ON championship.id = stage.championship_id ' +
+          'INNER JOIN sources source ON source.id = championship.source_id ' +
           'INNER JOIN leagues league ON league.stage_id = stage.id ' +
           'INNER JOIN matches match ON match.league_id = league.id ' +
           'WHERE stage.season_id = season.id ' +
           'AND championship.competition_type = :competitionType ' +
+          'AND source.code = :sourceCode ' +
           'AND stage.ends_at >= :now ' +
           'AND match.status = :scheduled)',
         {
           now,
           competitionType,
+          sourceCode,
           scheduled: EMatchStatus.Scheduled,
         },
       )
@@ -92,7 +105,10 @@ export class SeasonsRepository {
     return this.repository.exists();
   }
 
-  upsertMany(seasons: ISeason[], manager?: EntityManager) {
+  upsertMany(
+    seasons: Array<ISeason | Partial<SeasonsEntity>>,
+    manager?: EntityManager,
+  ) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
 
     return repository.upsert(seasons, {

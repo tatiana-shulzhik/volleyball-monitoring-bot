@@ -75,9 +75,9 @@ export function extractPlayerAttackStatistics(
       continue;
     }
 
-    const cells = [
-      ...match[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
-    ].map((cell) => cleanText(cell[1]));
+    const cells = [...match[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (cell) => cleanText(cell[1]),
+    );
     const playedSets = cells
       .slice(2, 7)
       .filter((value) => value === '*' || /^\d+$/.test(value)).length;

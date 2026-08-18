@@ -7,6 +7,8 @@ import {
   Repository,
 } from 'typeorm';
 import { PlayersEntity } from '../entities/players.entity';
+import { SourcesEntity } from '../entities/sources.entity';
+import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
 export class PlayersRepository {
@@ -33,18 +35,31 @@ export class PlayersRepository {
     return repository.find({ where });
   }
 
-  insertMany(players: Partial<PlayersEntity>[], manager?: EntityManager) {
+  async insertMany(players: Partial<PlayersEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: ESourceCode.Cev });
 
-    return repository.insert(players);
+    return repository.insert(players.map((player) => ({ ...player, source })));
   }
 
-  updateMany(players: PlayersEntity[], manager?: EntityManager) {
+  async updateMany(
+    players: Partial<PlayersEntity>[],
+    manager?: EntityManager,
+    sourceCode = ESourceCode.Cev,
+  ) {
     const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
+    const source = await (
+      manager?.getRepository(SourcesEntity) ??
+      this.repository.manager.getRepository(SourcesEntity)
+    ).findOneByOrFail({ code: sourceCode });
     const values = players.map(({ externalId, fullName, birthYear }) => ({
       externalId,
       fullName,
       birthYear,
+      source,
     }));
 
     return repository.upsert(values, {

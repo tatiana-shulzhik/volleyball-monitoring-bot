@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
 import { TeamEntity } from '../../databases/entities/team.entity';
+import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { SynchronizeTeamsParams } from '../../interfaces/requests/teams.interface';
+import { FetchedLeagueCatalog } from '../../interfaces/requests/leagues.interface';
 import {
   IPlayerRosterSource,
   ISynchronizedTeams,
@@ -17,6 +19,8 @@ import {
   calculateTeamChanges,
   calculateTeamLeagueChanges,
 } from '../../shared/teams.utils';
+import { ESourceCode } from '../../shared/enums';
+import { uniqueBy } from '../../shared/array.utils';
 
 @Injectable()
 export class TeamsService {
@@ -26,6 +30,60 @@ export class TeamsService {
     private readonly teamsRepository: TeamsRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
   ) {}
+
+  async upsertCatalogTeams(
+    incomingTeams: FetchedLeagueCatalog['teams'],
+    leaguesByExternalId: Map<number, LeaguesEntity>,
+    sourceCode: ESourceCode,
+    fallbackCountry?: string,
+  ): Promise<Map<string, TeamEntity>> {
+    const uniqueTeams = uniqueBy(incomingTeams, (team) => team.externalId);
+    await this.teamsRepository.updateMany(uniqueTeams, undefined, sourceCode);
+    if (fallbackCountry) {
+      await this.teamsRepository.updateCountries(
+        uniqueTeams.map((team) => ({
+          externalId: team.externalId,
+          country: team.country ?? fallbackCountry,
+        })),
+      );
+    }
+    const teamsByExternalId = new Map(
+      (
+        await this.teamsRepository.getWhere({
+          source: { code: sourceCode },
+        })
+      ).map((team) => [team.externalId, team]),
+    );
+
+    await this.upsertLegaTeamLeagues(
+      incomingTeams,
+      teamsByExternalId,
+      leaguesByExternalId,
+    );
+
+    return teamsByExternalId;
+  }
+
+  getBySource(sourceCode: ESourceCode): Promise<TeamEntity[]> {
+    return this.teamsRepository.getWhere({ source: { code: sourceCode } });
+  }
+
+  private async upsertLegaTeamLeagues(
+    incomingTeams: SynchronizeTeamsParams['teams'],
+    teamsByExternalId: Map<string, TeamEntity>,
+    leaguesByExternalId: Map<number, LeaguesEntity>,
+  ): Promise<void> {
+    const relations = uniqueBy(
+      incomingTeams.flatMap((team) => {
+        const storedTeam = teamsByExternalId.get(team.externalId);
+        const league = leaguesByExternalId.get(team.leagueExternalId);
+
+        return storedTeam && league ? [{ team: storedTeam, league }] : [];
+      }),
+      ({ team, league }) => `${team.id}:${league.id}`,
+    );
+    await this.teamLeaguesRepository.updateMany(relations);
+  }
 
   async synchronize(data: SynchronizeTeamsParams): Promise<ISynchronizedTeams> {
     const { leagues, teams: incomingTeams, isComplete } = data;

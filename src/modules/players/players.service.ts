@@ -3,10 +3,13 @@ import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
+import { LeaguesEntity } from '../../databases/entities/leagues.entity';
+import { TeamEntity } from '../../databases/entities/team.entity';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
-import { CevGateway } from '../../gateway/cev.gateway';
+import { IFetchedPlayers } from '../../interfaces/requests/players.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
+import { ILegaPlayer } from '../../interfaces/requests/lega-volley.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { createTeamStatistics } from '../../shared/player-statistics.utils';
 import {
@@ -18,18 +21,61 @@ import {
   applyEntityChanges,
   logEntityChanges,
 } from '../../shared/synchronization.utils';
+import { ESourceCode } from '../../shared/enums';
+import { splitIntoBatches, uniqueBy } from '../../shared/array.utils';
 
 @Injectable()
 export class PlayersService {
   private readonly logger = new Logger(PlayersService.name);
 
   constructor(
-    private readonly gateway: CevGateway,
     private readonly playersRepository: PlayersRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly teamsRepository: TeamsRepository,
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
   ) {}
+
+  async upsertCatalogPlayers(
+    incomingPlayers: ILegaPlayer[],
+    teamsByExternalId: Map<string, TeamEntity>,
+    leaguesByExternalId: Map<number, LeaguesEntity>,
+    sourceCode: ESourceCode,
+  ): Promise<number> {
+    const players = uniqueBy(incomingPlayers, (player) => player.externalId);
+    await this.playersRepository.updateMany(players, undefined, sourceCode);
+    const playersByExternalId = new Map(
+      (
+        await this.playersRepository.getWhere({
+          source: { code: sourceCode },
+        })
+      ).map((player) => [player.externalId, player]),
+    );
+    const relations = uniqueBy(
+      incomingPlayers.flatMap((incoming) => {
+        const player = playersByExternalId.get(incoming.externalId);
+        const team = teamsByExternalId.get(incoming.teamExternalId);
+        const league = leaguesByExternalId.get(incoming.leagueExternalId);
+
+        return player && team && league
+          ? [
+              {
+                player,
+                team,
+                league,
+                shirtNumber: incoming.shirtNumber,
+                position: incoming.position,
+              },
+            ]
+          : [];
+      }),
+      ({ player, team, league }) => `${player.id}:${team.id}:${league.id}`,
+    );
+    for (const batch of splitIntoBatches(relations)) {
+      await this.relationsRepository.updateMany(batch);
+    }
+
+    return players.length;
+  }
 
   async findTeamStatistics(
     teamId: number,
@@ -110,7 +156,10 @@ export class PlayersService {
     return result;
   }
 
-  async synchronize(sources: IPlayerRosterSource[]): Promise<void> {
+  async synchronize(
+    sources: IPlayerRosterSource[],
+    fetched: IFetchedPlayers,
+  ): Promise<void> {
     if (!sources.length) {
       this.logger.warn('No roster sources found; players sync skipped');
       return;
@@ -120,7 +169,6 @@ export class PlayersService {
       `Starting players synchronization for ${sources.length} rosters`,
     );
 
-    const fetched = await this.gateway.fetchPlayers(sources);
     await this.teamsRepository.updateCountries(
       fetched.teamCountries.map(({ teamExternalId, country }) => ({
         externalId: teamExternalId,
