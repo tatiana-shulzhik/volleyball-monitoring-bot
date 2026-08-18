@@ -42,7 +42,7 @@ export class LeaguesRepository {
     return repository.insert(leagues);
   }
 
-  updateMany(leagues: LeaguesEntity[], manager?: EntityManager) {
+  updateMany(leagues: Partial<LeaguesEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(LeaguesEntity) ?? this.repository;
     const values = leagues.map(({ externalId, name, stage }) => ({
       externalId,

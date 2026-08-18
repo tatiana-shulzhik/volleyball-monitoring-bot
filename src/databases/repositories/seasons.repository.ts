@@ -92,7 +92,10 @@ export class SeasonsRepository {
     return this.repository.exists();
   }
 
-  upsertMany(seasons: ISeason[], manager?: EntityManager) {
+  upsertMany(
+    seasons: Array<ISeason | Partial<SeasonsEntity>>,
+    manager?: EntityManager,
+  ) {
     const repository = manager?.getRepository(SeasonsEntity) ?? this.repository;
 
     return repository.upsert(seasons, {

@@ -55,7 +55,10 @@ export class CompetitionStagesRepository {
     ).insert(stages);
   }
 
-  updateMany(stages: CompetitionStagesEntity[], manager?: EntityManager) {
+  updateMany(
+    stages: Partial<CompetitionStagesEntity>[],
+    manager?: EntityManager,
+  ) {
     const repository =
       manager?.getRepository(CompetitionStagesEntity) ?? this.repository;
     const values = stages.map(

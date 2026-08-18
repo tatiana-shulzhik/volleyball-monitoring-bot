@@ -45,12 +45,16 @@ export class PlayersRepository {
     return repository.insert(players.map((player) => ({ ...player, source })));
   }
 
-  async updateMany(players: PlayersEntity[], manager?: EntityManager) {
+  async updateMany(
+    players: Partial<PlayersEntity>[],
+    manager?: EntityManager,
+    sourceCode = ESourceCode.Cev,
+  ) {
     const repository = manager?.getRepository(PlayersEntity) ?? this.repository;
     const source = await (
       manager?.getRepository(SourcesEntity) ??
       this.repository.manager.getRepository(SourcesEntity)
-    ).findOneByOrFail({ code: ESourceCode.Cev });
+    ).findOneByOrFail({ code: sourceCode });
     const values = players.map(({ externalId, fullName, birthYear }) => ({
       externalId,
       fullName,

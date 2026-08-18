@@ -2,6 +2,9 @@ import {
   ApplyEntityChangesParams,
   LogEntityChangesParams,
 } from '../interfaces/responses/entity-changes.interface';
+import { splitIntoBatches } from './array.utils';
+
+const ENTITY_CHANGES_BATCH_SIZE = 500;
 
 export async function applyEntityChanges<TEntity, TIncoming>(
   data: ApplyEntityChangesParams<TEntity, TIncoming>,
@@ -18,10 +21,20 @@ export async function applyEntityChanges<TEntity, TIncoming>(
 
   await repository.useTransaction(undefined, async (manager) => {
     if (changes.missing.length) {
-      await repository.insertMany(changes.missing, manager);
+      for (const batch of splitIntoBatches(
+        changes.missing,
+        ENTITY_CHANGES_BATCH_SIZE,
+      )) {
+        await repository.insertMany(batch, manager);
+      }
     }
     if (changes.changed.length) {
-      await repository.updateMany(changes.changed, manager);
+      for (const batch of splitIntoBatches(
+        changes.changed,
+        ENTITY_CHANGES_BATCH_SIZE,
+      )) {
+        await repository.updateMany(batch, manager);
+      }
     }
     if (allowDeletion && changes.obsoleteIds.length) {
       await repository.deleteMany(changes.obsoleteIds, manager);

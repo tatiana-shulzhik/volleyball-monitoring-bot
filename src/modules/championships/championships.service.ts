@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
+import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
+import { SeasonsEntity } from '../../databases/entities/seasons.entity';
+import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
-import { CevGateway } from '../../gateway/cev.gateway';
-import { ICevCompetitionStage } from '../../interfaces/requests/competition-stages.interface';
+import {
+  FetchedCompetitionStages,
+  ICevCompetitionStage,
+} from '../../interfaces/requests/competition-stages.interface';
+import { ICevChampionship } from '../../interfaces/requests/championships.interface';
 import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import {
   calculateStageChanges,
@@ -13,18 +19,72 @@ import {
   applyEntityChanges,
   logEntityChanges,
 } from '../../shared/synchronization.utils';
+import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
 export class ChampionshipsService {
   private readonly logger = new Logger(ChampionshipsService.name);
 
   constructor(
-    private readonly gateway: CevGateway,
     private readonly repository: CompetitionStagesRepository,
+    private readonly championshipsRepository: ChampionshipsRepository,
   ) {}
+
+  async upsertCatalogChampionships(
+    championships: ICevChampionship[],
+    sourceCode: ESourceCode,
+  ): Promise<Map<number, ChampionshipsEntity>> {
+    await this.championshipsRepository.updateMany(
+      championships,
+      undefined,
+      sourceCode,
+    );
+
+    return new Map(
+      (
+        await this.championshipsRepository.getWhere({
+          source: { code: sourceCode },
+        })
+      ).map((championship) => [championship.externalId, championship]),
+    );
+  }
+
+  async upsertCatalogStages(
+    stages: ICevCompetitionStage[],
+    seasonsByName: Map<string, SeasonsEntity>,
+    championshipsByExternalId: Map<number, ChampionshipsEntity>,
+    sourceCode: ESourceCode,
+  ): Promise<Map<string, CompetitionStagesEntity>> {
+    await this.repository.updateMany(
+      stages.map((stage) => ({
+        externalId: stage.externalId,
+        name: stage.name,
+        startsAt: stage.startsAt ?? null,
+        endsAt: stage.endsAt ?? null,
+        season: stage.seasonName
+          ? (seasonsByName.get(stage.seasonName) ?? null)
+          : null,
+        championship: championshipsByExternalId.get(
+          stage.championshipExternalId,
+        ),
+      })),
+    );
+
+    return new Map(
+      (
+        await this.repository.getWhere({
+          championship: { source: { code: sourceCode } },
+        })
+      ).map((stage) => [
+        `${stage.championship.externalId}:${stage.externalId}`,
+        stage,
+      ]),
+    );
+  }
 
   async synchronize(
     catalog: SynchronizedSeasonCatalog,
+    fetched: FetchedCompetitionStages,
   ): Promise<CompetitionStagesEntity[]> {
     const { championships, calendarStages, seasons } = catalog;
 
@@ -33,7 +93,6 @@ export class ChampionshipsService {
       return [];
     }
 
-    const fetched = await this.gateway.fetchCompetitionStages(championships);
     const incoming = this.mergeStages(
       calendarStages,
       fetched.stages,

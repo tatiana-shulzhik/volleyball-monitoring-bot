@@ -52,15 +52,16 @@ export class ChampionshipsRepository {
   }
 
   async updateMany(
-    championships: ChampionshipsEntity[],
+    championships: Partial<ChampionshipsEntity>[],
     manager?: EntityManager,
+    sourceCode = ESourceCode.Cev,
   ) {
     const repository =
       manager?.getRepository(ChampionshipsEntity) ?? this.repository;
     const source = await (
       manager?.getRepository(SourcesEntity) ??
       this.repository.manager.getRepository(SourcesEntity)
-    ).findOneByOrFail({ code: ESourceCode.Cev });
+    ).findOneByOrFail({ code: sourceCode });
     const values = championships.map(
       ({ externalId, name, competitionType }) => ({
         externalId,

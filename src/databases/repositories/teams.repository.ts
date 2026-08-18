@@ -45,12 +45,16 @@ export class TeamsRepository {
     return repository.insert(teams.map((team) => ({ ...team, source })));
   }
 
-  async updateMany(teams: TeamEntity[], manager?: EntityManager) {
+  async updateMany(
+    teams: Array<Pick<TeamEntity, 'externalId' | 'name'>>,
+    manager?: EntityManager,
+    sourceCode = ESourceCode.Cev,
+  ) {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
     const source = await (
       manager?.getRepository(SourcesEntity) ??
       this.repository.manager.getRepository(SourcesEntity)
-    ).findOneByOrFail({ code: ESourceCode.Cev });
+    ).findOneByOrFail({ code: sourceCode });
     const values = teams.map(({ externalId, name }) => ({
       externalId,
       name,

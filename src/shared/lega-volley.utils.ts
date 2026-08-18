@@ -134,6 +134,12 @@ export function readLegaMatches(
   year: number,
 ): ICevMatch[] {
   const matches = new Map<string, ICevMatch>();
+  const teamsByName = new Map(
+    readLegaTeams(html, leagueExternalId).map((team) => [
+      normalizeLegaName(team.name),
+      team.externalId,
+    ]),
+  );
 
   for (const rowMatch of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const row = rowMatch[1];
@@ -142,28 +148,36 @@ export function readLegaMatches(
         /href=["'][^"']*(?:\/|^)team\/(\d+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi,
       ),
     ];
-    if (teamMatches.length < 2) continue;
-
     const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
       (match) => cleanLegaText(match[1]),
     );
-    const matchNumber = cells[0]?.match(/^\d+$/)?.[0];
+    const homeTeamExternalId =
+      teamMatches[0]?.[1] ?? teamsByName.get(normalizeLegaName(cells[2] ?? ''));
+    const awayTeamExternalId =
+      teamMatches[1]?.[1] ?? teamsByName.get(normalizeLegaName(cells[4] ?? ''));
+    if (!homeTeamExternalId || !awayTeamExternalId) continue;
+
+    const matchNumber = (
+      teamMatches.length >= 2 ? cells[0] : cells.at(-1)
+    )?.match(/^\d+$/)?.[0];
     if (!matchNumber) continue;
 
     const externalId = `legavolley:${year}:${leagueExternalId}:${matchNumber}`;
     const rowText = cleanLegaText(row);
     const status = /annullat|cancel/i.test(rowText)
       ? EMatchStatus.Cancelled
-      : /\b0\s*-\s*0\b/.test(rowText)
-        ? EMatchStatus.Scheduled
-        : EMatchStatus.Finished;
-    const scheduledAt = parseLegaMatchDate(html.slice(0, rowMatch.index ?? 0));
+      : /\b\d+\s*-\s*\d+\b/.test(cells[5] ?? rowText)
+        ? EMatchStatus.Finished
+        : EMatchStatus.Scheduled;
+    const scheduledAt =
+      parseLegaScheduleDate(cells[0], cells[1]) ??
+      parseLegaMatchDate(html.slice(0, rowMatch.index ?? 0));
 
     matches.set(externalId, {
       externalId,
       leagueExternalId,
-      homeTeamExternalId: teamMatches[0][1],
-      awayTeamExternalId: teamMatches[1][1],
+      homeTeamExternalId,
+      awayTeamExternalId,
       scheduledAt,
       status,
     });
@@ -364,6 +378,25 @@ function parseLegaMatchDate(value: string): Date | null {
           Number(match[5] ?? 0),
         ),
       );
+}
+
+function parseLegaScheduleDate(
+  dateValue: string | undefined,
+  timeValue: string | undefined,
+): Date | null {
+  const date = dateValue?.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!date) return null;
+
+  const time = timeValue?.match(/^(\d{1,2}):(\d{2})$/);
+  return new Date(
+    Date.UTC(
+      Number(date[3]),
+      Number(date[2]) - 1,
+      Number(date[1]),
+      Number(time?.[1] ?? 0),
+      Number(time?.[2] ?? 0),
+    ),
+  );
 }
 
 function getChampionshipName(name: string): string {
