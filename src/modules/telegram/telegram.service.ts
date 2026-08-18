@@ -7,6 +7,7 @@ import {
 import { Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { getErrorMessage } from '../../shared/error.utils';
+import { isTelegramMenuCommand } from '../../shared/telegram.utils';
 import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
@@ -70,7 +71,7 @@ export class TelegramService
         await context.answerCbQuery(TELEGRAM_MESSAGES.access.denied, {
           show_alert: true,
         });
-      } else if (context.message) {
+      } else if (isTelegramMenuCommand(context)) {
         await context.reply(TELEGRAM_MESSAGES.access.denied);
       }
     });
