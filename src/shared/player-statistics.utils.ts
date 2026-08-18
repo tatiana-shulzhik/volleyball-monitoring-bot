@@ -378,21 +378,20 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
       );
 
       return [
-        '<br>',
         `<p>👤 №${latestSeason?.shirtNumber ?? '—'} `,
         `<b>${escapeHtml(seasons[0].fullName)}</b> · `,
         `${seasons[0].birthYear ?? '—'} г.р.</p>`,
-        '<small><table bordered striped>',
+        '<table bordered striped>',
         '<tr>' +
           '<th>Сезон</th>' +
           '<th>Турнир</th>' +
           '<th>Команда</th>' +
-          '<th>Рейтинг<br>(очки/сеты)</th>' +
-          '<th>Атака<br>(успешные/попытки)</th>' +
+          '<th>Рейтинг (очки/сеты)</th>' +
+          '<th>Атака (успешные/попытки)</th>' +
           '<th>Поз</th>' +
           '</tr>',
         ...rows,
-        '</table></small>',
+        '</table>',
       ].join('');
     })
     .join('');
@@ -459,17 +458,17 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
   });
 
   return [
-    '<small><table bordered striped>',
+    '<table bordered striped>',
     '<tr>' +
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
-      '<th align="center">Рейтинг<br>(очки/сеты)</th>' +
-      '<th align="center">Атака<br>(успешные/попытки)</th>' +
+      '<th align="center">Рейтинг (очки/сеты)</th>' +
+      '<th align="center">Атака (успешные/попытки)</th>' +
       '<th align="center">Год рождения</th>' +
       '<th align="center">Поз</th>' +
       '</tr>',
     ...rows,
-    '</table></small>',
+    '</table>',
   ].join('');
 }
 

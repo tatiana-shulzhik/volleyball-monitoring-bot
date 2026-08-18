@@ -280,7 +280,7 @@ export class TelegramStatisticsHandlers {
         const requestedPage = isSummary
           ? Number(context.match[isRetro ? 7 : 6] ?? 0)
           : 0;
-        const cacheKey = `team-statistics:v2:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
+        const cacheKey = `team-statistics:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
         let pages = (await this.cache.get<string[]>(cacheKey)) ?? undefined;
 
         if (pages === undefined) {
@@ -418,8 +418,7 @@ export class TelegramStatisticsHandlers {
         await editRichMessage('editMessageText', {
           chat_id: message.chat.id,
           message_id: message.message_id,
-          text: pages[page],
-          parse_mode: 'HTML',
+          rich_message: { html: pages[page] },
           reply_markup: keyboard.reply_markup,
         });
       },
