@@ -116,6 +116,9 @@ export class PlayerStatisticsService {
           manager,
         );
       });
+      await this.cache.deleteByPattern(
+        `team-statistics:${ESourceCode.LegaVolley}:*`,
+      );
     }
 
     return rows.length;
@@ -166,7 +169,7 @@ export class PlayerStatisticsService {
     );
 
     if (loadedMatches) {
-      await this.cache.deleteByPattern('team-statistics:*');
+      await this.cache.deleteByPattern(`team-statistics:${ESourceCode.Cev}:*`);
     }
 
     return loadedMatches;

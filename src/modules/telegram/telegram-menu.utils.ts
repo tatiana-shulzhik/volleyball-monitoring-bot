@@ -1,6 +1,6 @@
 import { Context, Markup } from 'telegraf';
 import { ListMenu } from '../../interfaces/telegram/menu.models';
-import { ESourceCode } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
 import { MENU_BUTTONS, SOURCE_BUTTONS } from './telegram.constants';
 
@@ -14,6 +14,14 @@ function createSourceButtons() {
 }
 
 export const SOURCE_MENU = Markup.inlineKeyboard(createSourceButtons());
+
+export function getAvailableCompetitionTypes(
+  source: ESourceCode,
+): ECompetitionType[] {
+  return source === ESourceCode.LegaVolley
+    ? [ECompetitionType.Club]
+    : Object.values(ECompetitionType);
+}
 
 export function createMainMenu() {
   return Markup.inlineKeyboard([
