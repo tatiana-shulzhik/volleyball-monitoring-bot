@@ -14,7 +14,6 @@ import { TeamEntity } from '../entities/team.entity';
 import { SynchronizationStateEntity } from '../entities/synchronization-state.entity';
 import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
 import { SourcesEntity } from '../entities/sources.entity';
-import { LegaMatchPlayerStatisticsEntity } from '../entities/lega-match-stats.entity';
 import { TelegramAccessEntity } from '../entities/telegram-access.entity';
 
 @Global()
@@ -38,7 +37,6 @@ import { TelegramAccessEntity } from '../entities/telegram-access.entity';
       MatchPlayerAttackStatisticsEntity,
       SynchronizationStateEntity,
       SourcesEntity,
-      LegaMatchPlayerStatisticsEntity,
       TelegramAccessEntity,
     ]),
   ],

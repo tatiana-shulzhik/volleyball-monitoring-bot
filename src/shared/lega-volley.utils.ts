@@ -230,13 +230,13 @@ export function parseLegaMatchStatistics(
       const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
         (cell) => cleanLegaText(cell[1]),
       );
-      const shirtNumber = parseLegaNumber(cells[0]);
-      const points = parseLegaNumber(cells[8]);
       players.push({
         externalId: player,
-        shirtNumber,
-        points,
-        played: cells.slice(3, 8).some((value) => value.length > 0),
+        attempts: parseLegaNumber(cells[18]) ?? 0,
+        successful: parseLegaNumber(cells[21]) ?? 0,
+        points: parseLegaNumber(cells[8]) ?? 0,
+        setsPlayed: cells.slice(3, 8).filter((value) => value.length > 0)
+          .length,
       });
     }
     return { name: title ? cleanLegaText(title) : '', players };

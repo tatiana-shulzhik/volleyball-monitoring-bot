@@ -58,9 +58,10 @@ export interface ILegaLeagueSchedule {
 
 export interface ILegaMatchPlayerStatistic {
   externalId: string;
-  shirtNumber: number | null;
-  points: number | null;
-  played: boolean;
+  attempts: number;
+  successful: number;
+  points: number;
+  setsPlayed: number;
 }
 
 export interface ILegaMatchStatistics {

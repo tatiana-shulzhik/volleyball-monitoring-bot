@@ -4,7 +4,6 @@ import { CompetitionStagesEntity } from '../../databases/entities/competition-st
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
-import { LegaMatchPlayerStatisticsRepository } from '../../databases/repositories/lega-match-player-statistics.repository';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { MatchPlayerAttackStatisticsEntity } from '../../databases/entities/match-player-attack-statistics.entity';
 import { MatchEntity } from '../../databases/entities/match.entity';
@@ -32,7 +31,6 @@ export class PlayerStatisticsService {
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly matchesRepository: MatchesRepository,
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
-    private readonly legaMatchStatisticsRepository: LegaMatchPlayerStatisticsRepository,
     private readonly cache: RedisCacheService,
   ) {}
 
@@ -64,9 +62,7 @@ export class PlayerStatisticsService {
       ]),
     );
     const sourceUpdatedAt = new Date();
-    const rows: Parameters<
-      LegaMatchPlayerStatisticsRepository['upsertMany']
-    >[0] = [];
+    const rows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
     const loadedMatchIds = new Set<number>();
     const externalIdsByMatchId = new Map<number, string>();
 
@@ -94,9 +90,10 @@ export class PlayerStatisticsService {
             match,
             team,
             player,
+            attempts: statistic.attempts,
+            successful: statistic.successful,
             points: statistic.points,
-            shirtNumber: statistic.shirtNumber,
-            played: statistic.played,
+            setsPlayed: statistic.setsPlayed,
             sourceUpdatedAt,
           });
           loadedMatchIds.add(match.id);
@@ -107,11 +104,18 @@ export class PlayerStatisticsService {
       [...externalIdsByMatchId].map(([id, externalId]) => ({ id, externalId })),
     );
     if (rows.length) {
-      await this.legaMatchStatisticsRepository.upsertMany(rows);
-      await this.matchesRepository.markAttackStatisticsLoaded(
-        [...loadedMatchIds],
-        sourceUpdatedAt,
-      );
+      await this.matchAttacksRepository.useTransaction(async (manager) => {
+        await this.matchAttacksRepository.replaceMany(
+          [...loadedMatchIds],
+          rows,
+          manager,
+        );
+        await this.matchesRepository.markAttackStatisticsLoaded(
+          [...loadedMatchIds],
+          sourceUpdatedAt,
+          manager,
+        );
+      });
     }
 
     return rows.length;

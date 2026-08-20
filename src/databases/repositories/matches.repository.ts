@@ -191,8 +191,8 @@ export class MatchesRepository {
       })
       .andWhere('match.attack_statistics_updated_at IS NULL')
       .andWhere(
-        'NOT EXISTS (SELECT 1 FROM lega_match_player_statistics statistics ' +
-          'WHERE statistics.match_id = match.id)',
+        'NOT EXISTS (SELECT 1 FROM match_player_attack_statistics attack ' +
+          'WHERE attack.match_id = match.id)',
       )
       .getMany();
   }
