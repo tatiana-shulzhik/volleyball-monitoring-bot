@@ -154,6 +154,36 @@ export function readLegaVolleyFemminileMatches(
   return { teams: [...teams.values()], matches: [...matches.values()] };
 }
 
+export function readLegaVolleyFemminileDateRange(html: string): {
+  startsAt?: Date;
+  endsAt?: Date;
+} {
+  const dateTexts = [
+    ...[...html.matchAll(/<option\b[^>]*>([\s\S]*?)<\/option>/gi)]
+      .map((match) => cleanText(match[1]))
+      .filter((text) => /giornata/i.test(text)),
+    ...[
+      ...html.matchAll(
+        /<table\b[^>]*class=["'][^"']*\brisultati\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+      ),
+    ].map((match) => cleanText(match[1])),
+  ];
+  const dates = dateTexts.flatMap((text) =>
+    [...text.matchAll(/\b(\d{2})\/(\d{2})\/(\d{4})\b/g)].map(
+      ([, day, month, year]) =>
+        new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))),
+    ),
+  );
+  if (!dates.length) return {};
+
+  return {
+    startsAt: new Date(Math.min(...dates.map((date) => date.getTime()))),
+    endsAt: new Date(
+      Math.max(...dates.map((date) => date.getTime() + 86_399_999)),
+    ),
+  };
+}
+
 export function parseLegaVolleyFemminileMatchStatistics(
   html: string,
   sourceMatchId: string,
@@ -279,6 +309,7 @@ function readCompetitions(
     if (name) {
       competitions.set(externalId, {
         externalId,
+        serie: readCompetitionSerie(url, name),
         name,
         seasonYear: season.year,
         seasonName: season.name,
@@ -287,6 +318,13 @@ function readCompetitions(
   }
 
   return [...competitions.values()];
+}
+
+function readCompetitionSerie(url: URL, name: string): number {
+  const serie = Number(url.searchParams.get('serie'));
+  if (serie === 1 || serie === 2) return serie;
+
+  return /\bA2\b/i.test(name) ? 2 : 1;
 }
 
 function getCompetitionHierarchy(name: string): {

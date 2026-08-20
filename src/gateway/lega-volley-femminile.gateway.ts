@@ -20,6 +20,7 @@ import {
   parseLegaVolleyFemminileCatalog,
   parseLegaVolleyFemminileMatchRoster,
   parseLegaVolleyFemminileMatchStatistics,
+  readLegaVolleyFemminileDateRange,
   readLegaVolleyFemminileMatches,
   readLegaVolleyFemminileSeasons,
 } from '../shared/lega-volley-femminile.utils';
@@ -45,30 +46,28 @@ export class LegaVolleyFemminileGateway {
 
     const catalog = parseLegaVolleyFemminileCatalog(pages);
     const scheduleResults = await Promise.all(
-      catalog.competitions.map(({ externalId, seasonYear }) =>
-        this.fetchLeagueMatches(seasonYear, externalId),
+      catalog.competitions.map(({ externalId, seasonYear, serie }) =>
+        this.fetchLeagueMatches(seasonYear, externalId, serie),
       ),
     );
-    const fetched = scheduleResults.flat();
+    const fetched = scheduleResults.flatMap(({ fetched }) => fetched);
     const matches = this.mergeMatches(fetched);
-    const matchesByLeagueExternalId = new Map<number, Date[]>();
-    for (const match of matches.values()) {
-      if (!match.scheduledAt) continue;
-
-      const dates = matchesByLeagueExternalId.get(match.leagueExternalId) ?? [];
-      dates.push(match.scheduledAt);
-      matchesByLeagueExternalId.set(match.leagueExternalId, dates);
-    }
+    const datesByStageKey = new Map<string, Date[]>();
     for (const league of catalog.leagues) {
-      const dates = matchesByLeagueExternalId.get(league.externalId);
-      if (!dates?.length) continue;
-
-      const stage = catalog.stages.find(
-        (item) =>
-          item.externalId === league.stageExternalId &&
-          item.championshipExternalId === league.championshipExternalId,
+      const range = scheduleResults.find(
+        (item) => item.leagueExternalId === league.externalId,
+      )?.range;
+      if (!range?.startsAt || !range.endsAt) continue;
+      const stageKey = `${league.championshipExternalId}:${league.stageExternalId}`;
+      const dates = datesByStageKey.get(stageKey) ?? [];
+      dates.push(range.startsAt, range.endsAt);
+      datesByStageKey.set(stageKey, dates);
+    }
+    for (const stage of catalog.stages) {
+      const dates = datesByStageKey.get(
+        `${stage.championshipExternalId}:${stage.externalId}`,
       );
-      if (!stage) continue;
+      if (!dates?.length) continue;
 
       stage.startsAt = new Date(
         Math.min(...dates.map((date) => date.getTime())),
@@ -84,12 +83,12 @@ export class LegaVolleyFemminileGateway {
   }
 
   async fetchMatches(
-    schedules: Array<{ year: number; leagueExternalId: number }>,
+    schedules: Array<{ year: number; leagueExternalId: number; serie: number }>,
   ): Promise<IFetchedMatches> {
     const uniqueSchedules = [
       ...new Map(
         schedules.map((schedule) => [
-          `${schedule.year}:${schedule.leagueExternalId}`,
+          `${schedule.year}:${schedule.serie}:${schedule.leagueExternalId}`,
           schedule,
         ]),
       ).values(),
@@ -102,13 +101,13 @@ export class LegaVolleyFemminileGateway {
       LEGA_VOLLEY_HTTP_CONCURRENCY,
     )) {
       const results = await Promise.allSettled(
-        batch.map(({ year, leagueExternalId }) =>
-          this.fetchLeagueMatches(year, leagueExternalId),
+        batch.map(({ year, leagueExternalId, serie }) =>
+          this.fetchLeagueMatches(year, leagueExternalId, serie),
         ),
       );
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
-          fetched.push(...result.value);
+          fetched.push(...result.value.fetched);
           return;
         }
 
@@ -217,10 +216,14 @@ export class LegaVolleyFemminileGateway {
     return rosters;
   }
 
-  private async fetchLeagueMatches(year: number, leagueExternalId: number) {
+  private async fetchLeagueMatches(
+    year: number,
+    leagueExternalId: number,
+    serie: number,
+  ) {
     const query =
-      `?serie=0&campionato=${leagueExternalId}` +
-      `&stagione=${year}&giornata=tutte`;
+      `?campionato=${leagueExternalId}` +
+      `&serie=${serie}&stagione=${year}&giornata=tutte`;
     const [resultsHtml, calendarHtml] = await Promise.all([
       this.http.get(
         `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${query}`,
@@ -230,9 +233,13 @@ export class LegaVolleyFemminileGateway {
       ),
     ]);
 
-    return [resultsHtml, calendarHtml].map((html) =>
-      readLegaVolleyFemminileMatches(html, leagueExternalId),
-    );
+    return {
+      leagueExternalId,
+      fetched: [resultsHtml, calendarHtml].map((html) =>
+        readLegaVolleyFemminileMatches(html, leagueExternalId),
+      ),
+      range: readLegaVolleyFemminileDateRange(resultsHtml),
+    };
   }
 
   private mergeMatches(

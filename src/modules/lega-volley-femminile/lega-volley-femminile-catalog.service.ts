@@ -48,9 +48,10 @@ export class LegaVolleyFemminileCatalogService {
       const isCurrentOrFuture = league.stage.endsAt
         ? league.stage.endsAt >= now
         : year >= currentYear;
+      const serie = /\bA2\b/i.test(league.stage.championship.name) ? 2 : 1;
 
       return Number.isInteger(year) && isCurrentOrFuture
-        ? [{ year, leagueExternalId: league.externalId }]
+        ? [{ year, leagueExternalId: league.externalId, serie }]
         : [];
     });
     if (!schedules.length) {

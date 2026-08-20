@@ -1,5 +1,6 @@
 export interface ILegaVolleyFemminileCompetition {
   externalId: number;
+  serie: number;
   name: string;
   seasonYear: number;
   seasonName: string;
