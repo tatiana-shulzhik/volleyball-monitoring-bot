@@ -1,6 +1,7 @@
 import type { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
 import type { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import type { IPlayerAttackStatisticsAggregate } from '../interfaces/responses/player-statistics.interface';
+import type { IPlayerPointsAggregate } from '../interfaces/responses/player-statistics.interface';
 import type { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
 import type {
   IFetchedMatchAttackStatistics,
@@ -10,6 +11,7 @@ import type {
 import type { MatchEntity } from '../databases/entities/match.entity';
 import { createCompetitionStageKey } from './competition-stages.utils';
 import { CEV_COUNTRIES } from './consts/constants';
+import { ESourceCode } from './enums';
 import { parseSeasonEndYear } from './season.utils';
 
 export function normalizeName(value: string): string {
@@ -163,7 +165,8 @@ export function getMatchTeams(
 
 export function createTeamStatistics(
   relations: PlayerTeamLeagueEntity[],
-  attacks: IPlayerAttackStatisticsAggregate[],
+  attacks: Array<IPlayerAttackStatisticsAggregate | IPlayerPointsAggregate>,
+  sourceCode = ESourceCode.Cev,
 ): ITeamStatistics | null {
   if (!relations.length) {
     return null;
@@ -224,9 +227,18 @@ export function createTeamStatistics(
         shirtNumber: relation.shirtNumber,
         position: relation.position,
         points: attackStatistics?.points ?? null,
-        setsPlayed: attackStatistics?.setsPlayed ?? null,
-        attackAttempts: attackStatistics?.attempts ?? null,
-        successfulAttacks: attackStatistics?.successful ?? null,
+        setsPlayed:
+          attackStatistics && 'setsPlayed' in attackStatistics
+            ? attackStatistics.setsPlayed
+            : null,
+        attackAttempts:
+          attackStatistics && 'attempts' in attackStatistics
+            ? attackStatistics.attempts
+            : null,
+        successfulAttacks:
+          attackStatistics && 'successful' in attackStatistics
+            ? attackStatistics.successful
+            : null,
       };
     })
     .sort(
@@ -255,6 +267,7 @@ export function createTeamStatistics(
     championshipName: relations[0].league.stage.championship.name,
     teamName: relations[0].team.name,
     leagueName: relations[0].league.name,
+    sourceCode,
     players,
   };
 }
@@ -501,9 +514,13 @@ function formatPlayerPosition(position: string | null): string {
   const normalizedPosition = position.trim().toLowerCase();
   const positionLabels: Record<string, string> = {
     'outside spiker': 'WS',
+    schiacciatore: 'WS',
     opposite: 'O',
+    opposto: 'O',
     'middle blocker': 'MB',
+    centrale: 'MB',
     setter: 'S',
+    palleggiatore: 'S',
     libero: 'L',
   };
 

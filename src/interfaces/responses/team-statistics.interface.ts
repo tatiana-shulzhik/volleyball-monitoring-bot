@@ -1,3 +1,5 @@
+import { ESourceCode } from '../../shared/enums';
+
 export interface ITeamPlayerStatistics {
   fullName: string;
   seasonName: string;
@@ -19,5 +21,6 @@ export interface ITeamStatistics {
   championshipName: string;
   teamName: string;
   leagueName: string;
+  sourceCode: ESourceCode;
   players: ITeamPlayerStatistics[];
 }

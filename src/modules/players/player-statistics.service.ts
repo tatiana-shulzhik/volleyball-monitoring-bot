@@ -2,10 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
-import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
-import { LegaMatchPlayerStatisticsRepository } from '../../databases/repositories/lega-match-player-statistics.repository';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { MatchPlayerAttackStatisticsEntity } from '../../databases/entities/match-player-attack-statistics.entity';
 import { MatchEntity } from '../../databases/entities/match.entity';
@@ -21,10 +19,7 @@ import {
   getMatchTeams,
   createPlayerTeamLeagueKey,
 } from '../../shared/player-statistics.utils';
-import {
-  createLegaMatchKey,
-  normalizeLegaName,
-} from '../../shared/lega-volley.utils';
+import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
 import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
@@ -33,21 +28,16 @@ export class PlayerStatisticsService {
 
   constructor(
     private readonly playersRepository: PlayersRepository,
-    private readonly teamsRepository: TeamsRepository,
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly matchesRepository: MatchesRepository,
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
-    private readonly legaMatchStatisticsRepository: LegaMatchPlayerStatisticsRepository,
     private readonly cache: RedisCacheService,
   ) {}
 
   async upsertLegaMatchStatistics(
     statistics: ILegaMatchStatistics[],
   ): Promise<number> {
-    const [teams, players, matches] = await Promise.all([
-      this.teamsRepository.getWhere({
-        source: { code: ESourceCode.LegaVolley },
-      }),
+    const [players, matches] = await Promise.all([
       this.playersRepository.getWhere({
         source: { code: ESourceCode.LegaVolley },
       }),
@@ -57,46 +47,40 @@ export class PlayerStatisticsService {
         },
       }),
     ]);
-    const teamsByName = new Map(
-      teams.map((team) => [normalizeLegaName(team.name), team]),
-    );
     const playersByExternalId = new Map(
       players.map((player) => [player.externalId, player]),
     );
     const matchesByKey = new Map(
       matches.map((match) => [
-        createLegaMatchKey(
+        createLegaMatchLookupKey(
           match.league.externalId,
-          match.homeTeam.externalId,
-          match.awayTeam.externalId,
+          match.homeTeam.name,
+          match.awayTeam.name,
           match.scheduledAt,
         ),
         match,
       ]),
     );
     const sourceUpdatedAt = new Date();
-    const rows: Parameters<
-      LegaMatchPlayerStatisticsRepository['upsertMany']
-    >[0] = [];
+    const rows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
+    const loadedMatchIds = new Set<number>();
+    const externalIdsByMatchId = new Map<number, string>();
 
     for (const item of statistics) {
-      const homeTeam = teamsByName.get(normalizeLegaName(item.homeTeamName));
-      const awayTeam = teamsByName.get(normalizeLegaName(item.awayTeamName));
-      if (!homeTeam || !awayTeam) continue;
-
       const match = matchesByKey.get(
-        createLegaMatchKey(
+        createLegaMatchLookupKey(
           item.leagueExternalId,
-          homeTeam.externalId,
-          awayTeam.externalId,
+          item.homeTeamName,
+          item.awayTeamName,
           item.playedOn,
         ),
       );
       if (!match) continue;
+      externalIdsByMatchId.set(match.id, item.sourceMatchId);
 
       for (const [team, playersStatistics] of [
-        [homeTeam, item.home],
-        [awayTeam, item.away],
+        [match.homeTeam, item.home],
+        [match.awayTeam, item.away],
       ] as const) {
         for (const statistic of playersStatistics) {
           const player = playersByExternalId.get(statistic.externalId);
@@ -106,19 +90,39 @@ export class PlayerStatisticsService {
             match,
             team,
             player,
+            attempts: statistic.attempts,
+            successful: statistic.successful,
             points: statistic.points,
-            shirtNumber: statistic.shirtNumber,
-            played: statistic.played,
+            setsPlayed: statistic.setsPlayed,
             sourceUpdatedAt,
           });
+          loadedMatchIds.add(match.id);
         }
       }
     }
+    await this.matchesRepository.updateExternalIds(
+      [...externalIdsByMatchId].map(([id, externalId]) => ({ id, externalId })),
+    );
     if (rows.length) {
-      await this.legaMatchStatisticsRepository.upsertMany(rows);
+      await this.matchAttacksRepository.useTransaction(async (manager) => {
+        await this.matchAttacksRepository.replaceMany(
+          [...loadedMatchIds],
+          rows,
+          manager,
+        );
+        await this.matchesRepository.markAttackStatisticsLoaded(
+          [...loadedMatchIds],
+          sourceUpdatedAt,
+          manager,
+        );
+      });
     }
 
     return rows.length;
+  }
+
+  findPendingLegaMatches(): Promise<MatchEntity[]> {
+    return this.matchesRepository.findFinishedRequiringLegaStatistics();
   }
 
   findPendingAttackStageIds(): Promise<number[]> {

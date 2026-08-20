@@ -33,7 +33,9 @@ export const MAX_ATTEMPTS = 3;
 
 export const CEV_HTTP_CONCURRENCY = 50;
 
-export const LEGA_VOLLEY_HTTP_CONCURRENCY = 16;
+export const LEGA_VOLLEY_HTTP_CONCURRENCY = 50;
+
+export const LEGA_VOLLEY_HTTP_TIMEOUT_MS = 15_000;
 
 export const PREVIOUS_YEARS_COUNT = 4;
 

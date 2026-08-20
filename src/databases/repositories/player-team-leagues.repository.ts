@@ -23,7 +23,7 @@ export class PlayerTeamLeaguesRepository {
       relations: {
         player: true,
         team: true,
-        league: { stage: { championship: true, season: true } },
+        league: { stage: { championship: { source: true }, season: true } },
       },
     });
   }

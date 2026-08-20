@@ -6,7 +6,13 @@ export class CreateMatches1760000009000 implements MigrationInterface {
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('matches')) return;
     await queryRunner.query(
-      `CREATE TYPE "public"."matches_status_enum" AS ENUM('scheduled', 'finished', 'cancelled')`,
+      `DO $$
+        BEGIN
+          CREATE TYPE "public"."matches_status_enum" AS ENUM('scheduled', 'finished', 'cancelled');
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END
+      $$`,
     );
     await queryRunner.query(
       `CREATE TABLE "matches" ("id" SERIAL NOT NULL, "external_id" character varying NOT NULL, "league_id" integer NOT NULL, "home_team_id" integer NOT NULL, "away_team_id" integer NOT NULL, "scheduled_at" TIMESTAMP WITH TIME ZONE, "monitoring_started_at" TIMESTAMP WITH TIME ZONE, "attack_statistics_updated_at" TIMESTAMP WITH TIME ZONE, "status" "public"."matches_status_enum" NOT NULL DEFAULT 'scheduled', CONSTRAINT "PK_matches_id" PRIMARY KEY ("id"), CONSTRAINT "UQ_matches_external_id" UNIQUE ("external_id"))`,

@@ -3,7 +3,10 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { splitIntoBatches } from '../../shared/array.utils';
 import { EMatchStatus } from '../../shared/enums';
-import { IPlayerAttackStatisticsAggregate } from '../../interfaces/responses/player-statistics.interface';
+import {
+  IPlayerAttackStatisticsAggregate,
+  IPlayerAttackStatisticsAggregateRow,
+} from '../../interfaces/responses/player-statistics.interface';
 import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
 import { uniqueMatchPlayerAttackStatistics } from '../../shared/player-statistics.utils';
 
@@ -73,15 +76,7 @@ export class MatchPlayerAttackStatisticsRepository {
 
     query.andWhere('attack.player_id IN (:...playerIds)', { playerIds });
 
-    const rows: Array<{
-      championshipId: string;
-      teamId: string;
-      playerId: string;
-      attempts: string;
-      successful: string;
-      points: string | null;
-      setsPlayed: string | null;
-    }> = await query
+    const rows: IPlayerAttackStatisticsAggregateRow[] = await query
       .groupBy('stage.championship_id')
       .addGroupBy('attack.team_id')
       .addGroupBy('attack.player_id')

@@ -93,6 +93,8 @@ export class PlayersService {
 
     const { team, league } = relations[0];
     const seasonId = league.stage.season?.id;
+    const sourceCode =
+      league.stage.championship.source?.code ?? ESourceCode.Cev;
 
     if (!seasonId) {
       return null;
@@ -119,6 +121,7 @@ export class PlayersService {
               season: { id: In(aggregateSeasons!.map(({ id }) => id)) },
               championship: {
                 competitionType: league.stage.championship.competitionType,
+                source: { code: sourceCode },
               },
             },
           },
@@ -140,7 +143,11 @@ export class PlayersService {
             playerIds,
           )
         : [];
-    const result = createTeamStatistics(displayedRelations, attacks);
+    const result = createTeamStatistics(
+      displayedRelations,
+      attacks,
+      sourceCode,
+    );
 
     if (result && aggregateSeasons?.length) {
       result.seasonName = aggregateSeasons

@@ -16,8 +16,13 @@ export class MatchEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'external_id', unique: true })
-  externalId: string;
+  @Column({
+    name: 'external_id',
+    type: 'varchar',
+    unique: true,
+    nullable: true,
+  })
+  externalId: string | null;
 
   @Index()
   @ManyToOne(() => LeaguesEntity, { nullable: false, onDelete: 'CASCADE' })

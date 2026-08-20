@@ -8,10 +8,7 @@ import { Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { getErrorMessage } from '../../shared/error.utils';
 import { isTelegramMenuCommand } from '../../shared/telegram.utils';
-import {
-  TELEGRAM_CALLBACK_PATTERNS,
-  TELEGRAM_CALLBACKS,
-} from './telegram-callbacks';
+import { TELEGRAM_CALLBACK_PATTERNS } from './telegram-callbacks';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { SOURCE_MENU } from './telegram-menu.utils';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';

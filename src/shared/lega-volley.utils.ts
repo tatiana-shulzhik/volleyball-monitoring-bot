@@ -10,6 +10,7 @@ import {
   ILegaOption,
   ILegaPlayer,
   ILegaMatchPlayerStatistic,
+  ILegaMatchReference,
   ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
 import { CHAMPIONSHIP_RULES, STAGE_RULES } from './consts/constants';
@@ -164,9 +165,10 @@ export function readLegaMatches(
 
     const externalId = `legavolley:${year}:${leagueExternalId}:${matchNumber}`;
     const rowText = cleanLegaText(row);
+    const score = (cells[5] ?? '').match(/\b(\d+)\s*-\s*(\d+)\b/);
     const status = /annullat|cancel/i.test(rowText)
       ? EMatchStatus.Cancelled
-      : /\b\d+\s*-\s*\d+\b/.test(cells[5] ?? rowText)
+      : score && (Number(score[1]) > 0 || Number(score[2]) > 0)
         ? EMatchStatus.Finished
         : EMatchStatus.Scheduled;
     const scheduledAt =
@@ -212,7 +214,9 @@ export function parseLegaMatchStatistics(
       /<table\b[^>]*id=["']Tabellino["'][^>]*>[\s\S]*?<\/table>/gi,
     ),
   ];
-  const teamTables = tables.filter((table) => /Atleta=/i.test(table[0]));
+  const teamTables = tables.filter(
+    (table) => /Atleta=/i.test(table[0]) && /Totali squadra/i.test(table[0]),
+  );
   if (teamTables.length < 2) return null;
 
   const parseTeam = (table: string) => {
@@ -226,13 +230,13 @@ export function parseLegaMatchStatistics(
       const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
         (cell) => cleanLegaText(cell[1]),
       );
-      const shirtNumber = parseLegaNumber(cells[0]);
-      const points = parseLegaNumber(cells[8]);
       players.push({
         externalId: player,
-        shirtNumber,
-        points,
-        played: cells.slice(3, 8).some((value) => value.length > 0),
+        attempts: parseLegaNumber(cells[18]) ?? 0,
+        successful: parseLegaNumber(cells[21]) ?? 0,
+        points: parseLegaNumber(cells[8]) ?? 0,
+        setsPlayed: cells.slice(3, 8).filter((value) => value.length > 0)
+          .length,
       });
     }
     return { name: title ? cleanLegaText(title) : '', players };
@@ -261,6 +265,26 @@ export function readLegaMatchIds(html: string): string[] {
   ];
 }
 
+export function readLegaMatchReferences(html: string): ILegaMatchReference[] {
+  const references: ILegaMatchReference[] = [];
+
+  for (const section of html.matchAll(
+    /<h3\b[^>]*>([\s\S]*?)<\/h3>([\s\S]*?)(?=<h3\b|$)/gi,
+  )) {
+    const sourceMatchId = section[2].match(/href=["']\/?match\/(\d+)/i)?.[1];
+    const teams = cleanLegaText(section[1]).match(/^(.+?)\s+-\s+(.+)$/);
+    if (!sourceMatchId || !teams) continue;
+
+    references.push({
+      sourceMatchId,
+      homeTeamName: teams[1].trim(),
+      awayTeamName: teams[2].trim(),
+    });
+  }
+
+  return references;
+}
+
 export function parseLegaPostGaraDate(value: string): Date | null {
   const match = value.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   return match
@@ -279,6 +303,15 @@ export function createLegaMatchKey(
   return `${leagueExternalId}:${homeTeamExternalId}:${awayTeamExternalId}:${scheduledAt?.toISOString().slice(0, 10) ?? ''}`;
 }
 
+export function createLegaMatchLookupKey(
+  leagueExternalId: number,
+  homeTeamName: string,
+  awayTeamName: string,
+  scheduledAt: Date | null,
+): string {
+  return `${leagueExternalId}:${normalizeLegaName(homeTeamName)}:${normalizeLegaName(awayTeamName)}:${scheduledAt?.toISOString().slice(0, 10) ?? ''}`;
+}
+
 export function normalizeLegaName(value: string): string {
   return value
     .toLocaleLowerCase('it-IT')
@@ -291,8 +324,9 @@ function extractLegaPlayers(
   teamExternalId: string,
 ): ILegaPlayer[] {
   const players = new Map<string, ILegaPlayer>();
+  const rosterHtml = extractLegaRosterHtml(html);
 
-  for (const rowMatch of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+  for (const rowMatch of rosterHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const row = rowMatch[1];
     const playerMatch = row.match(
       /<a\b[^>]*href=["'][^"']*\/player\/([^"'?#]+)[^>]*>([\s\S]*?)<\/a>/i,
@@ -311,9 +345,7 @@ function extractLegaPlayers(
     const birthYear = parseLegaYear(cells.join(' '));
     const position =
       playerCellIndex >= 0
-        ? (cells
-            .slice(playerCellIndex + 1)
-            .find((cell) => cell && !/^\d{4}$/.test(cell)) ?? null)
+        ? (cells.slice(playerCellIndex + 1).find(isLegaPlayerPosition) ?? null)
         : null;
     const fullName = cleanLegaText(playerMatch[2]);
 
@@ -331,6 +363,24 @@ function extractLegaPlayers(
   }
 
   return [...players.values()];
+}
+
+function extractLegaRosterHtml(html: string): string {
+  const roster = html.match(
+    /<table\b(?=[^>]*\bid=["']roster["'])[^>]*>[\s\S]*?<\/table>/i,
+  );
+
+  return roster?.[0] ?? '';
+}
+
+function isLegaPlayerPosition(value: string): boolean {
+  return [
+    'schiacciatore',
+    'opposto',
+    'centrale',
+    'palleggiatore',
+    'libero',
+  ].includes(value.trim().toLowerCase());
 }
 
 function parseLegaNumber(value: string | undefined): number | null {

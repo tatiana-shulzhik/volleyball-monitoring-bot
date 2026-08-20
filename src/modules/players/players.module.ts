@@ -4,7 +4,6 @@ import { PlayersRepository } from '../../databases/repositories/players.reposito
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
-import { LegaMatchPlayerStatisticsRepository } from '../../databases/repositories/lega-match-player-statistics.repository';
 import { RedisCacheModule } from '../../cache/redis-cache.module';
 import { PlayersService } from './players.service';
 import { PlayerStatisticsService } from './player-statistics.service';
@@ -18,7 +17,6 @@ import { PlayerStatisticsService } from './player-statistics.service';
     PlayerTeamLeaguesRepository,
     MatchesRepository,
     MatchPlayerAttackStatisticsRepository,
-    LegaMatchPlayerStatisticsRepository,
     TeamsRepository,
   ],
   exports: [

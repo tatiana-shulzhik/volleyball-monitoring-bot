@@ -9,7 +9,8 @@ import {
   IsNull,
   Repository,
 } from 'typeorm';
-import { EMatchStatus } from '../../shared/enums';
+import { EMatchStatus, ESourceCode } from '../../shared/enums';
+import { splitIntoBatches } from '../../shared/array.utils';
 import { MatchEntity } from '../entities/match.entity';
 
 @Injectable()
@@ -47,6 +48,32 @@ export class MatchesRepository {
   insertMany(matches: Partial<MatchEntity>[], manager?: EntityManager) {
     const repository = manager?.getRepository(MatchEntity) ?? this.repository;
     return repository.insert(matches);
+  }
+
+  saveMany(matches: Partial<MatchEntity>[], manager?: EntityManager) {
+    const repository = manager?.getRepository(MatchEntity) ?? this.repository;
+    return repository.save(matches, { chunk: 1000, reload: false });
+  }
+
+  async updateExternalIds(
+    matches: Array<{ id: number; externalId: string }>,
+  ): Promise<void> {
+    for (const batch of splitIntoBatches(matches, 1000)) {
+      const params = batch.flatMap(({ id, externalId }) => [id, externalId]);
+      const values = batch
+        .map(
+          (_, index) =>
+            `($${index * 2 + 1}::integer, $${index * 2 + 2}::varchar)`,
+        )
+        .join(', ');
+      await this.dataSource.query(
+        `UPDATE "matches" AS m
+         SET "external_id" = source.external_id
+         FROM (VALUES ${values}) AS source(id, external_id)
+         WHERE m.id = source.id`,
+        params,
+      );
+    }
   }
 
   updateMany(
@@ -147,6 +174,29 @@ export class MatchesRepository {
       .getMany();
   }
 
+  findFinishedRequiringLegaStatistics(): Promise<MatchEntity[]> {
+    return this.repository
+      .createQueryBuilder('match')
+      .innerJoinAndSelect('match.league', 'league')
+      .innerJoinAndSelect('league.stage', 'stage')
+      .innerJoinAndSelect('stage.championship', 'championship')
+      .innerJoin('championship.source', 'source')
+      .innerJoinAndSelect('match.homeTeam', 'homeTeam')
+      .innerJoinAndSelect('match.awayTeam', 'awayTeam')
+      .where('match.status = :finished', {
+        finished: EMatchStatus.Finished,
+      })
+      .andWhere('source.code = :sourceCode', {
+        sourceCode: ESourceCode.LegaVolley,
+      })
+      .andWhere('match.attack_statistics_updated_at IS NULL')
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM match_player_attack_statistics attack ' +
+          'WHERE attack.match_id = match.id)',
+      )
+      .getMany();
+  }
+
   async findStageIdsRequiringAttackStatistics(): Promise<number[]> {
     const rows: Array<{ stageId: string }> = await this.repository
       .createQueryBuilder('match')
@@ -169,10 +219,12 @@ export class MatchesRepository {
   async markAttackStatisticsLoaded(
     ids: number[],
     sourceUpdatedAt: Date,
-    manager: EntityManager,
+    manager?: EntityManager,
   ): Promise<void> {
-    await manager
-      .getRepository(MatchEntity)
-      .update({ id: In(ids) }, { attackStatisticsUpdatedAt: sourceUpdatedAt });
+    const repository = manager?.getRepository(MatchEntity) ?? this.repository;
+    await repository.update(
+      { id: In(ids) },
+      { attackStatisticsUpdatedAt: sourceUpdatedAt },
+    );
   }
 }

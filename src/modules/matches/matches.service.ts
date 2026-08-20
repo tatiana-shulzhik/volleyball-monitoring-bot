@@ -16,6 +16,8 @@ import {
   logEntityChanges,
 } from '../../shared/synchronization.utils';
 import { uniqueBy } from '../../shared/array.utils';
+import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
+import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
 export class MatchesService {
@@ -34,27 +36,55 @@ export class MatchesService {
     teamsByExternalId: Map<string, TeamEntity>,
   ): Promise<number> {
     const matches = uniqueBy(incoming, (match) => match.externalId);
-    await this.matchesRepository.updateMany(
-      matches.flatMap((match) => {
-        const league = leaguesByExternalId.get(match.leagueExternalId);
-        const homeTeam = teamsByExternalId.get(match.homeTeamExternalId);
-        const awayTeam = teamsByExternalId.get(match.awayTeamExternalId);
+    const resolved = matches.flatMap((match) => {
+      const league = leaguesByExternalId.get(match.leagueExternalId);
+      const homeTeam = teamsByExternalId.get(match.homeTeamExternalId);
+      const awayTeam = teamsByExternalId.get(match.awayTeamExternalId);
 
-        return league && homeTeam && awayTeam
-          ? [
-              {
-                externalId: match.externalId,
-                league,
-                homeTeam,
-                awayTeam,
-                scheduledAt: match.scheduledAt,
-                status: match.status,
-              },
-            ]
-          : [];
+      return league && homeTeam && awayTeam
+        ? [{ match, league, homeTeam, awayTeam }]
+        : [];
+    });
+    const existing = await this.matchesRepository.getWhere({
+      league: {
+        stage: { championship: { source: { code: ESourceCode.LegaVolley } } },
+      },
+    });
+    const existingByKey = new Map(
+      existing.map((match) => [
+        createLegaMatchLookupKey(
+          match.league.externalId,
+          match.homeTeam.name,
+          match.awayTeam.name,
+          match.scheduledAt,
+        ),
+        match,
+      ]),
+    );
+
+    await this.matchesRepository.saveMany(
+      resolved.map(({ match, league, homeTeam, awayTeam }) => {
+        const stored = existingByKey.get(
+          createLegaMatchLookupKey(
+            league.externalId,
+            homeTeam.name,
+            awayTeam.name,
+            match.scheduledAt,
+          ),
+        );
+
+        return {
+          id: stored?.id,
+          externalId: stored?.externalId ?? null,
+          league,
+          homeTeam,
+          awayTeam,
+          scheduledAt: match.scheduledAt,
+          monitoringStartedAt: stored?.monitoringStartedAt ?? null,
+          attackStatisticsUpdatedAt: stored?.attackStatisticsUpdatedAt ?? null,
+          status: match.status,
+        };
       }),
-      undefined,
-      false,
     );
     const teamLeagues = uniqueBy(
       matches.flatMap((match) => {
@@ -74,7 +104,7 @@ export class MatchesService {
       await this.teamLeaguesRepository.updateMany(teamLeagues);
     }
 
-    return matches.length;
+    return resolved.length;
   }
 
   async synchronize(

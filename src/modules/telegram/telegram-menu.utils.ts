@@ -15,7 +15,7 @@ function createSourceButtons() {
 
 export const SOURCE_MENU = Markup.inlineKeyboard(createSourceButtons());
 
-export function createMainMenu(source: ESourceCode) {
+export function createMainMenu() {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback(
