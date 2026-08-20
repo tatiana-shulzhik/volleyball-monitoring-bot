@@ -22,6 +22,7 @@ import {
   createMainMenu,
   formatChampionshipButton,
   formatMainMenuMessage,
+  getAvailableCompetitionTypes,
   showList,
   SOURCE_MENU,
 } from './telegram-menu.utils';
@@ -89,7 +90,9 @@ export class TelegramStatisticsHandlers {
   private registerCurrentStatistics(bot: Telegraf): void {
     bot.action(TELEGRAM_CALLBACKS.menu.statistics, async (context) => {
       await showList(context, {
-        items: Object.values(ECompetitionType).map((competitionType) => ({
+        items: getAvailableCompetitionTypes(
+          this.getSource(context.chat?.id),
+        ).map((competitionType) => ({
           text: COMPETITION_TYPE_BUTTONS[competitionType],
           callbackData:
             TELEGRAM_CALLBACKS.statistics.competitionType(competitionType),
@@ -153,7 +156,9 @@ export class TelegramStatisticsHandlers {
   private registerRetroStatistics(bot: Telegraf): void {
     bot.action(TELEGRAM_CALLBACKS.menu.retroStatistics, async (context) => {
       await showList(context, {
-        items: Object.values(ECompetitionType).map((competitionType) => ({
+        items: getAvailableCompetitionTypes(
+          this.getSource(context.chat?.id),
+        ).map((competitionType) => ({
           text: COMPETITION_TYPE_BUTTONS[competitionType],
           callbackData:
             TELEGRAM_CALLBACKS.retroStatistics.competitionType(competitionType),
