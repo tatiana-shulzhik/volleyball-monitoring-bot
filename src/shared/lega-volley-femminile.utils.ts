@@ -55,25 +55,28 @@ export function parseLegaVolleyFemminileCatalog(
   for (const { season, html } of pages) {
     for (const competition of readCompetitions(html, season)) {
       competitions.push(competition);
+      const hierarchy = getCompetitionHierarchy(competition.name);
       const championshipExternalId = hashId(
-        `championship:${competition.externalId}`,
+        `championship:${hierarchy.championshipName}`,
       );
-      const stageExternalId = hashId(`stage:${competition.externalId}`);
+      const stageExternalId = hashId(
+        `stage:${competition.seasonYear}:${hierarchy.stageName}`,
+      );
       const stageKey = `${championshipExternalId}:${stageExternalId}`;
       championships.set(championshipExternalId, {
         externalId: championshipExternalId,
-        name: `${competition.name} ${competition.seasonName}`,
+        name: hierarchy.championshipName,
         competitionType: ECompetitionType.Club,
       });
       stages.set(stageKey, {
         externalId: stageExternalId,
-        name: competition.name,
+        name: hierarchy.stageName,
         championshipExternalId,
         seasonName: competition.seasonName,
       });
       leagues.push({
         externalId: competition.externalId,
-        name: competition.name,
+        name: hierarchy.leagueName,
         championshipExternalId,
         stageExternalId,
       });
@@ -284,6 +287,21 @@ function readCompetitions(
   }
 
   return [...competitions.values()];
+}
+
+function getCompetitionHierarchy(name: string): {
+  championshipName: string;
+  stageName: string;
+  leagueName: string;
+} {
+  const group = name.match(/\s+(Girone\s+[A-Z0-9]+)$/i)?.[1];
+  const stageName = group ? name.slice(0, -group.length).trim() : name;
+
+  return {
+    championshipName: /\bA2\b/i.test(stageName) ? 'Serie A2' : 'Serie A1',
+    stageName,
+    leagueName: group ?? stageName,
+  };
 }
 
 function readMatchDate(html: string): Date | null {
