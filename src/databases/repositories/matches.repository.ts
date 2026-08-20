@@ -174,7 +174,9 @@ export class MatchesRepository {
       .getMany();
   }
 
-  findFinishedRequiringLegaStatistics(): Promise<MatchEntity[]> {
+  findFinishedRequiringLegaStatistics(
+    sourceCode = ESourceCode.LegaVolley,
+  ): Promise<MatchEntity[]> {
     return this.repository
       .createQueryBuilder('match')
       .innerJoinAndSelect('match.league', 'league')
@@ -187,7 +189,7 @@ export class MatchesRepository {
         finished: EMatchStatus.Finished,
       })
       .andWhere('source.code = :sourceCode', {
-        sourceCode: ESourceCode.LegaVolley,
+        sourceCode,
       })
       .andWhere('match.attack_statistics_updated_at IS NULL')
       .andWhere(

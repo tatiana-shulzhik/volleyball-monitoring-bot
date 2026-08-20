@@ -40,9 +40,32 @@ export class PlayersService {
     teamsByExternalId: Map<string, TeamEntity>,
     leaguesByExternalId: Map<number, LeaguesEntity>,
     sourceCode: ESourceCode,
+    preserveStoredNames = false,
   ): Promise<number> {
     const players = uniqueBy(incomingPlayers, (player) => player.externalId);
-    await this.playersRepository.updateMany(players, undefined, sourceCode);
+    const storedPlayersByExternalId = preserveStoredNames
+      ? new Map(
+          (
+            await this.playersRepository.getWhere({
+              source: { code: sourceCode },
+            })
+          ).map((player) => [player.externalId, player]),
+        )
+      : new Map();
+    await this.playersRepository.updateMany(
+      players.map((player) => {
+        const stored = storedPlayersByExternalId.get(player.externalId);
+        return stored
+          ? {
+              ...player,
+              fullName: stored.fullName,
+              birthYear: stored.birthYear,
+            }
+          : player;
+      }),
+      undefined,
+      sourceCode,
+    );
     const playersByExternalId = new Map(
       (
         await this.playersRepository.getWhere({
@@ -50,23 +73,45 @@ export class PlayersService {
         })
       ).map((player) => [player.externalId, player]),
     );
+    const teamIds = [
+      ...new Set([...teamsByExternalId.values()].map(({ id }) => id)),
+    ];
+    const leagueIds = [
+      ...new Set([...leaguesByExternalId.values()].map(({ id }) => id)),
+    ];
+    const existingRelations =
+      teamIds.length && leagueIds.length
+        ? await this.relationsRepository.getWhere({
+            team: { id: In(teamIds) },
+            league: { id: In(leagueIds) },
+          })
+        : [];
+    const existingRelationsByKey = new Map(
+      existingRelations.map((relation) => [
+        `${relation.player.id}:${relation.team.id}:${relation.league.id}`,
+        relation,
+      ]),
+    );
     const relations = uniqueBy(
       incomingPlayers.flatMap((incoming) => {
         const player = playersByExternalId.get(incoming.externalId);
         const team = teamsByExternalId.get(incoming.teamExternalId);
         const league = leaguesByExternalId.get(incoming.leagueExternalId);
 
-        return player && team && league
-          ? [
-              {
-                player,
-                team,
-                league,
-                shirtNumber: incoming.shirtNumber,
-                position: incoming.position,
-              },
-            ]
-          : [];
+        if (!player || !team || !league) return [];
+
+        const existing = existingRelationsByKey.get(
+          `${player.id}:${team.id}:${league.id}`,
+        );
+        return [
+          {
+            player,
+            team,
+            league,
+            shirtNumber: incoming.shirtNumber ?? existing?.shirtNumber ?? null,
+            position: incoming.position ?? existing?.position ?? null,
+          },
+        ];
       }),
       ({ player, team, league }) => `${player.id}:${team.id}:${league.id}`,
     );

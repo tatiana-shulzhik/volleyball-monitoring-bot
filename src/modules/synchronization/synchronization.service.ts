@@ -46,6 +46,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.legaVolleyCatalogService.synchronizeCurrentAndFuture();
       await this.legaVolleyFemminileCatalogService.synchronizeCurrentAndFuture();
       await this.legaVolleyCatalogService.synchronizeCurrentMatchStatistics();
+      await this.legaVolleyFemminileCatalogService.synchronizeCurrentMatchStatistics();
     }, false);
   }
 
@@ -81,10 +82,10 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async synchronizePlayerStatisticsByCron(): Promise<void> {
-    await this.runExclusive(
-      () => this.cevCatalogService.synchronizeCurrentPlayerStatistics(),
-      false,
-    );
+    await this.runExclusive(async () => {
+      await this.cevCatalogService.synchronizeCurrentPlayerStatistics();
+      await this.legaVolleyFemminileCatalogService.synchronizeCurrentMatchStatistics();
+    }, false);
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM, {
@@ -183,6 +184,9 @@ export class SynchronizationService implements OnApplicationBootstrap {
       this.logger.log('Starting LegaVolleyFemminile catalog synchronization');
       await this.runExclusive(() =>
         this.legaVolleyFemminileCatalogService.synchronizeStoredRange(),
+      );
+      await this.runExclusive(() =>
+        this.legaVolleyFemminileCatalogService.synchronizeMatchStatisticsStoredRange(),
       );
       await this.synchronizationStateRepository.markCompleted(
         ESynchronizationKey.LegaVolleyFemminileInitialCatalog,

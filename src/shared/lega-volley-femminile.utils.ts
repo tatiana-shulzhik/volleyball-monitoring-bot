@@ -5,6 +5,10 @@ import { ICevMatch } from '../interfaces/requests/matches.interface';
 import { ICevTeam } from '../interfaces/requests/teams.interface';
 import {
   ILegaVolleyFemminileCompetition,
+  ILegaVolleyFemminileMatchRoster,
+  ILegaVolleyFemminilePlayer,
+  ILegaVolleyFemminileMatchStatistics,
+  ILegaVolleyFemminilePlayerStatistic,
   ILegaVolleyFemminileSeason,
 } from '../interfaces/requests/lega-volley-femminile.interface';
 import { ECompetitionType, EMatchStatus } from './enums';
@@ -147,6 +151,109 @@ export function readLegaVolleyFemminileMatches(
   return { teams: [...teams.values()], matches: [...matches.values()] };
 }
 
+export function parseLegaVolleyFemminileMatchStatistics(
+  html: string,
+  sourceMatchId: string,
+): ILegaVolleyFemminileMatchStatistics | null {
+  const tables = [
+    ...html.matchAll(
+      /<table\b[^>]*class=["'][^"']*\bTabellino4\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ];
+  if (tables.length < 2) return null;
+
+  const teams = tables
+    .slice(0, 2)
+    .map((table) => readLegaVolleyFemminilePlayerStatistics(table[1]));
+  if (!teams[0].length && !teams[1].length) return null;
+
+  return {
+    matchExternalId: `legavolley_femminile:${sourceMatchId}`,
+    home: teams[0],
+    away: teams[1],
+  };
+}
+
+export function parseLegaVolleyFemminileMatchRoster(
+  html: string,
+  sourceMatchId: string,
+): ILegaVolleyFemminileMatchRoster | null {
+  const teams = [
+    ...html.matchAll(
+      /<table\b[^>]*class=["'][^"']*\btable-starting\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ]
+    .map((table) => readLegaVolleyFemminileRosterPlayers(table[1]))
+    .filter((players) => players.length > 0);
+  if (teams.length < 2) return null;
+
+  return {
+    matchExternalId: `legavolley_femminile:${sourceMatchId}`,
+    home: teams[0],
+    away: teams[1],
+  };
+}
+
+function readLegaVolleyFemminileRosterPlayers(
+  table: string,
+): ILegaVolleyFemminilePlayer[] {
+  const players: ILegaVolleyFemminilePlayer[] = [];
+
+  for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const externalId = row[1].match(/Foto\.aspx\?Key=([^&'"\s]+)/i)?.[1];
+    const cells = [
+      ...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi),
+    ].map((cell) => cleanText(cell[1]));
+    const shirtNumber = readNumber(cells[0] ?? '');
+    const fullName = cells[3] ?? '';
+    if (!externalId || shirtNumber === null || !fullName) continue;
+
+    players.push({
+      externalId: `legavolley_femminile:${decodeURIComponent(externalId)}`,
+      fullName,
+      shirtNumber,
+      position: cells[4] || null,
+    });
+  }
+
+  return players;
+}
+
+function readLegaVolleyFemminilePlayerStatistics(
+  table: string,
+): ILegaVolleyFemminilePlayerStatistic[] {
+  const players: ILegaVolleyFemminilePlayerStatistic[] = [];
+
+  for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const externalId = row[1].match(/\bAtleta=([^&'"\s]+)/i)?.[1];
+    if (!externalId) continue;
+
+    const cells = [
+      ...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi),
+    ].map((cell) => cleanText(cell[1]));
+    if (cells.length < 23) continue;
+
+    const rawName = cells[1];
+    const fullName = rawName.replace(/\s+\((?:C|L)\)\s*$/i, '').trim();
+    if (!fullName) continue;
+
+    players.push({
+      externalId: `legavolley_femminile:${decodeURIComponent(externalId)}`,
+      fullName,
+      shirtNumber: readNumber(cells[0]),
+      position: /\(L\)\s*$/i.test(rawName) ? 'Libero' : null,
+      attempts: readNumber(cells[17]) ?? 0,
+      successful: readNumber(cells[20]) ?? 0,
+      points: readNumber(cells[7]) ?? 0,
+      setsPlayed: cells
+        .slice(2, 7)
+        .filter((value) => value !== '' && value !== '.').length,
+    });
+  }
+
+  return players;
+}
+
 function readCompetitions(
   html: string,
   season: ILegaVolleyFemminileSeason,
@@ -216,10 +323,19 @@ function normalizeSeasonName(value: string): string {
 function cleanText(value: string): string {
   return value
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(\d+);/g, (_, code: string) =>
+      String.fromCodePoint(Number(code)),
+    )
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function readNumber(value: string): number | null {
+  return /^-?\d+$/.test(value) ? Number(value) : null;
 }
 
 function hashId(value: string): number {

@@ -56,13 +56,6 @@ export class TelegramStatisticsHandlers {
     bot.action(TELEGRAM_CALLBACK_PATTERNS.source, async (context) => {
       const source = context.match[1] as ESourceCode;
 
-      if (source === ESourceCode.LegaVolleyFemminile) {
-        await context.answerCbQuery(TELEGRAM_MESSAGES.inDevelopment, {
-          show_alert: true,
-        });
-        return;
-      }
-
       const chatId = context.chat?.id;
 
       if (chatId !== undefined) {

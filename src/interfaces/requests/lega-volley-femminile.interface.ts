@@ -9,3 +9,29 @@ export interface ILegaVolleyFemminileSeason {
   year: number;
   name: string;
 }
+
+export interface ILegaVolleyFemminilePlayer {
+  externalId: string;
+  fullName: string;
+  shirtNumber: number | null;
+  position: string | null;
+}
+
+export interface ILegaVolleyFemminilePlayerStatistic extends ILegaVolleyFemminilePlayer {
+  attempts: number;
+  successful: number;
+  points: number;
+  setsPlayed: number;
+}
+
+export interface ILegaVolleyFemminileMatchRoster {
+  matchExternalId: string;
+  home: ILegaVolleyFemminilePlayer[];
+  away: ILegaVolleyFemminilePlayer[];
+}
+
+export interface ILegaVolleyFemminileMatchStatistics {
+  matchExternalId: string;
+  home: ILegaVolleyFemminilePlayerStatistic[];
+  away: ILegaVolleyFemminilePlayerStatistic[];
+}

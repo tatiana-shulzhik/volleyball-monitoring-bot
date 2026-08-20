@@ -10,6 +10,8 @@ export const LEGA_VOLLEY_FEMMINILE_BASE_URL =
 export const LEGA_VOLLEY_FEMMINILE_SEASONS_PATH = '/classifica/';
 export const LEGA_VOLLEY_FEMMINILE_CATALOG_PATH = '/calendario/';
 export const LEGA_VOLLEY_FEMMINILE_RESULTS_PATH = '/risultati/';
+export const LEGA_VOLLEY_FEMMINILE_STATISTICS_URL =
+  'https://ww5.legavolleyfemminile.it/TabellinoGara_i.asp?IdGara=';
 
 export const CHAMPIONSHIP_RULES: ILegaCompetitionRule[] = [
   { pattern: /SuperLega/i, name: 'SuperLega' },
