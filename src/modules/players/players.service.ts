@@ -6,6 +6,7 @@ import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
+import { LegaMatchPlayerStatisticsRepository } from '../../databases/repositories/lega-match-player-statistics.repository';
 import { IFetchedPlayers } from '../../interfaces/requests/players.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
@@ -33,6 +34,7 @@ export class PlayersService {
     private readonly relationsRepository: PlayerTeamLeaguesRepository,
     private readonly teamsRepository: TeamsRepository,
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
+    private readonly legaMatchStatisticsRepository: LegaMatchPlayerStatisticsRepository,
   ) {}
 
   async upsertCatalogPlayers(
@@ -93,6 +95,8 @@ export class PlayersService {
 
     const { team, league } = relations[0];
     const seasonId = league.stage.season?.id;
+    const sourceCode =
+      league.stage.championship.source?.code ?? ESourceCode.Cev;
 
     if (!seasonId) {
       return null;
@@ -119,6 +123,7 @@ export class PlayersService {
               season: { id: In(aggregateSeasons!.map(({ id }) => id)) },
               championship: {
                 competitionType: league.stage.championship.competitionType,
+                source: { code: sourceCode },
               },
             },
           },
@@ -135,12 +140,21 @@ export class PlayersService {
     ];
     const attacks =
       championshipIds.length && playerIds.length
-        ? await this.matchAttacksRepository.aggregateByChampionshipIds(
-            championshipIds,
-            playerIds,
-          )
+        ? sourceCode === ESourceCode.LegaVolley
+          ? await this.legaMatchStatisticsRepository.aggregateByChampionshipIds(
+              championshipIds,
+              playerIds,
+            )
+          : await this.matchAttacksRepository.aggregateByChampionshipIds(
+              championshipIds,
+              playerIds,
+            )
         : [];
-    const result = createTeamStatistics(displayedRelations, attacks);
+    const result = createTeamStatistics(
+      displayedRelations,
+      attacks,
+      sourceCode,
+    );
 
     if (result && aggregateSeasons?.length) {
       result.seasonName = aggregateSeasons

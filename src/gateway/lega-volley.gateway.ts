@@ -81,21 +81,21 @@ export class LegaVolleyGateway {
     };
   }
 
-  async fetchCompetitionStages(
+  fetchCompetitionStages(
     championships: ICevChampionship[],
   ): Promise<FetchedCompetitionStages> {
     const championshipIds = new Set(
       championships.map(({ externalId }) => externalId),
     );
 
-    return {
+    return Promise.resolve({
       stages: [...this.catalogs.values()].flatMap(({ stages }) =>
         stages.filter(({ championshipExternalId }) =>
           championshipIds.has(championshipExternalId),
         ),
       ),
       isComplete: true,
-    };
+    });
   }
 
   async fetchLeagueCatalog(

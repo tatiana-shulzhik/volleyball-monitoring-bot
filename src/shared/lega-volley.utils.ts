@@ -291,8 +291,9 @@ function extractLegaPlayers(
   teamExternalId: string,
 ): ILegaPlayer[] {
   const players = new Map<string, ILegaPlayer>();
+  const rosterHtml = extractLegaRosterHtml(html);
 
-  for (const rowMatch of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+  for (const rowMatch of rosterHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const row = rowMatch[1];
     const playerMatch = row.match(
       /<a\b[^>]*href=["'][^"']*\/player\/([^"'?#]+)[^>]*>([\s\S]*?)<\/a>/i,
@@ -311,9 +312,7 @@ function extractLegaPlayers(
     const birthYear = parseLegaYear(cells.join(' '));
     const position =
       playerCellIndex >= 0
-        ? (cells
-            .slice(playerCellIndex + 1)
-            .find((cell) => cell && !/^\d{4}$/.test(cell)) ?? null)
+        ? (cells.slice(playerCellIndex + 1).find(isLegaPlayerPosition) ?? null)
         : null;
     const fullName = cleanLegaText(playerMatch[2]);
 
@@ -331,6 +330,24 @@ function extractLegaPlayers(
   }
 
   return [...players.values()];
+}
+
+function extractLegaRosterHtml(html: string): string {
+  const roster = html.match(
+    /<h[1-6]\b[^>]*>\s*Roster\s*<\/h[1-6]>([\s\S]*?)(?=<h[1-6]\b|$)/i,
+  );
+
+  return roster?.[1] ?? html;
+}
+
+function isLegaPlayerPosition(value: string): boolean {
+  return [
+    'schiacciatore',
+    'opposto',
+    'centrale',
+    'palleggiatore',
+    'libero',
+  ].includes(value.trim().toLowerCase());
 }
 
 function parseLegaNumber(value: string | undefined): number | null {

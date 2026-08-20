@@ -55,7 +55,7 @@ export class TelegramStatisticsHandlers {
     bot.action(TELEGRAM_CALLBACK_PATTERNS.source, async (context) => {
       const source = context.match[1] as ESourceCode;
 
-      if (source !== ESourceCode.Cev) {
+      if (source === ESourceCode.LegaVolleyFemminile) {
         await context.answerCbQuery(TELEGRAM_MESSAGES.inDevelopment, {
           show_alert: true,
         });
@@ -71,7 +71,7 @@ export class TelegramStatisticsHandlers {
       await context.answerCbQuery();
       await context.editMessageText(
         formatMainMenuMessage(source),
-        createMainMenu(source),
+        createMainMenu(),
       );
     });
 
@@ -81,7 +81,7 @@ export class TelegramStatisticsHandlers {
       await context.answerCbQuery();
       await context.editMessageText(
         formatMainMenuMessage(source),
-        createMainMenu(source),
+        createMainMenu(),
       );
     });
   }

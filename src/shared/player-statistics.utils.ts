@@ -1,6 +1,7 @@
 import type { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
 import type { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import type { IPlayerAttackStatisticsAggregate } from '../interfaces/responses/player-statistics.interface';
+import type { IPlayerPointsAggregate } from '../interfaces/responses/player-statistics.interface';
 import type { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
 import type {
   IFetchedMatchAttackStatistics,
@@ -10,6 +11,7 @@ import type {
 import type { MatchEntity } from '../databases/entities/match.entity';
 import { createCompetitionStageKey } from './competition-stages.utils';
 import { CEV_COUNTRIES } from './consts/constants';
+import { ESourceCode } from './enums';
 import { parseSeasonEndYear } from './season.utils';
 
 export function normalizeName(value: string): string {
@@ -163,7 +165,8 @@ export function getMatchTeams(
 
 export function createTeamStatistics(
   relations: PlayerTeamLeagueEntity[],
-  attacks: IPlayerAttackStatisticsAggregate[],
+  attacks: Array<IPlayerAttackStatisticsAggregate | IPlayerPointsAggregate>,
+  sourceCode = ESourceCode.Cev,
 ): ITeamStatistics | null {
   if (!relations.length) {
     return null;
@@ -224,9 +227,18 @@ export function createTeamStatistics(
         shirtNumber: relation.shirtNumber,
         position: relation.position,
         points: attackStatistics?.points ?? null,
-        setsPlayed: attackStatistics?.setsPlayed ?? null,
-        attackAttempts: attackStatistics?.attempts ?? null,
-        successfulAttacks: attackStatistics?.successful ?? null,
+        setsPlayed:
+          attackStatistics && 'setsPlayed' in attackStatistics
+            ? attackStatistics.setsPlayed
+            : null,
+        attackAttempts:
+          attackStatistics && 'attempts' in attackStatistics
+            ? attackStatistics.attempts
+            : null,
+        successfulAttacks:
+          attackStatistics && 'successful' in attackStatistics
+            ? attackStatistics.successful
+            : null,
       };
     })
     .sort(
@@ -255,6 +267,7 @@ export function createTeamStatistics(
     championshipName: relations[0].league.stage.championship.name,
     teamName: relations[0].team.name,
     leagueName: relations[0].league.name,
+    sourceCode,
     players,
   };
 }
@@ -265,8 +278,8 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
   ];
   const statistics =
     data.teamSeasonName !== data.seasonName || seasons.length > 1
-      ? formatRetroPlayers(data.players)
-      : formatPlayersTable(data.players);
+      ? formatRetroPlayers(data.players, data.sourceCode)
+      : formatPlayersTable(data.players, data.sourceCode);
 
   return formatTeamStatisticsHeader(data) + statistics;
 }
@@ -292,10 +305,11 @@ export function formatTeamStatisticsPages(
 
   for (const group of groups) {
     const candidateGroups = [...pageGroups, group];
-    const candidate = header + formatRetroPlayerGroups(candidateGroups);
+    const candidate =
+      header + formatRetroPlayerGroups(candidateGroups, data.sourceCode);
 
     if (candidate.length > maxLength && pageGroups.length) {
-      pages.push(header + formatRetroPlayerGroups(pageGroups));
+      pages.push(header + formatRetroPlayerGroups(pageGroups, data.sourceCode));
       pageGroups = [group];
     } else {
       pageGroups = candidateGroups;
@@ -303,7 +317,7 @@ export function formatTeamStatisticsPages(
   }
 
   if (pageGroups.length) {
-    pages.push(header + formatRetroPlayerGroups(pageGroups));
+    pages.push(header + formatRetroPlayerGroups(pageGroups, data.sourceCode));
   }
 
   return pages;
@@ -324,8 +338,11 @@ function formatTeamStatisticsHeader(data: ITeamStatistics): string {
   ].join('');
 }
 
-function formatRetroPlayers(players: ITeamStatistics['players']): string {
-  return formatRetroPlayerGroups(groupRetroPlayers(players));
+function formatRetroPlayers(
+  players: ITeamStatistics['players'],
+  sourceCode: ESourceCode,
+): string {
+  return formatRetroPlayerGroups(groupRetroPlayers(players), sourceCode);
 }
 
 function groupRetroPlayers(
@@ -341,7 +358,12 @@ function groupRetroPlayers(
   return [...playersByName.values()].sort(compareRetroPlayerGroups);
 }
 
-function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
+function formatRetroPlayerGroups(
+  groups: ITeamStatistics['players'][],
+  sourceCode: ESourceCode,
+): string {
+  const isLegaVolley = sourceCode === ESourceCode.LegaVolley;
+
   return groups
     .map((seasons) => {
       const sortedSeasons = [...seasons].sort(
@@ -371,8 +393,10 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           `<td>${escapeHtml(season.seasonName)}</td>` +
           `<td>${escapeHtml(season.championshipName)}</td>` +
           `<td>${escapeHtml(season.teamName)}</td>` +
-          `<td align="center">${formatPlayerRating(season)}</td>` +
-          `<td align="center">${formatPlayerAttacks(season)}</td>` +
+          `<td align="center">${isLegaVolley ? formatPlayerPoints(season) : formatPlayerRating(season)}</td>` +
+          (isLegaVolley
+            ? ''
+            : `<td align="center">${formatPlayerAttacks(season)}</td>`) +
           `<td align="center">${formatPlayerPosition(season.position)}</td>` +
           '</tr>',
       );
@@ -386,8 +410,8 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           '<th>Сезон</th>' +
           '<th>Турнир</th>' +
           '<th>Команда</th>' +
-          '<th>Рейтинг (очки/сеты)</th>' +
-          '<th>Атака (успешные/попытки)</th>' +
+          `<th>${isLegaVolley ? 'Очки' : 'Рейтинг (очки/сеты)'}</th>` +
+          (isLegaVolley ? '' : '<th>Атака (успешные/попытки)</th>') +
           '<th>Поз</th>' +
           '</tr>',
         ...rows,
@@ -440,7 +464,11 @@ function getLatestPlayerSeason(players: ITeamStatistics['players']): {
   };
 }
 
-function formatPlayersTable(players: ITeamStatistics['players']): string {
+function formatPlayersTable(
+  players: ITeamStatistics['players'],
+  sourceCode: ESourceCode,
+): string {
+  const isLegaVolley = sourceCode === ESourceCode.LegaVolley;
   const rows = players.map((player) => {
     const number = player.shirtNumber ?? '—';
     const position = formatPlayerPosition(player.position);
@@ -449,8 +477,10 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
       '<tr>' +
       `<td align="center">${number}</td>` +
       `<td>${escapeHtml(player.fullName)}</td>` +
-      `<td align="center">${formatPlayerRating(player)}</td>` +
-      `<td align="center">${formatPlayerAttacks(player)}</td>` +
+      `<td align="center">${isLegaVolley ? formatPlayerPoints(player) : formatPlayerRating(player)}</td>` +
+      (isLegaVolley
+        ? ''
+        : `<td align="center">${formatPlayerAttacks(player)}</td>`) +
       `<td align="center">${player.birthYear ?? '—'}</td>` +
       `<td align="center">${position}</td>` +
       '</tr>'
@@ -462,8 +492,8 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
     '<tr>' +
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
-      '<th align="center">Рейтинг (очки/сеты)</th>' +
-      '<th align="center">Атака (успешные/попытки)</th>' +
+      `<th align="center">${isLegaVolley ? 'Очки' : 'Рейтинг (очки/сеты)'}</th>` +
+      (isLegaVolley ? '' : '<th align="center">Атака (успешные/попытки)</th>') +
       '<th align="center">Год рождения</th>' +
       '<th align="center">Поз</th>' +
       '</tr>',
@@ -480,6 +510,12 @@ function formatPlayerRating(
   return rating !== null && player.points !== null && player.setsPlayed !== null
     ? `${rating.toFixed(2)} (${player.points}/${player.setsPlayed})`
     : '—';
+}
+
+function formatPlayerPoints(
+  player: ITeamStatistics['players'][number],
+): string {
+  return player.points?.toString() ?? '—';
 }
 
 function formatPlayerAttacks(
@@ -501,9 +537,13 @@ function formatPlayerPosition(position: string | null): string {
   const normalizedPosition = position.trim().toLowerCase();
   const positionLabels: Record<string, string> = {
     'outside spiker': 'WS',
+    schiacciatore: 'WS',
     opposite: 'O',
+    opposto: 'O',
     'middle blocker': 'MB',
+    centrale: 'MB',
     setter: 'S',
+    palleggiatore: 'S',
     libero: 'L',
   };
 
