@@ -3,6 +3,7 @@ import {
   ILegaVolleyFemminileMatchRoster,
   ILegaVolleyFemminileMatchStatistics,
 } from '../interfaces/requests/lega-volley-femminile.interface';
+import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import {
   LEGA_VOLLEY_FEMMINILE_BASE_URL,
   LEGA_VOLLEY_FEMMINILE_CATALOG_PATH,
@@ -44,35 +45,12 @@ export class LegaVolleyFemminileGateway {
 
     const catalog = parseLegaVolleyFemminileCatalog(pages);
     const scheduleResults = await Promise.all(
-      catalog.competitions.map(async (competition) => {
-        const query =
-          `?serie=0&campionato=${competition.externalId}` +
-          `&stagione=${competition.seasonYear}&giornata=tutte`;
-        const [resultsHtml, calendarHtml] = await Promise.all([
-          this.http.get(
-            `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${query}`,
-          ),
-          this.http.get(`${catalogUrl}${query}`),
-        ]);
-        return [resultsHtml, calendarHtml].map((html) =>
-          readLegaVolleyFemminileMatches(html, competition.externalId),
-        );
-      }),
+      catalog.competitions.map(({ externalId, seasonYear }) =>
+        this.fetchLeagueMatches(seasonYear, externalId),
+      ),
     );
     const fetched = scheduleResults.flat();
-    const matches = new Map(
-      fetched
-        .flatMap((result) => result.matches)
-        .map((match) => [match.externalId, match]),
-    );
-    for (const result of fetched) {
-      for (const match of result.matches) {
-        const existing = matches.get(match.externalId);
-        if (!existing || match.status === 'finished') {
-          matches.set(match.externalId, match);
-        }
-      }
-    }
+    const matches = this.mergeMatches(fetched);
     const matchesByLeagueExternalId = new Map<number, Date[]>();
     for (const match of matches.values()) {
       if (!match.scheduledAt) continue;
@@ -102,6 +80,50 @@ export class LegaVolleyFemminileGateway {
       ...catalog,
       teams: fetched.flatMap((result) => result.teams),
       matches: [...matches.values()],
+    };
+  }
+
+  async fetchMatches(
+    schedules: Array<{ year: number; leagueExternalId: number }>,
+  ): Promise<IFetchedMatches> {
+    const uniqueSchedules = [
+      ...new Map(
+        schedules.map((schedule) => [
+          `${schedule.year}:${schedule.leagueExternalId}`,
+          schedule,
+        ]),
+      ).values(),
+    ];
+    const fetched = [] as ReturnType<typeof readLegaVolleyFemminileMatches>[];
+    let isComplete = true;
+
+    for (const batch of splitIntoBatches(
+      uniqueSchedules,
+      LEGA_VOLLEY_HTTP_CONCURRENCY,
+    )) {
+      const results = await Promise.allSettled(
+        batch.map(({ year, leagueExternalId }) =>
+          this.fetchLeagueMatches(year, leagueExternalId),
+        ),
+      );
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          fetched.push(...result.value);
+          return;
+        }
+
+        isComplete = false;
+        const schedule = batch[index];
+        this.logger.warn(
+          `League matches request failed for ${schedule.leagueExternalId} ` +
+            `(${schedule.year}): ${getErrorMessage(result.reason)}`,
+        );
+      });
+    }
+
+    return {
+      matches: [...this.mergeMatches(fetched).values()],
+      isComplete,
     };
   }
 
@@ -193,5 +215,43 @@ export class LegaVolleyFemminileGateway {
     }
 
     return rosters;
+  }
+
+  private async fetchLeagueMatches(year: number, leagueExternalId: number) {
+    const query =
+      `?serie=0&campionato=${leagueExternalId}` +
+      `&stagione=${year}&giornata=tutte`;
+    const [resultsHtml, calendarHtml] = await Promise.all([
+      this.http.get(
+        `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${query}`,
+      ),
+      this.http.get(
+        `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_CATALOG_PATH}${query}`,
+      ),
+    ]);
+
+    return [resultsHtml, calendarHtml].map((html) =>
+      readLegaVolleyFemminileMatches(html, leagueExternalId),
+    );
+  }
+
+  private mergeMatches(
+    fetched: Array<ReturnType<typeof readLegaVolleyFemminileMatches>>,
+  ) {
+    const matches = new Map(
+      fetched
+        .flatMap((result) => result.matches)
+        .map((match) => [match.externalId, match]),
+    );
+    for (const result of fetched) {
+      for (const match of result.matches) {
+        const existing = matches.get(match.externalId);
+        if (!existing || match.status === 'finished') {
+          matches.set(match.externalId, match);
+        }
+      }
+    }
+
+    return matches;
   }
 }

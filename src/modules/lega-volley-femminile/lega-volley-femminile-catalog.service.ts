@@ -36,8 +36,42 @@ export class LegaVolleyFemminileCatalogService {
     return this.synchronizeFrom(new Date().getFullYear(), true);
   }
 
-  synchronizeCurrentAndFutureMatches(): Promise<void> {
-    return this.synchronizeFrom(new Date().getFullYear(), false);
+  async synchronizeCurrentAndFutureMatches(): Promise<void> {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const [leagues, teams] = await Promise.all([
+      this.leaguesService.getBySource(ESourceCode.LegaVolleyFemminile),
+      this.teamsService.getBySource(ESourceCode.LegaVolleyFemminile),
+    ]);
+    const schedules = leagues.flatMap((league) => {
+      const year = Number(league.stage.season?.name.slice(0, 4));
+      const isCurrentOrFuture = league.stage.endsAt
+        ? league.stage.endsAt >= now
+        : year >= currentYear;
+
+      return Number.isInteger(year) && isCurrentOrFuture
+        ? [{ year, leagueExternalId: league.externalId }]
+        : [];
+    });
+    if (!schedules.length) {
+      this.logger.log(
+        'No current LegaVolleyFemminile leagues found for matches sync',
+      );
+      return;
+    }
+
+    const fetched = await this.gateway.fetchMatches(schedules);
+    const matches = await this.matchesService.upsertCatalogMatches(
+      fetched.matches,
+      new Map(leagues.map((league) => [league.externalId, league])),
+      new Map(teams.map((team) => [team.externalId, team])),
+      ESourceCode.LegaVolleyFemminile,
+    );
+
+    this.logger.log(
+      `LegaVolleyFemminile matches synchronized: ${matches} matches, ` +
+        `${fetched.isComplete ? 'complete' : 'partially complete'}`,
+    );
   }
 
   synchronizeMatchStatisticsStoredRange(): Promise<void> {
