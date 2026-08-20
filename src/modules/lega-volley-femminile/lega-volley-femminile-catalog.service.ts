@@ -4,7 +4,9 @@ import { ESourceCode } from '../../shared/enums';
 import { getEarliestCatalogYear } from '../../shared/season.utils';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
+import { MatchesService } from '../matches/matches.service';
 import { SeasonsService } from '../seasons/seasons.service';
+import { TeamsService } from '../teams/teams.service';
 
 @Injectable()
 export class LegaVolleyFemminileCatalogService {
@@ -15,6 +17,8 @@ export class LegaVolleyFemminileCatalogService {
     private readonly seasonsService: SeasonsService,
     private readonly championshipsService: ChampionshipsService,
     private readonly leaguesService: LeaguesService,
+    private readonly teamsService: TeamsService,
+    private readonly matchesService: MatchesService,
   ) {}
 
   synchronizeStoredRange(): Promise<void> {
@@ -22,6 +26,10 @@ export class LegaVolleyFemminileCatalogService {
   }
 
   synchronizeCurrentAndFuture(): Promise<void> {
+    return this.synchronizeFrom(new Date().getFullYear());
+  }
+
+  synchronizeCurrentAndFutureMatches(): Promise<void> {
     return this.synchronizeFrom(new Date().getFullYear());
   }
 
@@ -41,15 +49,28 @@ export class LegaVolleyFemminileCatalogService {
       championshipsByExternalId,
       ESourceCode.LegaVolleyFemminile,
     );
-    await this.leaguesService.upsertCatalogLeagues(
+    const leaguesByExternalId = await this.leaguesService.upsertCatalogLeagues(
       catalog.leagues,
       stagesByKey,
+      ESourceCode.LegaVolleyFemminile,
+    );
+    const teamsByExternalId = await this.teamsService.upsertCatalogTeams(
+      catalog.teams,
+      leaguesByExternalId,
+      ESourceCode.LegaVolleyFemminile,
+      'ITA',
+    );
+    const matches = await this.matchesService.upsertCatalogMatches(
+      catalog.matches,
+      leaguesByExternalId,
+      teamsByExternalId,
       ESourceCode.LegaVolleyFemminile,
     );
 
     this.logger.log(
       `LegaVolleyFemminile catalog synchronized: ${catalog.championships.length} championships, ` +
-        `${catalog.stages.length} stages, ${catalog.leagues.length} leagues`,
+        `${catalog.stages.length} stages, ${catalog.leagues.length} leagues, ` +
+        `${teamsByExternalId.size} teams, ${matches} matches`,
     );
   }
 }

@@ -70,6 +70,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     await this.runExclusive(async () => {
       await this.cevCatalogService.synchronizeCurrentAndFutureMatches();
       await this.legaVolleyCatalogService.synchronizeCurrentAndFutureMatches();
+      await this.legaVolleyFemminileCatalogService.synchronizeCurrentAndFutureMatches();
       await this.cevCatalogService.startMonitoring();
     }, false);
   }

@@ -7,7 +7,9 @@ export const CEV_BASE_URL = 'https://www-old.cev.eu';
 export const LEGA_VOLLEY_BASE_URL = 'https://www.legavolley.it';
 export const LEGA_VOLLEY_FEMMINILE_BASE_URL =
   'https://www.legavolleyfemminile.it';
-export const LEGA_VOLLEY_FEMMINILE_CATALOG_PATH = '/classifica/';
+export const LEGA_VOLLEY_FEMMINILE_SEASONS_PATH = '/classifica/';
+export const LEGA_VOLLEY_FEMMINILE_CATALOG_PATH = '/calendario/';
+export const LEGA_VOLLEY_FEMMINILE_RESULTS_PATH = '/risultati/';
 
 export const CHAMPIONSHIP_RULES: ILegaCompetitionRule[] = [
   { pattern: /SuperLega/i, name: 'SuperLega' },
