@@ -18,16 +18,19 @@ import {
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import {
   LEGA_VOLLEY_HTTP_CONCURRENCY,
+  LEGA_VOLLEY_HTTP_TIMEOUT_MS,
   LEGA_VOLLEY_BASE_URL,
 } from '../shared/consts/constants';
 import {
   normalizeLegaSeasonName,
+  createLegaMatchLookupKey,
   parseLegaPostGaraDate,
   parseLegaTeamPage,
   parseLegaMatchStatistics,
   parseLegaSeason,
   readLegaMatches,
   readLegaMatchIds,
+  readLegaMatchReferences,
   readLegaOptions,
   readLegaTeams,
 } from '../shared/lega-volley.utils';
@@ -38,6 +41,8 @@ import { getErrorMessage } from '../shared/error.utils';
 export class LegaVolleyGateway {
   private readonly logger = new Logger(LegaVolleyGateway.name);
   private readonly catalogs = new Map<number, ILegaCatalog>();
+  private activeRequests = 0;
+  private readonly requestWaiters: Array<() => void> = [];
 
   constructor(private readonly http: HttpService) {}
 
@@ -241,72 +246,92 @@ export class LegaVolleyGateway {
 
   async fetchMatchStatisticsSince(
     earliestYear: number,
+    pendingMatchKeys?: ReadonlySet<string>,
   ): Promise<ILegaMatchStatistics[]> {
-    const results: ILegaMatchStatistics[] = [];
-    for (let year = earliestYear; year <= new Date().getFullYear(); year++) {
-      try {
-        results.push(...(await this.fetchSeasonMatchStatistics(year)));
-      } catch (error) {
-        this.logger.warn(
-          `Post-gara statistics request failed for ${year}: ` +
-            getErrorMessage(error),
-        );
-      }
-    }
-    return results;
+    const years = Array.from(
+      { length: new Date().getFullYear() - earliestYear + 1 },
+      (_, index) => earliestYear + index,
+    );
+    const results = await this.mapSettled({
+      items: years,
+      mapper: (year) => this.fetchSeasonMatchStatistics(year, pendingMatchKeys),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    return results.flatMap((result, index) => {
+      if (result.status === 'fulfilled') return result.value;
+
+      this.logger.warn(
+        `Post-gara statistics request failed for ${years[index]}: ` +
+          getErrorMessage(result.reason),
+      );
+      return [];
+    });
   }
 
   private async fetchSeasonMatchStatistics(
     year: number,
+    pendingMatchKeys?: ReadonlySet<string>,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({ year });
     const series = readLegaOptions(html, 'serie');
-    const results: ILegaMatchStatistics[] = [];
-    for (const item of series) {
-      try {
-        results.push(...(await this.fetchSeriesMatchStatistics(year, item)));
-      } catch (error) {
-        this.logger.warn(
-          `Post-gara series request failed for ${year}/${item.value}: ` +
-            getErrorMessage(error),
-        );
-      }
-    }
+    const results = await this.mapSettled({
+      items: series,
+      mapper: (item) =>
+        this.fetchSeriesMatchStatistics(year, item, pendingMatchKeys),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
 
-    return results;
+    return results.flatMap((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Post-gara series request failed for ${year}/${series[index].value}: ` +
+            getErrorMessage(result.reason),
+        );
+        return [];
+      }
+
+      return result.value;
+    });
   }
 
   private async fetchSeriesMatchStatistics(
     year: number,
     series: ILegaOption,
+    pendingMatchKeys?: ReadonlySet<string>,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({ year, series: series.value });
     const championships = readLegaOptions(html, 'campionato');
-    const results: ILegaMatchStatistics[] = [];
-    for (const item of championships) {
-      try {
-        results.push(
-          ...(await this.fetchChampionshipMatchStatistics(
-            year,
-            series.value,
-            item,
-          )),
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Post-gara championship request failed for ${year}/${item.value}: ` +
-            getErrorMessage(error),
-        );
-      }
-    }
+    const results = await this.mapSettled({
+      items: championships,
+      mapper: (item) =>
+        this.fetchChampionshipMatchStatistics(
+          year,
+          series.value,
+          item,
+          pendingMatchKeys,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
 
-    return results;
+    return results.flatMap((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Post-gara championship request failed for ${year}/${championships[index].value}: ` +
+            getErrorMessage(result.reason),
+        );
+        return [];
+      }
+
+      return result.value;
+    });
   }
 
   private async fetchChampionshipMatchStatistics(
     year: number,
     series: string,
     championship: ILegaOption,
+    pendingMatchKeys?: ReadonlySet<string>,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({
       year,
@@ -314,26 +339,30 @@ export class LegaVolleyGateway {
       championship: championship.value,
     });
     const phases = readLegaOptions(html, 'fase');
-    const results: ILegaMatchStatistics[] = [];
-    for (const item of phases) {
-      try {
-        results.push(
-          ...(await this.fetchPhaseMatchStatistics(
-            year,
-            series,
-            championship.value,
-            item,
-          )),
-        );
-      } catch (error) {
-        this.logger.warn(
-          `Post-gara phase request failed for ${championship.value}/${item.value}: ` +
-            getErrorMessage(error),
-        );
-      }
-    }
+    const results = await this.mapSettled({
+      items: phases,
+      mapper: (item) =>
+        this.fetchPhaseMatchStatistics(
+          year,
+          series,
+          championship.value,
+          item,
+          pendingMatchKeys,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
 
-    return results;
+    return results.flatMap((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Post-gara phase request failed for ${championship.value}/${phases[index].value}: ` +
+            getErrorMessage(result.reason),
+        );
+        return [];
+      }
+
+      return result.value;
+    });
   }
 
   private async fetchPhaseMatchStatistics(
@@ -341,6 +370,7 @@ export class LegaVolleyGateway {
     series: string,
     championship: string,
     phase: ILegaOption,
+    pendingMatchKeys?: ReadonlySet<string>,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({
       year,
@@ -372,20 +402,43 @@ export class LegaVolleyGateway {
         return [];
       }
       const playedOn = parseLegaPostGaraDate(result.value.day.label);
-      return readLegaMatchIds(result.value.html).map((id) => ({
-        id,
-        playedOn,
-      }));
+      const references = readLegaMatchReferences(result.value.html);
+      const referencedIds = new Set(
+        references.map(({ sourceMatchId }) => sourceMatchId),
+      );
+      const matches = references
+        .filter(
+          ({ homeTeamName, awayTeamName }) =>
+            !pendingMatchKeys ||
+            pendingMatchKeys.has(
+              createLegaMatchLookupKey(
+                Number(championship),
+                homeTeamName,
+                awayTeamName,
+                playedOn,
+              ),
+            ),
+        )
+        .map(({ sourceMatchId }) => ({ id: sourceMatchId, playedOn }));
+
+      return [
+        ...matches,
+        ...readLegaMatchIds(result.value.html)
+          .filter((id) => !referencedIds.has(id))
+          .map((id) => ({ id, playedOn })),
+      ];
     });
     const matchResults = await this.mapSettled({
       items: matches,
-      mapper: async ({ id, playedOn }) =>
-        parseLegaMatchStatistics(
+      mapper: async ({ id, playedOn }) => {
+        const statistics = parseLegaMatchStatistics(
           await this.get(`${LEGA_VOLLEY_BASE_URL}/match/${id}`),
           id,
           Number(championship),
           playedOn,
-        ),
+        );
+        return statistics;
+      },
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
 
@@ -425,8 +478,32 @@ export class LegaVolleyGateway {
     );
   }
 
-  private get(url: string): Promise<string> {
-    return this.http.get(url, 30_000);
+  private async get(url: string): Promise<string> {
+    await this.acquireRequestSlot();
+    try {
+      return await this.http.get(url, LEGA_VOLLEY_HTTP_TIMEOUT_MS);
+    } finally {
+      this.releaseRequestSlot();
+    }
+  }
+
+  private async acquireRequestSlot(): Promise<void> {
+    if (this.activeRequests < LEGA_VOLLEY_HTTP_CONCURRENCY) {
+      this.activeRequests++;
+      return;
+    }
+
+    await new Promise<void>((resolve) => this.requestWaiters.push(resolve));
+  }
+
+  private releaseRequestSlot(): void {
+    const next = this.requestWaiters.shift();
+    if (next) {
+      next();
+      return;
+    }
+
+    this.activeRequests--;
   }
 
   private async mapSettled<TInput, TOutput>(

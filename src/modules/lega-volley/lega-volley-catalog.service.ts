@@ -9,6 +9,7 @@ import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ESourceCode } from '../../shared/enums';
+import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
 
 @Injectable()
 export class LegaVolleyCatalogService {
@@ -134,8 +135,34 @@ export class LegaVolleyCatalogService {
   private async synchronizeMatchStatisticsSince(
     earliestYear: number,
   ): Promise<void> {
+    const pendingMatches =
+      await this.playerStatisticsService.findPendingLegaMatches();
+    const pendingMatchKeys = new Set(
+      pendingMatches.map((match) =>
+        createLegaMatchLookupKey(
+          match.league.externalId,
+          match.homeTeam.name,
+          match.awayTeam.name,
+          match.scheduledAt,
+        ),
+      ),
+    );
+
+    if (!pendingMatchKeys.size) {
+      this.logger.log('No pending LegaVolley match statistics found');
+      return;
+    }
+
+    this.logger.log(
+      `Starting LegaVolley statistics synchronization for ` +
+        `${pendingMatchKeys.size} pending matches`,
+    );
+
     const rows = await this.playerStatisticsService.upsertLegaMatchStatistics(
-      await this.gateway.fetchMatchStatisticsSince(earliestYear),
+      await this.gateway.fetchMatchStatisticsSince(
+        earliestYear,
+        pendingMatchKeys,
+      ),
     );
 
     this.logger.log(`LegaVolley match statistics synchronized: ${rows} rows`);

@@ -297,6 +297,9 @@ export class CevGateway {
     return this.mapSettled({
       items: matches,
       mapper: async (match) => {
+        if (!match.externalId) {
+          throw new Error(`CEV match ${match.id} has no external ID`);
+        }
         const html = await this.http.get(
           createMatchStatisticsUrl(match.externalId),
         );
@@ -317,6 +320,9 @@ export class CevGateway {
     const results = await this.mapSettled({
       items: matches,
       mapper: async (match) => {
+        if (!match.externalId) {
+          throw new Error(`CEV match ${match.id} has no external ID`);
+        }
         const html = await this.http.get(
           createMatchPageUrl(
             match.league.stage.championship.externalId,

@@ -32,6 +32,7 @@ import { SeedLegaVolleySource1760000013000 } from '../databases/migrations/17600
 import { ScopeLeagueExternalIdByStage1760000014000 } from '../databases/migrations/1760000014000-ScopeLeagueExternalIdByStage';
 import { CreateLegaMatchPlayerStatistics1760000015000 } from '../databases/migrations/1760000015000-CreateLegaMatchStats';
 import { CreateTelegramAccess1760000016000 } from '../databases/migrations/1760000016000-CreateTelegramAccess';
+import { MakeLegaMatchExternalIdNullable1760000017000 } from '../databases/migrations/1760000017000-MakeLegaMatchExternalIdNullable';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -96,6 +97,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         ScopeLeagueExternalIdByStage1760000014000,
         CreateLegaMatchPlayerStatistics1760000015000,
         CreateTelegramAccess1760000016000,
+        MakeLegaMatchExternalIdNullable1760000017000,
       ],
     };
   }

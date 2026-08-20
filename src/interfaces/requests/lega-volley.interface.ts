@@ -72,3 +72,9 @@ export interface ILegaMatchStatistics {
   home: ILegaMatchPlayerStatistic[];
   away: ILegaMatchPlayerStatistic[];
 }
+
+export interface ILegaMatchReference {
+  sourceMatchId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+}
