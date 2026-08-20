@@ -36,6 +36,7 @@ import {
 } from '../shared/lega-volley.utils';
 import { HttpService } from '../shared/http/http.service';
 import { getErrorMessage } from '../shared/error.utils';
+import { parseSeasonEndYear } from '../shared/season.utils';
 
 @Injectable()
 export class LegaVolleyGateway {
@@ -52,14 +53,21 @@ export class LegaVolleyGateway {
     const currentYear = new Date().getFullYear();
     const firstHtml = await this.fetchSchedule(currentYear);
     const seasons = readLegaOptions(firstHtml, 'stagione')
-      .map(({ value, label }) => ({ year: Number(value), name: label }))
-      .filter(({ year }) => Number.isInteger(year) && year >= earliestYear);
+      .map(({ value, label }) => ({
+        year: Number(value),
+        name: normalizeLegaSeasonName(label),
+      }))
+      .filter(
+        ({ year, name }) =>
+          Number.isInteger(year) &&
+          (parseSeasonEndYear(name) ?? 0) >= earliestYear,
+      );
 
     const results = await Promise.all(
       seasons.map(async ({ year, name }) => {
         const html =
           year === currentYear ? firstHtml : await this.fetchSchedule(year);
-        return parseLegaSeason(year, normalizeLegaSeasonName(name), html);
+        return parseLegaSeason(year, name, html);
       }),
     );
 

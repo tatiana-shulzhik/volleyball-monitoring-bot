@@ -5,6 +5,9 @@ import type {
 
 export const CEV_BASE_URL = 'https://www-old.cev.eu';
 export const LEGA_VOLLEY_BASE_URL = 'https://www.legavolley.it';
+export const LEGA_VOLLEY_FEMMINILE_BASE_URL =
+  'https://www.legavolleyfemminile.it';
+export const LEGA_VOLLEY_FEMMINILE_CATALOG_PATH = '/classifica/';
 
 export const CHAMPIONSHIP_RULES: ILegaCompetitionRule[] = [
   { pattern: /SuperLega/i, name: 'SuperLega' },

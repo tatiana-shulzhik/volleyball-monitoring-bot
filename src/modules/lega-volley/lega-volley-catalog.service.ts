@@ -7,9 +7,9 @@ import { PlayerStatisticsService } from '../players/player-statistics.service';
 import { PlayersService } from '../players/players.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
-import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ESourceCode } from '../../shared/enums';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
+import { getEarliestCatalogYear } from '../../shared/season.utils';
 
 @Injectable()
 export class LegaVolleyCatalogService {
@@ -27,10 +27,7 @@ export class LegaVolleyCatalogService {
   ) {}
 
   async synchronizeStoredRange(): Promise<void> {
-    await this.synchronizeFrom(
-      new Date().getFullYear() - PREVIOUS_YEARS_COUNT,
-      true,
-    );
+    await this.synchronizeFrom(getEarliestCatalogYear(), true);
   }
 
   async synchronizeCurrentAndFuture(): Promise<void> {
@@ -71,9 +68,7 @@ export class LegaVolleyCatalogService {
   }
 
   async synchronizeMatchStatisticsStoredRange(): Promise<void> {
-    await this.synchronizeMatchStatisticsSince(
-      new Date().getFullYear() - PREVIOUS_YEARS_COUNT,
-    );
+    await this.synchronizeMatchStatisticsSince(getEarliestCatalogYear());
   }
 
   async synchronizeCurrentMatchStatistics(): Promise<void> {
