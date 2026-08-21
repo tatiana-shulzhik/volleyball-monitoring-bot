@@ -396,7 +396,7 @@ export class LegaVolleyFemminileGateway {
       leagueExternalId,
       serie,
       fetched: [{ teams: teams.length ? teams : results.teams, matches }],
-      range: readLegaVolleyFemminileDateRange(calendarHtml),
+      range: readLegaVolleyFemminileDateRange(resultsHtml),
     };
   }
 
