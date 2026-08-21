@@ -112,6 +112,7 @@ export class LegaVolleyFemminileCatalogService {
       leaguesByExternalId,
       ESourceCode.LegaVolleyFemminile,
       'ITA',
+      true,
     );
     const matches = await this.matchesService.upsertCatalogMatches(
       catalog.matches,

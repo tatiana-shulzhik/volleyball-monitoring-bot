@@ -154,6 +154,51 @@ export function readLegaVolleyFemminileMatches(
   return { teams: [...teams.values()], matches: [...matches.values()] };
 }
 
+export function readLegaVolleyFemminileCalendarTeams(
+  html: string,
+  leagueExternalId: number,
+): ICevTeam[] {
+  const clubs = html.match(
+    /<ul\b[^>]*aria-labelledby=["']filtroClub["'][^>]*>([\s\S]*?)<\/ul>/i,
+  )?.[1];
+  if (!clubs) return [];
+
+  const teams = new Map<string, ICevTeam>();
+  for (const link of readLinks(clubs)) {
+    const externalId = parseUrl(link.href).searchParams.get('club');
+    const name = cleanText(link.label);
+    if (externalId && name) {
+      teams.set(externalId, {
+        externalId,
+        name,
+        leagueExternalId,
+        country: 'ITA',
+      });
+    }
+  }
+
+  return [...teams.values()];
+}
+
+export function readLegaVolleyFemminileSelectedCompetitionId(
+  html: string,
+): number | null {
+  for (const link of html.matchAll(/<a\b([^>]*)>/gi)) {
+    const attributes = link[1];
+    const className = attributes.match(/\bclass=["']([^"']*)["']/i)?.[1];
+    const externalId = attributes.match(/\bcampionato=(\d+)/i)?.[1];
+    if (
+      className?.split(/\s+/).includes('dropdown-item') &&
+      className.split(/\s+/).includes('active') &&
+      externalId
+    ) {
+      return Number(externalId);
+    }
+  }
+
+  return null;
+}
+
 export function readLegaVolleyFemminileDateRange(html: string): {
   startsAt?: Date;
   endsAt?: Date;
@@ -321,8 +366,10 @@ function readCompetitions(
 }
 
 function readCompetitionSerie(url: URL, name: string): number {
-  const serie = Number(url.searchParams.get('serie'));
-  if (serie === 1 || serie === 2) return serie;
+  const rawSerie = url.searchParams.get('serie');
+  if (rawSerie !== null && /^\d+$/.test(rawSerie)) {
+    return Number(rawSerie);
+  }
 
   return /\bA2\b/i.test(name) ? 2 : 1;
 }

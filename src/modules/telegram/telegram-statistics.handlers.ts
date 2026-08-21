@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Markup, Telegraf } from 'telegraf';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { TEAM_STATISTICS_CACHE_TTL_SECONDS } from '../../shared/consts/constants';
-import { ECompetitionType, ESourceCode } from '../../shared/enums';
+import { ESourceCode } from '../../shared/enums';
 import {
   formatTeamStatistics,
   formatTeamStatisticsPages,

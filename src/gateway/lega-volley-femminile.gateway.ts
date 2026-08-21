@@ -16,12 +16,15 @@ import {
 import { HttpService } from '../shared/http/http.service';
 import { splitIntoBatches } from '../shared/array.utils';
 import { getErrorMessage } from '../shared/error.utils';
+import { EMatchStatus } from '../shared/enums';
 import {
   parseLegaVolleyFemminileCatalog,
   parseLegaVolleyFemminileMatchRoster,
   parseLegaVolleyFemminileMatchStatistics,
+  readLegaVolleyFemminileCalendarTeams,
   readLegaVolleyFemminileDateRange,
   readLegaVolleyFemminileMatches,
+  readLegaVolleyFemminileSelectedCompetitionId,
   readLegaVolleyFemminileSeasons,
 } from '../shared/lega-volley-femminile.utils';
 
@@ -222,8 +225,7 @@ export class LegaVolleyFemminileGateway {
     serie: number,
   ) {
     const query =
-      `?campionato=${leagueExternalId}` +
-      `&serie=${serie}&stagione=${year}&giornata=tutte`;
+      `?campionato=${leagueExternalId}` + `&serie=${serie}&stagione=${year}`;
     const [resultsHtml, calendarHtml] = await Promise.all([
       this.http.get(
         `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${query}`,
@@ -232,13 +234,24 @@ export class LegaVolleyFemminileGateway {
         `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_CATALOG_PATH}${query}`,
       ),
     ]);
+    const results = readLegaVolleyFemminileMatches(
+      resultsHtml,
+      leagueExternalId,
+    );
+    const matches =
+      readLegaVolleyFemminileSelectedCompetitionId(resultsHtml) ===
+      leagueExternalId
+        ? results.matches
+        : [];
+    const teams = readLegaVolleyFemminileCalendarTeams(
+      calendarHtml,
+      leagueExternalId,
+    );
 
     return {
       leagueExternalId,
-      fetched: [resultsHtml, calendarHtml].map((html) =>
-        readLegaVolleyFemminileMatches(html, leagueExternalId),
-      ),
-      range: readLegaVolleyFemminileDateRange(resultsHtml),
+      fetched: [{ teams: teams.length ? teams : results.teams, matches }],
+      range: readLegaVolleyFemminileDateRange(calendarHtml),
     };
   }
 
@@ -253,7 +266,7 @@ export class LegaVolleyFemminileGateway {
     for (const result of fetched) {
       for (const match of result.matches) {
         const existing = matches.get(match.externalId);
-        if (!existing || match.status === 'finished') {
+        if (!existing || match.status === EMatchStatus.Finished) {
           matches.set(match.externalId, match);
         }
       }

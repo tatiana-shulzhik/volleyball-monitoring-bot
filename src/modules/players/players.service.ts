@@ -4,6 +4,7 @@ import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
+import { PlayersEntity } from '../../databases/entities/players.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { IFetchedPlayers } from '../../interfaces/requests/players.interface';
@@ -51,7 +52,7 @@ export class PlayersService {
             })
           ).map((player) => [player.externalId, player]),
         )
-      : new Map();
+      : new Map<string, PlayersEntity>();
     await this.playersRepository.updateMany(
       players.map((player) => {
         const stored = storedPlayersByExternalId.get(player.externalId);
