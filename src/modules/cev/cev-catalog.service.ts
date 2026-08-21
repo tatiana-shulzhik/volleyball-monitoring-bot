@@ -8,9 +8,11 @@ import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
 import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
-import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
 import { ESourceCode } from '../../shared/enums';
-import { parseSeasonEndYear } from '../../shared/season.utils';
+import {
+  getEarliestCatalogYear,
+  parseSeasonEndYear,
+} from '../../shared/season.utils';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
 import { MatchesService } from '../matches/matches.service';
@@ -39,7 +41,7 @@ export class CevCatalogService {
   ) {}
 
   async synchronizeStoredRange(): Promise<void> {
-    const earliestYear = new Date().getFullYear() - PREVIOUS_YEARS_COUNT;
+    const earliestYear = getEarliestCatalogYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(earliestYear));
     await this.synchronizeMatches(false);
   }
@@ -99,7 +101,7 @@ export class CevCatalogService {
   }
 
   async removeOutdatedCatalog(): Promise<CleanupResult> {
-    const beforeYear = new Date().getFullYear() - PREVIOUS_YEARS_COUNT;
+    const beforeYear = getEarliestCatalogYear();
 
     return this.seasonsRepository.useTransaction(undefined, async (manager) => {
       const seasons = await this.seasonsRepository.deleteOutdated(

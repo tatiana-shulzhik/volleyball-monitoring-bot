@@ -18,9 +18,9 @@ export const SOURCE_MENU = Markup.inlineKeyboard(createSourceButtons());
 export function getAvailableCompetitionTypes(
   source: ESourceCode,
 ): ECompetitionType[] {
-  return source === ESourceCode.LegaVolley
-    ? [ECompetitionType.Club]
-    : Object.values(ECompetitionType);
+  return source === ESourceCode.Cev
+    ? Object.values(ECompetitionType)
+    : [ECompetitionType.Club];
 }
 
 export function createMainMenu() {

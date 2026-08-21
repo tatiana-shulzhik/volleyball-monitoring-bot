@@ -4,6 +4,7 @@ import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
+import { PlayersEntity } from '../../databases/entities/players.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
 import { IFetchedPlayers } from '../../interfaces/requests/players.interface';
@@ -23,6 +24,7 @@ import {
 } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 import { splitIntoBatches, uniqueBy } from '../../shared/array.utils';
+import { normalizePlayerName } from '../../shared/player-name.utils';
 
 @Injectable()
 export class PlayersService {
@@ -40,9 +42,33 @@ export class PlayersService {
     teamsByExternalId: Map<string, TeamEntity>,
     leaguesByExternalId: Map<number, LeaguesEntity>,
     sourceCode: ESourceCode,
+    preserveStoredNames = false,
+    removeObsoleteRelations = false,
   ): Promise<number> {
     const players = uniqueBy(incomingPlayers, (player) => player.externalId);
-    await this.playersRepository.updateMany(players, undefined, sourceCode);
+    const storedPlayersByExternalId = preserveStoredNames
+      ? new Map(
+          (
+            await this.playersRepository.getWhere({
+              source: { code: sourceCode },
+            })
+          ).map((player) => [player.externalId, player]),
+        )
+      : new Map<string, PlayersEntity>();
+    await this.playersRepository.updateMany(
+      players.map((player) => {
+        const stored = storedPlayersByExternalId.get(player.externalId);
+        return stored
+          ? {
+              ...player,
+              fullName: stored.fullName,
+              birthYear: stored.birthYear,
+            }
+          : player;
+      }),
+      undefined,
+      sourceCode,
+    );
     const playersByExternalId = new Map(
       (
         await this.playersRepository.getWhere({
@@ -50,31 +76,97 @@ export class PlayersService {
         })
       ).map((player) => [player.externalId, player]),
     );
+    const teamIds = [
+      ...new Set([...teamsByExternalId.values()].map(({ id }) => id)),
+    ];
+    const leagueIds = [
+      ...new Set([...leaguesByExternalId.values()].map(({ id }) => id)),
+    ];
+    const existingRelations =
+      teamIds.length && leagueIds.length
+        ? await this.relationsRepository.getWhere({
+            team: { id: In(teamIds) },
+            league: { id: In(leagueIds) },
+          })
+        : [];
+    const existingRelationsByKey = new Map(
+      existingRelations.map((relation) => [
+        `${relation.player.id}:${relation.team.id}:${relation.league.id}`,
+        relation,
+      ]),
+    );
     const relations = uniqueBy(
       incomingPlayers.flatMap((incoming) => {
         const player = playersByExternalId.get(incoming.externalId);
         const team = teamsByExternalId.get(incoming.teamExternalId);
         const league = leaguesByExternalId.get(incoming.leagueExternalId);
 
-        return player && team && league
-          ? [
-              {
-                player,
-                team,
-                league,
-                shirtNumber: incoming.shirtNumber,
-                position: incoming.position,
-              },
-            ]
-          : [];
+        if (!player || !team || !league) return [];
+
+        const existing = existingRelationsByKey.get(
+          `${player.id}:${team.id}:${league.id}`,
+        );
+        return [
+          {
+            player,
+            team,
+            league,
+            shirtNumber: incoming.shirtNumber ?? existing?.shirtNumber ?? null,
+            position: incoming.position ?? existing?.position ?? null,
+          },
+        ];
       }),
       ({ player, team, league }) => `${player.id}:${team.id}:${league.id}`,
     );
-    for (const batch of splitIntoBatches(relations)) {
-      await this.relationsRepository.updateMany(batch);
+    if (!removeObsoleteRelations) {
+      for (const batch of splitIntoBatches(relations)) {
+        await this.relationsRepository.updateMany(batch);
+      }
+      return players.length;
     }
 
+    const changes = calculatePlayerRelationChanges({
+      incoming: incomingPlayers.map((player) => ({
+        ...player,
+        position: player.position ?? '',
+      })),
+      existing: existingRelations,
+      playersByExternalId,
+      teamsByExternalId,
+      leaguesByExternalId,
+    });
+    await applyRelationChanges({
+      transactionOwner: this.playersRepository,
+      repository: this.relationsRepository,
+      changes,
+      allowDeletion: true,
+    });
+
     return players.length;
+  }
+
+  async resolveSyntheticPlayersByFullName(
+    incoming: ILegaPlayer[],
+    sourceCode: ESourceCode,
+  ): Promise<ILegaPlayer[]> {
+    const playersByName = new Map<string, PlayersEntity[]>();
+    for (const player of await this.playersRepository.getWhere({
+      source: { code: sourceCode },
+    })) {
+      const key = normalizePlayerName(player.fullName);
+      const players = playersByName.get(key) ?? [];
+      players.push(player);
+      playersByName.set(key, players);
+    }
+
+    return incoming.map((player) => {
+      if (!player.externalId.includes(':synthetic:')) return player;
+
+      const matches = playersByName.get(normalizePlayerName(player.fullName));
+      return matches?.length === 1
+        ? { ...player, externalId: matches[0].externalId }
+        : player;
+    });
   }
 
   async findTeamStatistics(
@@ -186,7 +278,10 @@ export class PlayersService {
       ...new Set(fetched.players.map(({ externalId }) => externalId)),
     ];
     const existingPlayers = externalIds.length
-      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.playersRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const calculatedChanges = calculatePlayerChanges({
       incoming: fetched.players,
@@ -201,7 +296,10 @@ export class PlayersService {
     });
 
     const players = externalIds.length
-      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.playersRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const teams = [
       ...new Map(sources.map(({ team }) => [team.externalId, team])).values(),

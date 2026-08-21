@@ -34,6 +34,7 @@ export class MatchesService {
     incoming: ICevMatch[],
     leaguesByExternalId: Map<number, LeaguesEntity>,
     teamsByExternalId: Map<string, TeamEntity>,
+    sourceCode = ESourceCode.LegaVolley,
   ): Promise<number> {
     const matches = uniqueBy(incoming, (match) => match.externalId);
     const resolved = matches.flatMap((match) => {
@@ -47,7 +48,7 @@ export class MatchesService {
     });
     const existing = await this.matchesRepository.getWhere({
       league: {
-        stage: { championship: { source: { code: ESourceCode.LegaVolley } } },
+        stage: { championship: { source: { code: sourceCode } } },
       },
     });
     const existingByKey = new Map(
@@ -75,7 +76,13 @@ export class MatchesService {
 
         return {
           id: stored?.id,
-          externalId: stored?.externalId ?? null,
+          externalId:
+            sourceCode === ESourceCode.LegaVolleyFemminile
+              ? match.externalId
+              : (stored?.externalId ??
+                (sourceCode === ESourceCode.LegaVolley
+                  ? null
+                  : match.externalId)),
           league,
           homeTeam,
           awayTeam,
@@ -141,9 +148,16 @@ export class MatchesService {
     const [leagues, teams, existing] = await Promise.all([
       this.leaguesRepository.getWhere({
         externalId: In(leagueExternalIds),
+        stage: { id: In(stages.map(({ id }) => id)) },
       }),
-      this.teamsRepository.getWhere({ externalId: In(teamExternalIds) }),
-      this.matchesRepository.getWhere({ externalId: In(matchExternalIds) }),
+      this.teamsRepository.getWhere({
+        externalId: In(teamExternalIds),
+        source: { code: ESourceCode.Cev },
+      }),
+      this.matchesRepository.getWhere({
+        externalId: In(matchExternalIds),
+        league: { stage: { id: In(stages.map(({ id }) => id)) } },
+      }),
     ]);
     const changes = calculateMatchChanges({
       incoming: fetched.matches,

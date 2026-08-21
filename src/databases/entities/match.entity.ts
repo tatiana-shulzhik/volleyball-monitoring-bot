@@ -5,6 +5,7 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { EMatchStatus } from '../../shared/enums';
 import { LeaguesEntity } from './leagues.entity';
@@ -12,6 +13,7 @@ import { TeamEntity } from './team.entity';
 
 @Entity({ name: 'matches' })
 @Index(['status', 'attackStatisticsUpdatedAt'])
+@Unique(['externalId', 'league'])
 export class MatchEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -19,7 +21,6 @@ export class MatchEntity {
   @Column({
     name: 'external_id',
     type: 'varchar',
-    unique: true,
     nullable: true,
   })
   externalId: string | null;

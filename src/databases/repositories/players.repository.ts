@@ -63,7 +63,7 @@ export class PlayersRepository {
     }));
 
     return repository.upsert(values, {
-      conflictPaths: ['externalId'],
+      conflictPaths: ['externalId', 'source'],
       skipUpdateIfNoValuesChanged: true,
     });
   }

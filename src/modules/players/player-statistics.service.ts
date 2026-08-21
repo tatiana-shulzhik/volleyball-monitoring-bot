@@ -12,6 +12,7 @@ import { RedisCacheService } from '../../cache/redis-cache.service';
 import { IFetchedMatchRoster } from '../../interfaces/requests/player-statistics.interface';
 import { IFetchedMatchAttackStatistics } from '../../interfaces/requests/player-statistics.interface';
 import { ILegaMatchStatistics } from '../../interfaces/requests/lega-volley.interface';
+import { ILegaVolleyFemminileMatchStatistics } from '../../interfaces/requests/lega-volley-femminile.interface';
 import { createCompetitionStageKey } from '../../shared/competition-stages.utils';
 import {
   buildRelationMaps,
@@ -124,8 +125,91 @@ export class PlayerStatisticsService {
     return rows.length;
   }
 
-  findPendingLegaMatches(): Promise<MatchEntity[]> {
-    return this.matchesRepository.findFinishedRequiringLegaStatistics();
+  async upsertLegaVolleyFemminileMatchStatistics(
+    statistics: ILegaVolleyFemminileMatchStatistics[],
+  ): Promise<number> {
+    const sourceCode = ESourceCode.LegaVolleyFemminile;
+    const [players, matches] = await Promise.all([
+      this.playersRepository.getWhere({ source: { code: sourceCode } }),
+      this.matchesRepository.getWhere({
+        league: { stage: { championship: { source: { code: sourceCode } } } },
+      }),
+    ]);
+    const playersByExternalId = new Map(
+      players.map((player) => [player.externalId, player]),
+    );
+    const matchesByExternalId = new Map(
+      matches.flatMap((match) =>
+        match.externalId ? [[match.externalId, match] as const] : [],
+      ),
+    );
+    const sourceUpdatedAt = new Date();
+    const rows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
+    const replacedMatchIds: number[] = [];
+    const completedMatchIds: number[] = [];
+
+    for (const item of statistics) {
+      const match = matchesByExternalId.get(item.matchExternalId);
+      if (!match) continue;
+
+      const currentRows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
+      const expectedRows = item.home.length + item.away.length;
+      for (const [team, playerStatistics] of [
+        [match.homeTeam, item.home],
+        [match.awayTeam, item.away],
+      ] as const) {
+        for (const statistic of playerStatistics) {
+          const player = playersByExternalId.get(statistic.externalId);
+          if (!player) continue;
+
+          currentRows.push({
+            match,
+            team,
+            player,
+            attempts: statistic.attempts,
+            successful: statistic.successful,
+            points: statistic.points,
+            setsPlayed: statistic.setsPlayed,
+            sourceUpdatedAt,
+          });
+        }
+      }
+
+      if (!currentRows.length) continue;
+      rows.push(...currentRows);
+      replacedMatchIds.push(match.id);
+      if (currentRows.length === expectedRows) {
+        completedMatchIds.push(match.id);
+      }
+    }
+
+    if (replacedMatchIds.length) {
+      await this.matchAttacksRepository.useTransaction(async (manager) => {
+        await this.matchAttacksRepository.replaceMany(
+          replacedMatchIds,
+          rows,
+          manager,
+        );
+        if (completedMatchIds.length) {
+          await this.matchesRepository.markAttackStatisticsLoaded(
+            completedMatchIds,
+            sourceUpdatedAt,
+            manager,
+          );
+        }
+      });
+      await this.cache.deleteByPattern(`team-statistics:${sourceCode}:*`);
+    }
+
+    return rows.length;
+  }
+
+  findPendingLegaMatches(
+    sourceCode = ESourceCode.LegaVolley,
+  ): Promise<MatchEntity[]> {
+    return this.matchesRepository.findFinishedRequiringLegaStatistics(
+      sourceCode,
+    );
   }
 
   findPendingAttackStageIds(): Promise<number[]> {
@@ -400,7 +484,10 @@ export class PlayerStatisticsService {
     ];
     const playersByExternalId = new Map(
       (
-        await this.playersRepository.getWhere({ externalId: In(externalIds) })
+        await this.playersRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       ).map((player) => [player.externalId, player]),
     );
     const missingPlayers = [
@@ -423,6 +510,7 @@ export class PlayerStatisticsService {
 
       for (const player of await this.playersRepository.getWhere({
         externalId: In(missingPlayers.map(({ externalId }) => externalId)),
+        source: { code: ESourceCode.Cev },
       })) {
         playersByExternalId.set(player.externalId, player);
       }

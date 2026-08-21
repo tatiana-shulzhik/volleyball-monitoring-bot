@@ -515,12 +515,14 @@ function formatPlayerPosition(position: string | null): string {
   const positionLabels: Record<string, string> = {
     'outside spiker': 'WS',
     schiacciatore: 'WS',
+    schiacciatrice: 'WS',
     opposite: 'O',
     opposto: 'O',
     'middle blocker': 'MB',
     centrale: 'MB',
     setter: 'S',
     palleggiatore: 'S',
+    palleggiatrice: 'S',
     libero: 'L',
   };
 
@@ -559,6 +561,7 @@ function compareRelationsBySeason(
 
   return (
     seasonDifference ||
+    Number(right.position !== null) - Number(left.position !== null) ||
     Number(right.shirtNumber !== null) - Number(left.shirtNumber !== null)
   );
 }

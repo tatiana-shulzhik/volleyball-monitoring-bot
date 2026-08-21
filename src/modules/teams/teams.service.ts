@@ -36,6 +36,7 @@ export class TeamsService {
     leaguesByExternalId: Map<number, LeaguesEntity>,
     sourceCode: ESourceCode,
     fallbackCountry?: string,
+    removeObsoleteRelations = false,
   ): Promise<Map<string, TeamEntity>> {
     const uniqueTeams = uniqueBy(incomingTeams, (team) => team.externalId);
     await this.teamsRepository.updateMany(uniqueTeams, undefined, sourceCode);
@@ -45,6 +46,7 @@ export class TeamsService {
           externalId: team.externalId,
           country: team.country ?? fallbackCountry,
         })),
+        sourceCode,
       );
     }
     const teamsByExternalId = new Map(
@@ -59,6 +61,7 @@ export class TeamsService {
       incomingTeams,
       teamsByExternalId,
       leaguesByExternalId,
+      removeObsoleteRelations,
     );
 
     return teamsByExternalId;
@@ -72,6 +75,7 @@ export class TeamsService {
     incomingTeams: SynchronizeTeamsParams['teams'],
     teamsByExternalId: Map<string, TeamEntity>,
     leaguesByExternalId: Map<number, LeaguesEntity>,
+    removeObsoleteRelations: boolean,
   ): Promise<void> {
     const relations = uniqueBy(
       incomingTeams.flatMap((team) => {
@@ -82,7 +86,26 @@ export class TeamsService {
       }),
       ({ team, league }) => `${team.id}:${league.id}`,
     );
-    await this.teamLeaguesRepository.updateMany(relations);
+    if (!removeObsoleteRelations) {
+      await this.teamLeaguesRepository.updateMany(relations);
+      return;
+    }
+
+    const existing = await this.teamLeaguesRepository.getWhere({
+      league: { id: In([...leaguesByExternalId.values()].map(({ id }) => id)) },
+    });
+    const changes = calculateTeamLeagueChanges({
+      incoming: incomingTeams,
+      existing,
+      teamsByExternalId,
+      leaguesByExternalId,
+    });
+    await applyRelationChanges({
+      transactionOwner: this.teamsRepository,
+      repository: this.teamLeaguesRepository,
+      changes,
+      allowDeletion: true,
+    });
   }
 
   async synchronize(data: SynchronizeTeamsParams): Promise<ISynchronizedTeams> {
@@ -101,7 +124,10 @@ export class TeamsService {
       ...new Set(incomingTeams.map(({ externalId }) => externalId)),
     ];
     const existingTeams = externalIds.length
-      ? await this.teamsRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.teamsRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const calculatedChanges = calculateTeamChanges({
       incoming: incomingTeams,
@@ -116,7 +142,10 @@ export class TeamsService {
     });
 
     const teams = externalIds.length
-      ? await this.teamsRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.teamsRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const existingRelations = await this.teamLeaguesRepository.getWhere({
       league: { id: In(leagues.map(({ id }) => id)) },

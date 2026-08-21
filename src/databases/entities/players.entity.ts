@@ -4,10 +4,12 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { SourcesEntity } from './sources.entity';
 
 @Entity({ name: 'players' })
+@Unique(['externalId', 'source'])
 export class PlayersEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -15,7 +17,7 @@ export class PlayersEntity {
   @Column({ name: 'full_name' })
   fullName: string;
 
-  @Column({ name: 'external_id', unique: true })
+  @Column({ name: 'external_id' })
   externalId: string;
 
   @ManyToOne(() => SourcesEntity, (source) => source.players, {
