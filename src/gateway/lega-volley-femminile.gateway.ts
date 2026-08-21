@@ -10,6 +10,8 @@ import {
   LEGA_VOLLEY_FEMMINILE_RESULTS_PATH,
   LEGA_VOLLEY_FEMMINILE_SEASONS_PATH,
   LEGA_VOLLEY_FEMMINILE_STATISTICS_URL,
+  LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_PRESENTATION_URL,
+  LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS,
   LEGA_VOLLEY_HTTP_CONCURRENCY,
   LEGA_VOLLEY_HTTP_TIMEOUT_MS,
 } from '../shared/consts/constants';
@@ -18,9 +20,11 @@ import { splitIntoBatches } from '../shared/array.utils';
 import { getErrorMessage } from '../shared/error.utils';
 import { EMatchStatus } from '../shared/enums';
 import {
+  createSummerTourPlayerNamesBySurname,
   parseLegaVolleyFemminileCatalog,
   parseLegaVolleyFemminileMatchStatistics,
   parseLegaVolleyFemminileTeamRoster,
+  parseLegaVolleyFemminileSummerTourRosters,
   readLegaVolleyFemminileCalendarTeams,
   readLegaVolleyFemminileDateRange,
   readLegaVolleyFemminileMatches,
@@ -186,7 +190,9 @@ export class LegaVolleyFemminileGateway {
   async fetchTeamRosters(
     sources: Array<{
       teamExternalId: string;
+      teamName: string;
       leagueExternalId: number;
+      leagueName: string;
       year: number;
     }>,
   ): Promise<{
@@ -194,10 +200,24 @@ export class LegaVolleyFemminileGateway {
     isComplete: boolean;
   }> {
     const rosters: ILegaVolleyFemminileTeamRoster[] = [];
-    let isComplete = true;
+    const summerTourSources = sources.filter((source) =>
+      this.getSummerTourRosterUrl(source.year, source.leagueName),
+    );
+    const standardSources = sources.filter(
+      (source) => !summerTourSources.includes(source),
+    );
+    const summerTour = await this.fetchSummerTourRosters(summerTourSources);
+    rosters.push(...summerTour.rosters);
+    let isComplete = summerTour.isComplete;
+    const standardSourcesByKey = new Map(
+      standardSources.map((source) => [
+        `${source.year}:${source.teamExternalId}`,
+        source,
+      ]),
+    );
 
     for (const batch of splitIntoBatches(
-      sources,
+      [...standardSourcesByKey.values()],
       LEGA_VOLLEY_HTTP_CONCURRENCY,
     )) {
       const results = await Promise.allSettled(
@@ -227,13 +247,108 @@ export class LegaVolleyFemminileGateway {
           return;
         }
 
-        rosters.push({
-          teamExternalId: result.value.source.teamExternalId,
-          leagueExternalId: result.value.source.leagueExternalId,
-          players,
-        });
+        const rosterSources = standardSources.filter(
+          (source) =>
+            source.year === result.value.source.year &&
+            source.teamExternalId === result.value.source.teamExternalId,
+        );
+        rosters.push(
+          ...rosterSources.map((source) => ({
+            teamExternalId: source.teamExternalId,
+            leagueExternalId: source.leagueExternalId,
+            players,
+          })),
+        );
       });
     }
+
+    return { rosters, isComplete };
+  }
+
+  private async fetchSummerTourRosters(
+    sources: Array<{
+      teamExternalId: string;
+      teamName: string;
+      leagueExternalId: number;
+      leagueName: string;
+      year: number;
+    }>,
+  ): Promise<{
+    rosters: ILegaVolleyFemminileTeamRoster[];
+    isComplete: boolean;
+  }> {
+    if (!sources.length) return { rosters: [], isComplete: true };
+
+    let isComplete = true;
+    let namesBySurname = new Map<string, string>();
+    try {
+      const presentationHtml = await this.http.get(
+        LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_PRESENTATION_URL,
+      );
+      namesBySurname = createSummerTourPlayerNamesBySurname(
+        parseLegaVolleyFemminileSummerTourRosters(presentationHtml),
+      );
+    } catch (error) {
+      isComplete = false;
+      this.logger.warn(
+        `Summer Tour presentation request failed: ${getErrorMessage(error)}`,
+      );
+    }
+
+    const urls = [
+      ...new Set(
+        sources.flatMap((source) => {
+          const url = this.getSummerTourRosterUrl(
+            source.year,
+            source.leagueName,
+          );
+          return url ? [url] : [];
+        }),
+      ),
+    ];
+    const results = await Promise.allSettled(
+      urls.map(async (url) => ({ url, html: await this.http.get(url) })),
+    );
+    const rosters: ILegaVolleyFemminileTeamRoster[] = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        isComplete = false;
+        this.logger.warn(
+          `Summer Tour roster request failed for ${urls[index]}: ` +
+            getErrorMessage(result.reason),
+        );
+        return;
+      }
+
+      const parsed = parseLegaVolleyFemminileSummerTourRosters(
+        result.value.html,
+        namesBySurname,
+      );
+      for (const source of sources.filter(
+        (item) =>
+          this.getSummerTourRosterUrl(item.year, item.leagueName) ===
+          result.value.url,
+      )) {
+        const roster = parsed.find(({ teamName }) =>
+          this.isSameSummerTourTeam(teamName, source.teamName),
+        );
+        if (!roster) {
+          isComplete = false;
+          this.logger.warn(
+            `Summer Tour roster not found for ${source.teamExternalId} ` +
+              `(${source.year})`,
+          );
+          continue;
+        }
+
+        rosters.push({
+          teamExternalId: source.teamExternalId,
+          leagueExternalId: source.leagueExternalId,
+          players: roster.players,
+        });
+      }
+    });
 
     return { rosters, isComplete };
   }
@@ -294,5 +409,39 @@ export class LegaVolleyFemminileGateway {
     }
 
     return matches;
+  }
+
+  private getSummerTourRosterUrl(
+    year: number,
+    leagueName: string,
+  ): string | undefined {
+    if (year !== 2022) return undefined;
+    if (leagueName.startsWith('17') && /Supercoppa Italiana/.test(leagueName)) {
+      return LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS.supercoppa;
+    }
+    if (leagueName.startsWith('23') && /Coppa Italia/.test(leagueName)) {
+      return LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS.coppaItalia;
+    }
+    if (
+      leagueName.startsWith('28') &&
+      /Campionato Italiano/.test(leagueName)
+    ) {
+      return LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS.campionatoItaliano;
+    }
+
+    return undefined;
+  }
+
+  private isSameSummerTourTeam(left: string, right: string): boolean {
+    return this.normalizeSummerTourTeam(left) === this.normalizeSummerTourTeam(right);
+  }
+
+  private normalizeSummerTourTeam(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/millenium/g, '')
+      .replace(/[^a-z0-9]+/g, '');
   }
 }

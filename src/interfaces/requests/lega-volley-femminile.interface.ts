@@ -32,6 +32,11 @@ export interface ILegaVolleyFemminileTeamRoster {
   players: ILegaVolleyFemminilePlayer[];
 }
 
+export interface ILegaVolleyFemminileSummerTourRoster {
+  teamName: string;
+  players: ILegaVolleyFemminilePlayer[];
+}
+
 export interface ILegaVolleyFemminileMatchStatistics {
   matchExternalId: string;
   home: ILegaVolleyFemminilePlayerStatistic[];

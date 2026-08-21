@@ -138,6 +138,7 @@ export class LegaVolleyFemminileCatalogService {
   private async synchronizeRosters(
     teams: Array<{
       externalId: string;
+      name: string;
       leagueExternalId: number;
       serie: number;
     }>,
@@ -156,7 +157,9 @@ export class LegaVolleyFemminileCatalogService {
                   `${team.externalId}:${team.leagueExternalId}`,
                   {
                     teamExternalId: team.externalId,
+                    teamName: team.name,
                     leagueExternalId: team.leagueExternalId,
+                    leagueName: league.stage.name,
                     year,
                   },
                 ] as const,
@@ -185,12 +188,15 @@ export class LegaVolleyFemminileCatalogService {
           return team ? [[roster.teamExternalId, team] as const] : [];
         }),
       );
-      const players = rosters.flatMap((roster) =>
-        roster.players.map((player) => ({
-          ...player,
-          teamExternalId: roster.teamExternalId,
-          leagueExternalId,
-        })),
+      const players = await this.playersService.resolveSyntheticPlayersByFullName(
+        rosters.flatMap((roster) =>
+          roster.players.map((player) => ({
+            ...player,
+            teamExternalId: roster.teamExternalId,
+            leagueExternalId,
+          })),
+        ),
+        ESourceCode.LegaVolleyFemminile,
       );
 
       await this.playersService.upsertCatalogPlayers(

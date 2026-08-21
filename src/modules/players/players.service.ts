@@ -24,6 +24,7 @@ import {
 } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 import { splitIntoBatches, uniqueBy } from '../../shared/array.utils';
+import { normalizePlayerName } from '../../shared/player-name.utils';
 
 @Injectable()
 export class PlayersService {
@@ -142,6 +143,30 @@ export class PlayersService {
     });
 
     return players.length;
+  }
+
+  async resolveSyntheticPlayersByFullName(
+    incoming: ILegaPlayer[],
+    sourceCode: ESourceCode,
+  ): Promise<ILegaPlayer[]> {
+    const playersByName = new Map<string, PlayersEntity[]>();
+    for (const player of await this.playersRepository.getWhere({
+      source: { code: sourceCode },
+    })) {
+      const key = normalizePlayerName(player.fullName);
+      const players = playersByName.get(key) ?? [];
+      players.push(player);
+      playersByName.set(key, players);
+    }
+
+    return incoming.map((player) => {
+      if (!player.externalId.includes(':synthetic:')) return player;
+
+      const matches = playersByName.get(normalizePlayerName(player.fullName));
+      return matches?.length === 1
+        ? { ...player, externalId: matches[0].externalId }
+        : player;
+    });
   }
 
   async findTeamStatistics(

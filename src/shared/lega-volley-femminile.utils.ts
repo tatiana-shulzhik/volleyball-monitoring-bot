@@ -9,6 +9,7 @@ import {
   ILegaVolleyFemminileMatchStatistics,
   ILegaVolleyFemminilePlayerStatistic,
   ILegaVolleyFemminileSeason,
+  ILegaVolleyFemminileSummerTourRoster,
 } from '../interfaces/requests/lega-volley-femminile.interface';
 import { ECompetitionType, EMatchStatus } from './enums';
 import { parseSeasonEndYear } from './season.utils';
@@ -314,6 +315,79 @@ export function parseLegaVolleyFemminileTeamRoster(
   return players;
 }
 
+export function parseLegaVolleyFemminileSummerTourRosters(
+  html: string,
+  knownPlayerNamesBySurname = new Map<string, string>(),
+): ILegaVolleyFemminileSummerTourRoster[] {
+  const text = cleanText(html);
+  const start = Math.max(
+    text.indexOf('Questo l'),
+    text.indexOf('ROSTER'),
+  );
+  if (start < 0) return [];
+
+  const end = text.indexOf('IL PROGRAMMA', start);
+  const rosterText = text.slice(start, end < 0 ? text.length : end);
+  const teamPattern = SUMMER_TOUR_TEAM_NAMES.join('|');
+  const rosters: ILegaVolleyFemminileSummerTourRoster[] = [];
+  const matches = rosterText.matchAll(
+    new RegExp(
+      `(${teamPattern})\\s*:\\s*([\\s\\S]*?)(?=(?:${teamPattern})\\s*:|$)`,
+      'gi',
+    ),
+  );
+
+  for (const match of matches) {
+    const teamName = match[1];
+    const playerNames = match[2]
+      .split(/\b(?:Allenatore|All\.)\b/i)[0]
+      .split(',')
+      .map((value) => value.replace(/[.;]+$/, '').trim())
+      .filter(Boolean)
+      .map((value) => {
+        const surname = normalizeSummerTourName(value.split(/\s+/).at(-1) ?? '');
+        return knownPlayerNamesBySurname.get(surname) ?? value;
+      });
+    if (!playerNames.length) continue;
+
+    rosters.push({
+      teamName,
+      players: playerNames.map((fullName) => ({
+        externalId: createSummerTourPlayerExternalId(teamName, fullName),
+        fullName,
+        birthYear: null,
+        shirtNumber: null,
+        position: null,
+      })),
+    });
+  }
+
+  return rosters;
+}
+
+export function createSummerTourPlayerNamesBySurname(
+  rosters: ILegaVolleyFemminileSummerTourRoster[],
+): Map<string, string> {
+  const namesBySurname = new Map<string, string>();
+  const duplicateSurnames = new Set<string>();
+  for (const player of rosters.flatMap((roster) => roster.players)) {
+    const surname = normalizeSummerTourName(
+      player.fullName.split(/\s+/).at(-1) ?? '',
+    );
+    if (!surname) continue;
+    if (namesBySurname.has(surname)) {
+      duplicateSurnames.add(surname);
+      continue;
+    }
+    namesBySurname.set(surname, player.fullName);
+  }
+  for (const surname of duplicateSurnames) {
+    namesBySurname.delete(surname);
+  }
+
+  return namesBySurname;
+}
+
 function readCompetitions(
   html: string,
   season: ILegaVolleyFemminileSeason,
@@ -345,6 +419,37 @@ function readCompetitions(
   }
 
   return [...competitions.values()];
+}
+
+const SUMMER_TOUR_TEAM_NAMES = [
+  'Vero Volley Milano',
+  'Stabili Casalmaggiore',
+  'Motorola Busto Arsizio',
+  'Megabox Vallefoglia',
+  'Valsabbina Millenium Brescia',
+  'BVT Picco Lecco',
+];
+
+function createSummerTourPlayerExternalId(
+  teamName: string,
+  fullName: string,
+): string {
+  return [
+    'legavolley_femminile',
+    'synthetic',
+    'summer-tour',
+    '2023',
+    normalizeSummerTourName(teamName),
+    normalizeSummerTourName(fullName),
+  ].join(':');
+}
+
+function normalizeSummerTourName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
 }
 
 function readCompetitionSerie(url: URL, name: string): number {

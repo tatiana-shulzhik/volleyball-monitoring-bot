@@ -12,6 +12,16 @@ export const LEGA_VOLLEY_FEMMINILE_CATALOG_PATH = '/calendario/';
 export const LEGA_VOLLEY_FEMMINILE_RESULTS_PATH = '/risultati/';
 export const LEGA_VOLLEY_FEMMINILE_STATISTICS_URL =
   'https://ww5.legavolleyfemminile.it/TabellinoGara_i.asp?IdGara=';
+export const LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_PRESENTATION_URL =
+  'https://www.legavolleyfemminile.it/la-presentazione-del-lega-volley-summer-tour-2023-dalle-coppe-ai-roster-delle-squadre-fabris-sara-la-giusta-conclusione-di-una-stagione-meravigliosa/';
+export const LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS = {
+  supercoppa:
+    'https://www.legavolleyfemminile.it/back-to-back-la-supercoppa-resta-a-casalmaggiore-le-rosa-conquistano-la-tappa-del-lega-volley-summer-tour-con-super-zago/',
+  coppaItalia:
+    'https://www.legavolleyfemminile.it/sotto-il-sole-di-riccione-nel-weekend-della-notte-rosa-in-palio-la-23-coppa-italia-del-lega-volley-summer-tour/',
+  campionatoItaliano:
+    'https://www.legavolleyfemminile.it/a-lignano-sabbiadoro-lultima-tappa-del-lega-volley-summer-tour-2023-in-palio-lo-scudetto/',
+} as const;
 
 export const CHAMPIONSHIP_RULES: ILegaCompetitionRule[] = [
   { pattern: /SuperLega/i, name: 'SuperLega' },
