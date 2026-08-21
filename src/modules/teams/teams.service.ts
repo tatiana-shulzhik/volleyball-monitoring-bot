@@ -46,6 +46,7 @@ export class TeamsService {
           externalId: team.externalId,
           country: team.country ?? fallbackCountry,
         })),
+        sourceCode,
       );
     }
     const teamsByExternalId = new Map(
@@ -123,7 +124,10 @@ export class TeamsService {
       ...new Set(incomingTeams.map(({ externalId }) => externalId)),
     ];
     const existingTeams = externalIds.length
-      ? await this.teamsRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.teamsRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const calculatedChanges = calculateTeamChanges({
       incoming: incomingTeams,
@@ -138,7 +142,10 @@ export class TeamsService {
     });
 
     const teams = externalIds.length
-      ? await this.teamsRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.teamsRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const existingRelations = await this.teamLeaguesRepository.getWhere({
       league: { id: In(leagues.map(({ id }) => id)) },

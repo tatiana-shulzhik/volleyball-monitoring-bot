@@ -72,7 +72,7 @@ export class ChampionshipsRepository {
     );
 
     return repository.upsert(values, {
-      conflictPaths: ['externalId'],
+      conflictPaths: ['externalId', 'source'],
       skipUpdateIfNoValuesChanged: true,
     });
   }

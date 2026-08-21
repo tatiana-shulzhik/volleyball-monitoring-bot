@@ -77,8 +77,12 @@ export class MatchesService {
         return {
           id: stored?.id,
           externalId:
-            stored?.externalId ??
-            (sourceCode === ESourceCode.LegaVolley ? null : match.externalId),
+            sourceCode === ESourceCode.LegaVolleyFemminile
+              ? match.externalId
+              : (stored?.externalId ??
+                (sourceCode === ESourceCode.LegaVolley
+                  ? null
+                  : match.externalId)),
           league,
           homeTeam,
           awayTeam,
@@ -144,9 +148,16 @@ export class MatchesService {
     const [leagues, teams, existing] = await Promise.all([
       this.leaguesRepository.getWhere({
         externalId: In(leagueExternalIds),
+        stage: { id: In(stages.map(({ id }) => id)) },
       }),
-      this.teamsRepository.getWhere({ externalId: In(teamExternalIds) }),
-      this.matchesRepository.getWhere({ externalId: In(matchExternalIds) }),
+      this.teamsRepository.getWhere({
+        externalId: In(teamExternalIds),
+        source: { code: ESourceCode.Cev },
+      }),
+      this.matchesRepository.getWhere({
+        externalId: In(matchExternalIds),
+        league: { stage: { id: In(stages.map(({ id }) => id)) } },
+      }),
     ]);
     const changes = calculateMatchChanges({
       incoming: fetched.matches,

@@ -62,17 +62,28 @@ export class TeamsRepository {
     }));
 
     return repository.upsert(values, {
-      conflictPaths: ['externalId'],
+      conflictPaths: ['externalId', 'source'],
       skipUpdateIfNoValuesChanged: true,
     });
   }
 
   async updateCountries(
     updates: Array<{ externalId: string; country: string }>,
+    sourceCode = ESourceCode.Cev,
   ): Promise<void> {
+    const source = await this.repository.manager
+      .getRepository(SourcesEntity)
+      .findOneByOrFail({ code: sourceCode });
+
     await Promise.all(
       updates.map(({ externalId, country }) =>
-        this.repository.update({ externalId }, { country }),
+        this.repository
+          .createQueryBuilder()
+          .update()
+          .set({ country })
+          .where('external_id = :externalId', { externalId })
+          .andWhere('source_id = :sourceId', { sourceId: source.id })
+          .execute(),
       ),
     );
   }

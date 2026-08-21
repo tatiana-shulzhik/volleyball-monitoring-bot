@@ -136,10 +136,11 @@ export function readLegaVolleyFemminileMatches(
     const status = /annullat|cancel/i.test(cleanText(table))
       ? EMatchStatus.Cancelled
       : scores.length >= 2 &&
-          scores.slice(0, 2).every((score) => /^\d+$/.test(score))
+          scores.slice(0, 2).every((score) => /^\d+$/.test(score)) &&
+          scores.slice(0, 2).some((score) => score !== '0')
         ? EMatchStatus.Finished
         : EMatchStatus.Scheduled;
-    const externalId = `legavolley_femminile:${sourceMatchId}`;
+    const externalId = sourceMatchId;
     matches.set(externalId, {
       externalId,
       leagueExternalId,
@@ -245,7 +246,7 @@ export function parseLegaVolleyFemminileMatchStatistics(
   if (!teams[0].length && !teams[1].length) return null;
 
   return {
-    matchExternalId: `legavolley_femminile:${sourceMatchId}`,
+    matchExternalId: sourceMatchId,
     home: teams[0],
     away: teams[1],
   };

@@ -253,7 +253,10 @@ export class PlayersService {
       ...new Set(fetched.players.map(({ externalId }) => externalId)),
     ];
     const existingPlayers = externalIds.length
-      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.playersRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const calculatedChanges = calculatePlayerChanges({
       incoming: fetched.players,
@@ -268,7 +271,10 @@ export class PlayersService {
     });
 
     const players = externalIds.length
-      ? await this.playersRepository.getWhere({ externalId: In(externalIds) })
+      ? await this.playersRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       : [];
     const teams = [
       ...new Map(sources.map(({ team }) => [team.externalId, team])).values(),

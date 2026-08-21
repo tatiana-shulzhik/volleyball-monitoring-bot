@@ -146,25 +146,23 @@ export class LegaVolleyFemminileCatalogService {
   ): Promise<number> {
     const sources = [
       ...new Map(
-        teams
-          .filter(({ serie }) => serie !== 0)
-          .flatMap((team) => {
-            const league = leaguesByExternalId.get(team.leagueExternalId);
-            const year = Number(league?.stage.season?.name.slice(0, 4));
+        teams.flatMap((team) => {
+          const league = leaguesByExternalId.get(team.leagueExternalId);
+          const year = Number(league?.stage.season?.name.slice(0, 4));
 
-            return league && Number.isInteger(year)
-              ? [
-                  [
-                    `${team.externalId}:${team.leagueExternalId}`,
-                    {
-                      teamExternalId: team.externalId,
-                      leagueExternalId: team.leagueExternalId,
-                      year,
-                    },
-                  ] as const,
-                ]
-              : [];
-          }),
+          return league && Number.isInteger(year)
+            ? [
+                [
+                  `${team.externalId}:${team.leagueExternalId}`,
+                  {
+                    teamExternalId: team.externalId,
+                    leagueExternalId: team.leagueExternalId,
+                    year,
+                  },
+                ] as const,
+              ]
+            : [];
+        }),
       ).values(),
     ];
     const fetched = await this.gateway.fetchTeamRosters(sources);

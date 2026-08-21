@@ -95,7 +95,7 @@ export class MatchesRepository {
     );
 
     return repository.upsert(values, {
-      conflictPaths: ['externalId'],
+      conflictPaths: ['externalId', 'league'],
       skipUpdateIfNoValuesChanged: true,
     });
   }

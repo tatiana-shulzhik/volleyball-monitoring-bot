@@ -136,23 +136,23 @@ export class LegaVolleyFemminileGateway {
   async fetchMatchStatistics(
     matchExternalIds: string[],
   ): Promise<ILegaVolleyFemminileMatchStatistics[]> {
-    const sourceMatchIds = matchExternalIds.flatMap((externalId) => {
+    const sourceMatches = matchExternalIds.flatMap((externalId) => {
       const sourceMatchId = externalId.match(
-        /^legavolley_femminile:(\d+)$/,
+        /^(?:legavolley_femminile:)?(\d+)$/,
       )?.[1];
-      return sourceMatchId ? [sourceMatchId] : [];
+      return sourceMatchId ? [{ externalId, sourceMatchId }] : [];
     });
     const statistics: ILegaVolleyFemminileMatchStatistics[] = [];
 
     for (const batch of splitIntoBatches(
-      sourceMatchIds,
+      sourceMatches,
       LEGA_VOLLEY_HTTP_CONCURRENCY,
     )) {
       const results = await Promise.allSettled(
-        batch.map(async (sourceMatchId) => ({
-          sourceMatchId,
+        batch.map(async (sourceMatch) => ({
+          ...sourceMatch,
           html: await this.http.get(
-            `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${sourceMatchId}`,
+            `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${sourceMatch.sourceMatchId}`,
             LEGA_VOLLEY_HTTP_TIMEOUT_MS,
           ),
         })),
@@ -161,7 +161,7 @@ export class LegaVolleyFemminileGateway {
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
           this.logger.warn(
-            `Match statistics request failed for ${batch[index]}: ` +
+            `Match statistics request failed for ${batch[index].externalId}: ` +
               getErrorMessage(result.reason),
           );
           return;
@@ -171,7 +171,12 @@ export class LegaVolleyFemminileGateway {
           result.value.html,
           result.value.sourceMatchId,
         );
-        if (parsed) statistics.push(parsed);
+        if (parsed) {
+          statistics.push({
+            ...parsed,
+            matchExternalId: result.value.externalId,
+          });
+        }
       });
     }
 
@@ -239,7 +244,8 @@ export class LegaVolleyFemminileGateway {
     serie: number,
   ) {
     const query =
-      `?campionato=${leagueExternalId}` + `&serie=${serie}&stagione=${year}`;
+      `?campionato=${leagueExternalId}` +
+      `&serie=${serie}&stagione=${year}&giornata=tutte`;
     const [resultsHtml, calendarHtml] = await Promise.all([
       this.http.get(
         `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${query}`,

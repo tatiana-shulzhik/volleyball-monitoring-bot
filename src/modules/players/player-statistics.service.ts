@@ -484,7 +484,10 @@ export class PlayerStatisticsService {
     ];
     const playersByExternalId = new Map(
       (
-        await this.playersRepository.getWhere({ externalId: In(externalIds) })
+        await this.playersRepository.getWhere({
+          externalId: In(externalIds),
+          source: { code: ESourceCode.Cev },
+        })
       ).map((player) => [player.externalId, player]),
     );
     const missingPlayers = [
@@ -507,6 +510,7 @@ export class PlayerStatisticsService {
 
       for (const player of await this.playersRepository.getWhere({
         externalId: In(missingPlayers.map(({ externalId }) => externalId)),
+        source: { code: ESourceCode.Cev },
       })) {
         playersByExternalId.set(player.externalId, player);
       }

@@ -5,12 +5,14 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { ECompetitionType } from '../../shared/enums';
 import { CompetitionStagesEntity } from './competition-stages.entity';
 import { SourcesEntity } from './sources.entity';
 
 @Entity({ name: 'championships' })
+@Unique(['externalId', 'source'])
 export class ChampionshipsEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -18,7 +20,7 @@ export class ChampionshipsEntity {
   @Column()
   name: string;
 
-  @Column({ name: 'external_id', unique: true })
+  @Column({ name: 'external_id' })
   externalId: number;
 
   @Column({

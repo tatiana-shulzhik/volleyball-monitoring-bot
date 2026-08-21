@@ -33,6 +33,7 @@ import { CreateTelegramAccess1760000016000 } from '../databases/migrations/17600
 import { MakeLegaMatchExternalIdNullable1760000017000 } from '../databases/migrations/1760000017000-MakeLegaMatchExternalIdNullable';
 import { DropLegaMatchPlayerStatistics1760000018000 } from '../databases/migrations/1760000018000-DropLegaMatchPlayerStatistics';
 import { SeedLegaVolleyFemminileSource1760000019000 } from '../databases/migrations/1760000019000-SeedLegaVolleyFemminileSource';
+import { ScopeExternalIdsBySource1760000020000 } from '../databases/migrations/1760000020000-ScopeExternalIdsBySource';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -98,6 +99,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         MakeLegaMatchExternalIdNullable1760000017000,
         DropLegaMatchPlayerStatistics1760000018000,
         SeedLegaVolleyFemminileSource1760000019000,
+        ScopeExternalIdsBySource1760000020000,
       ],
     };
   }
