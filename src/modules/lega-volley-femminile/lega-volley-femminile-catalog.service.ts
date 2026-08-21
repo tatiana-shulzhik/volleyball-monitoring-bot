@@ -169,46 +169,48 @@ export class LegaVolleyFemminileCatalogService {
       ).values(),
     ];
     const fetched = await this.gateway.fetchTeamRosters(sources);
-    const rostersByLeagueExternalId = new Map<number, typeof fetched.rosters>();
-    for (const roster of fetched.rosters) {
-      const rosters = rostersByLeagueExternalId.get(roster.leagueExternalId);
-      rostersByLeagueExternalId.set(
+    const rosterScopes = fetched.rosters.flatMap((roster) => {
+      const team = teamsByExternalId.get(roster.teamExternalId);
+      const league = leaguesByExternalId.get(roster.leagueExternalId);
+
+      return team && league ? [{ roster, team, league }] : [];
+    });
+    if (!rosterScopes.length) {
+      return new Set(
+        fetched.rosters.flatMap((roster) =>
+          roster.players.map((player) => player.externalId),
+        ),
+      ).size;
+    }
+    const rosterTeamsByExternalId = new Map(
+      rosterScopes.map(({ roster, team }) => [roster.teamExternalId, team]),
+    );
+    const rosterLeaguesByExternalId = new Map(
+      rosterScopes.map(({ roster, league }) => [
         roster.leagueExternalId,
-        rosters ? [...rosters, roster] : [roster],
-      );
-    }
+        league,
+      ]),
+    );
+    const players = await this.playersService.resolveSyntheticPlayersByFullName(
+      rosterScopes.flatMap(({ roster }) =>
+        roster.players.map((player) => ({
+          ...player,
+          teamExternalId: roster.teamExternalId,
+          leagueExternalId: roster.leagueExternalId,
+        })),
+      ),
+      ESourceCode.LegaVolleyFemminile,
+    );
 
-    for (const [leagueExternalId, rosters] of rostersByLeagueExternalId) {
-      const league = leaguesByExternalId.get(leagueExternalId);
-      if (!league) continue;
-
-      const rosterTeamsByExternalId = new Map(
-        rosters.flatMap((roster) => {
-          const team = teamsByExternalId.get(roster.teamExternalId);
-          return team ? [[roster.teamExternalId, team] as const] : [];
-        }),
-      );
-      const players =
-        await this.playersService.resolveSyntheticPlayersByFullName(
-          rosters.flatMap((roster) =>
-            roster.players.map((player) => ({
-              ...player,
-              teamExternalId: roster.teamExternalId,
-              leagueExternalId,
-            })),
-          ),
-          ESourceCode.LegaVolleyFemminile,
-        );
-
-      await this.playersService.upsertCatalogPlayers(
-        players,
-        rosterTeamsByExternalId,
-        new Map([[leagueExternalId, league]]),
-        ESourceCode.LegaVolleyFemminile,
-        false,
-        true,
-      );
-    }
+    await this.playersService.upsertCatalogPlayers(
+      players,
+      rosterTeamsByExternalId,
+      rosterLeaguesByExternalId,
+      ESourceCode.LegaVolleyFemminile,
+      false,
+      true,
+      rosterScopes.map(({ team, league }) => ({ team, league })),
+    );
 
     return new Set(
       fetched.rosters.flatMap((roster) =>

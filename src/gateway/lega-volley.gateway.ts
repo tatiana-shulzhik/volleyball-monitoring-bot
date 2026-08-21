@@ -277,6 +277,38 @@ export class LegaVolleyGateway {
     });
   }
 
+  async fetchMatchStatisticsByIds(
+    matches: Array<{
+      sourceMatchId: string;
+      leagueExternalId: number;
+      playedOn: Date | null;
+    }>,
+  ): Promise<ILegaMatchStatistics[]> {
+    const results = await this.mapSettled({
+      items: matches,
+      mapper: async ({ sourceMatchId, leagueExternalId, playedOn }) =>
+        parseLegaMatchStatistics(
+          await this.get(`${LEGA_VOLLEY_BASE_URL}/match/${sourceMatchId}`),
+          sourceMatchId,
+          leagueExternalId,
+          playedOn,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    return results.flatMap((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value ? [result.value] : [];
+      }
+
+      this.logger.warn(
+        `Match statistics request failed for ${matches[index].sourceMatchId}: ` +
+          getErrorMessage(result.reason),
+      );
+      return [];
+    });
+  }
+
   private async fetchSeasonMatchStatistics(
     year: number,
     pendingMatchKeys?: ReadonlySet<string>,

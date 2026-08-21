@@ -132,33 +132,56 @@ export class LegaVolleyCatalogService {
   ): Promise<void> {
     const pendingMatches =
       await this.playerStatisticsService.findPendingLegaMatches();
+    const matchesWithStoredStatisticsId = pendingMatches.flatMap((match) =>
+      match.externalId?.match(/^\d+$/)
+        ? [
+            {
+              sourceMatchId: match.externalId,
+              leagueExternalId: match.league.externalId,
+              playedOn: match.scheduledAt,
+            },
+          ]
+        : [],
+    );
+    const storedStatisticsMatchIds = new Set(
+      matchesWithStoredStatisticsId.map(({ sourceMatchId }) => sourceMatchId),
+    );
     const pendingMatchKeys = new Set(
-      pendingMatches.map((match) =>
-        createLegaMatchLookupKey(
-          match.league.externalId,
-          match.homeTeam.name,
-          match.awayTeam.name,
-          match.scheduledAt,
-        ),
+      pendingMatches.flatMap((match) =>
+        storedStatisticsMatchIds.has(match.externalId ?? '')
+          ? []
+          : [
+              createLegaMatchLookupKey(
+                match.league.externalId,
+                match.homeTeam.name,
+                match.awayTeam.name,
+                match.scheduledAt,
+              ),
+            ],
       ),
     );
 
-    if (!pendingMatchKeys.size) {
+    if (!pendingMatches.length) {
       this.logger.log('No pending LegaVolley match statistics found');
       return;
     }
 
     this.logger.log(
       `Starting LegaVolley statistics synchronization for ` +
-        `${pendingMatchKeys.size} pending matches`,
+        `${pendingMatches.length} pending matches`,
     );
 
-    const rows = await this.playerStatisticsService.upsertLegaMatchStatistics(
-      await this.gateway.fetchMatchStatisticsSince(
-        earliestYear,
-        pendingMatchKeys,
-      ),
-    );
+    const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
+      ...(await this.gateway.fetchMatchStatisticsByIds(
+        matchesWithStoredStatisticsId,
+      )),
+      ...(pendingMatchKeys.size
+        ? await this.gateway.fetchMatchStatisticsSince(
+            earliestYear,
+            pendingMatchKeys,
+          )
+        : []),
+    ]);
 
     this.logger.log(`LegaVolley match statistics synchronized: ${rows} rows`);
   }
