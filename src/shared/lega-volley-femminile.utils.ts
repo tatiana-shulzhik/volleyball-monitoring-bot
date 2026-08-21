@@ -320,10 +320,7 @@ export function parseLegaVolleyFemminileSummerTourRosters(
   knownPlayerNamesBySurname = new Map<string, string>(),
 ): ILegaVolleyFemminileSummerTourRoster[] {
   const text = cleanText(html);
-  const start = Math.max(
-    text.indexOf('Questo l'),
-    text.indexOf('ROSTER'),
-  );
+  const start = Math.max(text.indexOf('Questo l'), text.indexOf('ROSTER'));
   if (start < 0) return [];
 
   const end = text.indexOf('IL PROGRAMMA', start);
@@ -345,7 +342,9 @@ export function parseLegaVolleyFemminileSummerTourRosters(
       .map((value) => value.replace(/[.;]+$/, '').trim())
       .filter(Boolean)
       .map((value) => {
-        const surname = normalizeSummerTourName(value.split(/\s+/).at(-1) ?? '');
+        const surname = normalizeSummerTourName(
+          value.split(/\s+/).at(-1) ?? '',
+        );
         return knownPlayerNamesBySurname.get(surname) ?? value;
       });
     if (!playerNames.length) continue;

@@ -53,8 +53,13 @@ export class LegaVolleyFemminileGateway {
 
     const catalog = parseLegaVolleyFemminileCatalog(pages);
     const scheduleResults = await Promise.all(
-      catalog.competitions.map(({ externalId, seasonYear, serie }) =>
-        this.fetchLeagueMatches(seasonYear, externalId, serie),
+      catalog.competitions.map(({ externalId, seasonYear, serie, name }) =>
+        this.fetchLeagueMatches(
+          seasonYear,
+          externalId,
+          serie,
+          /\bA2\b/i.test(name),
+        ),
       ),
     );
     const fetched = scheduleResults.flatMap(({ fetched }) => fetched);
@@ -357,16 +362,20 @@ export class LegaVolleyFemminileGateway {
     year: number,
     leagueExternalId: number,
     serie: number,
+    isA2 = false,
   ) {
-    const query =
+    const calendarQuery =
       `?campionato=${leagueExternalId}` +
       `&serie=${serie}&stagione=${year}&giornata=tutte`;
+    const resultsQuery =
+      `?campionato=${leagueExternalId}` +
+      `&serie=${isA2 ? 2 : serie}&stagione=${year}&giornata=tutte`;
     const [resultsHtml, calendarHtml] = await Promise.all([
       this.http.get(
-        `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${query}`,
+        `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_RESULTS_PATH}${resultsQuery}`,
       ),
       this.http.get(
-        `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_CATALOG_PATH}${query}`,
+        `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_CATALOG_PATH}${calendarQuery}`,
       ),
     ]);
     const results = readLegaVolleyFemminileMatches(
@@ -422,10 +431,7 @@ export class LegaVolleyFemminileGateway {
     if (leagueName.startsWith('23') && /Coppa Italia/.test(leagueName)) {
       return LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS.coppaItalia;
     }
-    if (
-      leagueName.startsWith('28') &&
-      /Campionato Italiano/.test(leagueName)
-    ) {
+    if (leagueName.startsWith('28') && /Campionato Italiano/.test(leagueName)) {
       return LEGA_VOLLEY_FEMMINILE_SUMMER_TOUR_2023_URLS.campionatoItaliano;
     }
 
@@ -433,7 +439,9 @@ export class LegaVolleyFemminileGateway {
   }
 
   private isSameSummerTourTeam(left: string, right: string): boolean {
-    return this.normalizeSummerTourTeam(left) === this.normalizeSummerTourTeam(right);
+    return (
+      this.normalizeSummerTourTeam(left) === this.normalizeSummerTourTeam(right)
+    );
   }
 
   private normalizeSummerTourTeam(value: string): string {

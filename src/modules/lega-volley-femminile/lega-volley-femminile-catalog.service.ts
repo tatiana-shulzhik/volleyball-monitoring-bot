@@ -188,16 +188,17 @@ export class LegaVolleyFemminileCatalogService {
           return team ? [[roster.teamExternalId, team] as const] : [];
         }),
       );
-      const players = await this.playersService.resolveSyntheticPlayersByFullName(
-        rosters.flatMap((roster) =>
-          roster.players.map((player) => ({
-            ...player,
-            teamExternalId: roster.teamExternalId,
-            leagueExternalId,
-          })),
-        ),
-        ESourceCode.LegaVolleyFemminile,
-      );
+      const players =
+        await this.playersService.resolveSyntheticPlayersByFullName(
+          rosters.flatMap((roster) =>
+            roster.players.map((player) => ({
+              ...player,
+              teamExternalId: roster.teamExternalId,
+              leagueExternalId,
+            })),
+          ),
+          ESourceCode.LegaVolleyFemminile,
+        );
 
       await this.playersService.upsertCatalogPlayers(
         players,
