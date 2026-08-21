@@ -42,6 +42,7 @@ export class PlayersService {
     leaguesByExternalId: Map<number, LeaguesEntity>,
     sourceCode: ESourceCode,
     preserveStoredNames = false,
+    removeObsoleteRelations = false,
   ): Promise<number> {
     const players = uniqueBy(incomingPlayers, (player) => player.externalId);
     const storedPlayersByExternalId = preserveStoredNames
@@ -116,9 +117,29 @@ export class PlayersService {
       }),
       ({ player, team, league }) => `${player.id}:${team.id}:${league.id}`,
     );
-    for (const batch of splitIntoBatches(relations)) {
-      await this.relationsRepository.updateMany(batch);
+    if (!removeObsoleteRelations) {
+      for (const batch of splitIntoBatches(relations)) {
+        await this.relationsRepository.updateMany(batch);
+      }
+      return players.length;
     }
+
+    const changes = calculatePlayerRelationChanges({
+      incoming: incomingPlayers.map((player) => ({
+        ...player,
+        position: player.position ?? '',
+      })),
+      existing: existingRelations,
+      playersByExternalId,
+      teamsByExternalId,
+      leaguesByExternalId,
+    });
+    await applyRelationChanges({
+      transactionOwner: this.playersRepository,
+      repository: this.relationsRepository,
+      changes,
+      allowDeletion: true,
+    });
 
     return players.length;
   }

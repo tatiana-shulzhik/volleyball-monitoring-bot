@@ -5,7 +5,6 @@ import { ICevMatch } from '../interfaces/requests/matches.interface';
 import { ICevTeam } from '../interfaces/requests/teams.interface';
 import {
   ILegaVolleyFemminileCompetition,
-  ILegaVolleyFemminileMatchRoster,
   ILegaVolleyFemminilePlayer,
   ILegaVolleyFemminileMatchStatistics,
   ILegaVolleyFemminilePlayerStatistic,
@@ -252,51 +251,6 @@ export function parseLegaVolleyFemminileMatchStatistics(
   };
 }
 
-export function parseLegaVolleyFemminileMatchRoster(
-  html: string,
-  sourceMatchId: string,
-): ILegaVolleyFemminileMatchRoster | null {
-  const teams = [
-    ...html.matchAll(
-      /<table\b[^>]*class=["'][^"']*\btable-starting\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
-    ),
-  ]
-    .map((table) => readLegaVolleyFemminileRosterPlayers(table[1]))
-    .filter((players) => players.length > 0);
-  if (teams.length < 2) return null;
-
-  return {
-    matchExternalId: `legavolley_femminile:${sourceMatchId}`,
-    home: teams[0],
-    away: teams[1],
-  };
-}
-
-function readLegaVolleyFemminileRosterPlayers(
-  table: string,
-): ILegaVolleyFemminilePlayer[] {
-  const players: ILegaVolleyFemminilePlayer[] = [];
-
-  for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
-    const externalId = row[1].match(/Foto\.aspx\?Key=([^&'"\s]+)/i)?.[1];
-    const cells = [
-      ...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi),
-    ].map((cell) => cleanText(cell[1]));
-    const shirtNumber = readNumber(cells[0] ?? '');
-    const fullName = cells[3] ?? '';
-    if (!externalId || shirtNumber === null || !fullName) continue;
-
-    players.push({
-      externalId: `legavolley_femminile:${decodeURIComponent(externalId)}`,
-      fullName,
-      shirtNumber,
-      position: cells[4] || null,
-    });
-  }
-
-  return players;
-}
-
 function readLegaVolleyFemminilePlayerStatistics(
   table: string,
 ): ILegaVolleyFemminilePlayerStatistic[] {
@@ -316,8 +270,9 @@ function readLegaVolleyFemminilePlayerStatistics(
     if (!fullName) continue;
 
     players.push({
-      externalId: `legavolley_femminile:${decodeURIComponent(externalId)}`,
+      externalId: decodeURIComponent(externalId),
       fullName,
+      birthYear: null,
       shirtNumber: readNumber(cells[0]),
       position: /\(L\)\s*$/i.test(rawName) ? 'Libero' : null,
       attempts: readNumber(cells[17]) ?? 0,
@@ -326,6 +281,32 @@ function readLegaVolleyFemminilePlayerStatistics(
       setsPlayed: cells
         .slice(2, 7)
         .filter((value) => value !== '' && value !== '.').length,
+    });
+  }
+
+  return players;
+}
+
+export function parseLegaVolleyFemminileTeamRoster(
+  html: string,
+): ILegaVolleyFemminilePlayer[] {
+  const players: ILegaVolleyFemminilePlayer[] = [];
+
+  for (const row of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = [
+      ...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi),
+    ].map((cell) => cleanText(cell[1]));
+    const externalId = row[1].match(/\/player\/[^/]+\/([^/'"\s]+)\//i)?.[1];
+    const shirtNumber = readNumber(cells[0] ?? '');
+    const fullName = `${cells[1] ?? ''} ${cells[2] ?? ''}`.trim();
+    if (!externalId || shirtNumber === null || !fullName) continue;
+
+    players.push({
+      externalId: decodeURIComponent(externalId),
+      fullName,
+      birthYear: readNumber(cells[6] ?? ''),
+      shirtNumber,
+      position: cells[3] || null,
     });
   }
 

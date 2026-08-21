@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
-import { ICevMatch } from '../../interfaces/requests/matches.interface';
 import { ESourceCode } from '../../shared/enums';
 import { getEarliestCatalogYear } from '../../shared/season.utils';
 import { ChampionshipsService } from '../championships/championships.service';
@@ -122,7 +121,7 @@ export class LegaVolleyFemminileCatalogService {
     );
     const synchronizedPlayers = includeRosters
       ? await this.synchronizeRosters(
-          catalog.matches,
+          catalog.teams,
           teamsByExternalId,
           leaguesByExternalId,
         )
@@ -137,54 +136,80 @@ export class LegaVolleyFemminileCatalogService {
   }
 
   private async synchronizeRosters(
-    matches: ICevMatch[],
+    teams: Array<{
+      externalId: string;
+      leagueExternalId: number;
+      serie: number;
+    }>,
     teamsByExternalId: Map<string, TeamEntity>,
     leaguesByExternalId: Map<number, LeaguesEntity>,
   ): Promise<number> {
-    const coveredTeams = new Set<string>();
-    const rosterMatchExternalIds: string[] = [];
-    for (const match of matches) {
-      const homeKey = `${match.leagueExternalId}:${match.homeTeamExternalId}`;
-      const awayKey = `${match.leagueExternalId}:${match.awayTeamExternalId}`;
-      if (coveredTeams.has(homeKey) && coveredTeams.has(awayKey)) continue;
+    const sources = [
+      ...new Map(
+        teams
+          .filter(({ serie }) => serie !== 0)
+          .flatMap((team) => {
+            const league = leaguesByExternalId.get(team.leagueExternalId);
+            const year = Number(league?.stage.season?.name.slice(0, 4));
 
-      rosterMatchExternalIds.push(match.externalId);
-      coveredTeams.add(homeKey);
-      coveredTeams.add(awayKey);
+            return league && Number.isInteger(year)
+              ? [
+                  [
+                    `${team.externalId}:${team.leagueExternalId}`,
+                    {
+                      teamExternalId: team.externalId,
+                      leagueExternalId: team.leagueExternalId,
+                      year,
+                    },
+                  ] as const,
+                ]
+              : [];
+          }),
+      ).values(),
+    ];
+    const fetched = await this.gateway.fetchTeamRosters(sources);
+    const rostersByLeagueExternalId = new Map<number, typeof fetched.rosters>();
+    for (const roster of fetched.rosters) {
+      const rosters = rostersByLeagueExternalId.get(roster.leagueExternalId);
+      rostersByLeagueExternalId.set(
+        roster.leagueExternalId,
+        rosters ? [...rosters, roster] : [roster],
+      );
     }
 
-    const rosters = await this.gateway.fetchMatchRosters(
-      rosterMatchExternalIds,
-    );
-    const matchesByExternalId = new Map(
-      matches.map((match) => [match.externalId, match]),
-    );
-    const players = rosters.flatMap((roster) => {
-      const match = matchesByExternalId.get(roster.matchExternalId);
-      if (!match) return [];
+    for (const [leagueExternalId, rosters] of rostersByLeagueExternalId) {
+      const league = leaguesByExternalId.get(leagueExternalId);
+      if (!league) continue;
 
-      return [
-        ...roster.home.map((player) => ({
+      const rosterTeamsByExternalId = new Map(
+        rosters.flatMap((roster) => {
+          const team = teamsByExternalId.get(roster.teamExternalId);
+          return team ? [[roster.teamExternalId, team] as const] : [];
+        }),
+      );
+      const players = rosters.flatMap((roster) =>
+        roster.players.map((player) => ({
           ...player,
-          birthYear: null,
-          teamExternalId: match.homeTeamExternalId,
-          leagueExternalId: match.leagueExternalId,
+          teamExternalId: roster.teamExternalId,
+          leagueExternalId,
         })),
-        ...roster.away.map((player) => ({
-          ...player,
-          birthYear: null,
-          teamExternalId: match.awayTeamExternalId,
-          leagueExternalId: match.leagueExternalId,
-        })),
-      ];
-    });
+      );
 
-    return this.playersService.upsertCatalogPlayers(
-      players,
-      teamsByExternalId,
-      leaguesByExternalId,
-      ESourceCode.LegaVolleyFemminile,
-    );
+      await this.playersService.upsertCatalogPlayers(
+        players,
+        rosterTeamsByExternalId,
+        new Map([[leagueExternalId, league]]),
+        ESourceCode.LegaVolleyFemminile,
+        false,
+        true,
+      );
+    }
+
+    return new Set(
+      fetched.rosters.flatMap((roster) =>
+        roster.players.map((player) => player.externalId),
+      ),
+    ).size;
   }
 
   private async synchronizeMatchStatistics(): Promise<void> {

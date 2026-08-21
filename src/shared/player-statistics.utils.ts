@@ -561,6 +561,7 @@ function compareRelationsBySeason(
 
   return (
     seasonDifference ||
+    Number(right.position !== null) - Number(left.position !== null) ||
     Number(right.shirtNumber !== null) - Number(left.shirtNumber !== null)
   );
 }
