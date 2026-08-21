@@ -9,6 +9,7 @@ import {
 import { TeamEntity } from '../entities/team.entity';
 import { SourcesEntity } from '../entities/sources.entity';
 import { ESourceCode } from '../../shared/enums';
+import { splitIntoBatches } from '../../shared/array.utils';
 
 @Injectable()
 export class TeamsRepository {
@@ -71,21 +72,29 @@ export class TeamsRepository {
     updates: Array<{ externalId: string; country: string }>,
     sourceCode = ESourceCode.Cev,
   ): Promise<void> {
-    const source = await this.repository.manager
-      .getRepository(SourcesEntity)
-      .findOneByOrFail({ code: sourceCode });
+    for (const batch of splitIntoBatches(updates)) {
+      const params = batch.flatMap(({ externalId, country }) => [
+        externalId,
+        country,
+      ]);
+      const values = batch
+        .map(
+          (_, index) =>
+            `($${index * 2 + 1}::varchar, $${index * 2 + 2}::varchar)`,
+        )
+        .join(', ');
 
-    await Promise.all(
-      updates.map(({ externalId, country }) =>
-        this.repository
-          .createQueryBuilder()
-          .update()
-          .set({ country })
-          .where('external_id = :externalId', { externalId })
-          .andWhere('source_id = :sourceId', { sourceId: source.id })
-          .execute(),
-      ),
-    );
+      await this.repository.manager.query(
+        `UPDATE "teams" AS team
+         SET "country" = input.country
+         FROM (VALUES ${values}) AS input(external_id, country)
+         INNER JOIN "sources" AS source ON source.code = $${params.length + 1}
+         WHERE team.external_id = input.external_id
+         AND team.source_id = source.id
+         AND team.country IS DISTINCT FROM input.country`,
+        [...params, sourceCode],
+      );
+    }
   }
 
   deleteMany(ids: number[], manager?: EntityManager) {

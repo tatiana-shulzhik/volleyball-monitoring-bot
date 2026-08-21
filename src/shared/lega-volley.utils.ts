@@ -342,7 +342,7 @@ function extractLegaPlayers(
     const shirtNumber = parseLegaNumber(
       cells[playerCellIndex > 0 ? playerCellIndex - 1 : 0],
     );
-    const birthYear = parseLegaYear(cells.join(' '));
+    const birthYear = parseLegaYear(cells[playerCellIndex + 2] ?? '');
     const position =
       playerCellIndex >= 0
         ? (cells.slice(playerCellIndex + 1).find(isLegaPlayerPosition) ?? null)

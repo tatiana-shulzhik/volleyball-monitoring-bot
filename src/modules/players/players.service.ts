@@ -44,6 +44,7 @@ export class PlayersService {
     sourceCode: ESourceCode,
     preserveStoredNames = false,
     removeObsoleteRelations = false,
+    relationScopes?: Array<{ team: TeamEntity; league: LeaguesEntity }>,
   ): Promise<number> {
     const players = uniqueBy(incomingPlayers, (player) => player.externalId);
     const storedPlayersByExternalId = preserveStoredNames
@@ -76,19 +77,26 @@ export class PlayersService {
         })
       ).map((player) => [player.externalId, player]),
     );
-    const teamIds = [
-      ...new Set([...teamsByExternalId.values()].map(({ id }) => id)),
-    ];
+    const scopedRelations =
+      relationScopes ??
+      [...teamsByExternalId.values()].flatMap((team) =>
+        [...leaguesByExternalId.values()].map((league) => ({ team, league })),
+      );
+    const teamIds = [...new Set(scopedRelations.map(({ team }) => team.id))];
     const leagueIds = [
-      ...new Set([...leaguesByExternalId.values()].map(({ id }) => id)),
+      ...new Set(scopedRelations.map(({ league }) => league.id)),
     ];
-    const existingRelations =
+    const scopeKeys = new Set(
+      scopedRelations.map(({ team, league }) => `${team.id}:${league.id}`),
+    );
+    const existingRelations = (
       teamIds.length && leagueIds.length
         ? await this.relationsRepository.getWhere({
             team: { id: In(teamIds) },
             league: { id: In(leagueIds) },
           })
-        : [];
+        : []
+    ).filter(({ team, league }) => scopeKeys.has(`${team.id}:${league.id}`));
     const existingRelationsByKey = new Map(
       existingRelations.map((relation) => [
         `${relation.player.id}:${relation.team.id}:${relation.league.id}`,
