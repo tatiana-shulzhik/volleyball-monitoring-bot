@@ -115,11 +115,16 @@ export function readLegaTeams(
       /<option[^>]*value=["'](\d+)["'][^>]*>([\s\S]*?)<\/option>/gi,
     ),
   ]
-    .map(([, externalId, name]) => ({
-      externalId,
-      name: cleanLegaText(name),
-      leagueExternalId,
-    }))
+    .map(([, externalId, name]) => {
+      const teamName = cleanLegaText(name);
+
+      return {
+        externalId,
+        name: teamName,
+        country: extractLegaTeamCountry(teamName),
+        leagueExternalId,
+      };
+    })
     .filter(({ name }) => name.length > 0);
 }
 
@@ -186,13 +191,14 @@ export function parseLegaTeamPage(
   html: string,
   fallbackName: string,
   teamExternalId = '',
+  fallbackCountry?: string,
 ): { name: string; country: string; players: ILegaPlayer[] } {
   const title = html.match(
     /<(?:h1|h2|title)[^>]*>([\s\S]*?)<\/(?:h1|h2|title)>/i,
   )?.[1];
   return {
     name: title ? cleanLegaText(title) : fallbackName,
-    country: 'ITA',
+    country: fallbackCountry ?? 'ITA',
     players: extractLegaPlayers(html, teamExternalId),
   };
 }
@@ -302,6 +308,10 @@ export function normalizeLegaName(value: string): string {
     .toLocaleLowerCase('it-IT')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
+}
+
+function extractLegaTeamCountry(value: string): string | undefined {
+  return value.match(/\(([a-z]{3})\)\s*$/i)?.[1]?.toUpperCase();
 }
 
 function extractLegaPlayers(
@@ -514,7 +524,7 @@ function getLegaStageName(
   return stageDetails && stage
     ? `${baseStage} - ${stageDetails}`
     : !stageDetails && !stage
-      ? 'Regular Season'
+      ? 'Main'
       : baseStage;
 }
 

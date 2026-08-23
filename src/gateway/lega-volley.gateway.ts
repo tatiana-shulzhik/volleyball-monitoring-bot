@@ -185,6 +185,7 @@ export class LegaVolleyGateway {
             html,
             teamNames.get(team.externalId) ?? team.name,
             team.externalId,
+            team.country,
           ),
         };
       },
