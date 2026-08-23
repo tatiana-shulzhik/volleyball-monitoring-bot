@@ -35,16 +35,6 @@ export interface ILegaPlayer {
   leagueExternalId: number;
 }
 
-export interface ILegaCompetitionRule {
-  pattern: RegExp;
-  name: string;
-}
-
-export interface ILegaStageRule {
-  pattern: RegExp;
-  name: string;
-}
-
 export interface IMapSettledParams<TInput, TOutput> {
   items: TInput[];
   mapper: (item: TInput) => Promise<TOutput>;

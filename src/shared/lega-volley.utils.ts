@@ -13,7 +13,6 @@ import {
   ILegaMatchReference,
   ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
-import { CHAMPIONSHIP_RULES, STAGE_RULES } from './consts/constants';
 import { ECompetitionType, EMatchStatus } from './enums';
 
 export function parseLegaSeason(
@@ -24,7 +23,6 @@ export function parseLegaSeason(
   const championships = new Map<number, ICevChampionship>();
   const stages = new Map<string, ICevCompetitionStage>();
   const leagues: ICevLeague[] = [];
-  const range = extractLegaDateRange(html);
 
   for (const option of readLegaOptions(html, 'campionato')) {
     const parsedName = parseCompetitionName(option.label);
@@ -43,15 +41,11 @@ export function parseLegaSeason(
       competitionType: ECompetitionType.Club,
     });
 
-    const stageKey = `${championshipExternalId}:${stageExternalId}`;
-    const existingStage = stages.get(stageKey);
-    stages.set(stageKey, {
+    stages.set(`${championshipExternalId}:${stageExternalId}`, {
       externalId: stageExternalId,
       name: stageName,
       championshipExternalId,
       seasonName,
-      startsAt: minLegaDate(existingStage?.startsAt, range.startsAt),
-      endsAt: maxLegaDate(existingStage?.endsAt, range.endsAt),
     });
 
     leagues.push({
@@ -72,9 +66,9 @@ export function parseLegaSeason(
 
 export function parseCompetitionName(name: string): ILegaCompetitionName {
   const cleanName = name.trim();
-  const championshipName = getChampionshipName(cleanName);
-  const stageRule = STAGE_RULES.find(({ pattern }) => pattern.test(cleanName));
-  const stageName = stageRule?.name ?? cleanName;
+  const [competitionName, stageDetails] = cleanName.split(/\s+-\s+/, 2);
+  const championshipName = getLegaChampionshipName(competitionName);
+  const stageName = getLegaStageName(competitionName, stageDetails);
 
   return {
     championshipName,
@@ -294,15 +288,6 @@ export function parseLegaPostGaraDate(value: string): Date | null {
     : null;
 }
 
-export function createLegaMatchKey(
-  leagueExternalId: number,
-  homeTeamExternalId: string,
-  awayTeamExternalId: string,
-  scheduledAt: Date | null,
-): string {
-  return `${leagueExternalId}:${homeTeamExternalId}:${awayTeamExternalId}:${scheduledAt?.toISOString().slice(0, 10) ?? ''}`;
-}
-
 export function createLegaMatchLookupKey(
   leagueExternalId: number,
   homeTeamName: string,
@@ -449,10 +434,88 @@ function parseLegaScheduleDate(
   );
 }
 
-function getChampionshipName(name: string): string {
-  return (
-    CHAMPIONSHIP_RULES.find(({ pattern }) => pattern.test(name))?.name ?? name
-  );
+function getLegaChampionshipName(name: string): string {
+  // European competitions
+  if (/\bChampions League\b/i.test(name)) {
+    return 'Champions League';
+  }
+
+  if (
+    /\b(?:CEV\s+)?Volleyball Cup\b/i.test(name) ||
+    /\bCEV Cup\b/i.test(name)
+  ) {
+    return 'CEV Cup';
+  }
+
+  if (/\bChallenge Cup\b/i.test(name)) {
+    return 'Challenge Cup';
+  }
+
+  // Coppa Italia
+  if (/\bCoppa Italia\b.*\bSuperLega\b/i.test(name)) {
+    return 'Coppa Italia SuperLega';
+  }
+
+  if (/\bCoppa Italia\b.*\bA2\b/i.test(name)) {
+    return 'Coppa Italia A2';
+  }
+
+  if (/\bCoppa Italia\b.*\bA3\b/i.test(name)) {
+    return 'Coppa Italia A3';
+  }
+
+  // Supercoppa
+  if (/\bSupercoppa\b.*\bA2\b/i.test(name)) {
+    return 'Supercoppa A2';
+  }
+
+  if (/\bSupercoppa\b.*\bA3\b/i.test(name)) {
+    return 'Supercoppa A3';
+  }
+
+  if (
+    /\bSupercoppa\b.*\bSuperLega\b/i.test(name) ||
+    /\bDel Monte Supercoppa\b/i.test(name)
+  ) {
+    return 'Supercoppa SuperLega';
+  }
+
+  // SuperLega
+  if (
+    /\bSuperLega\b/i.test(name) ||
+    /\b(?:Play Off\s+)?(?:3|5)\s*(?:°|o)?\s*Posto\b/i.test(name) ||
+    /\b(?:Play Off\s+)?Finale\s+3\s*(?:°|o)?\s*Posto\b/i.test(name)
+  ) {
+    return 'SuperLega';
+  }
+
+  // Serie A2
+  if (/\b(?:Serie\s+)?A2\b/i.test(name)) {
+    return 'Serie A2';
+  }
+
+  // Serie A3
+  if (/\b(?:Serie\s+)?A3\b/i.test(name)) {
+    return 'Serie A3';
+  }
+
+  return name.trim();
+}
+
+function getLegaStageName(
+  competitionName: string,
+  stageDetails: string | undefined,
+): string {
+  const stage = competitionName.match(
+    /^(Regular Season|Main Phase|Early Round|1st Round|2nd Round|Play Off\s+(?:3|5)\s*(?:°|o)?\s*Posto|(?:Play Off\s+)?Finale\s+3\s*(?:°|o)?\s*Posto|(?:Play Off\s+)?(?:3|5)\s*(?:°|o)?\s*Posto|Play Off|Play Out)\b/i,
+  )?.[1];
+  const baseStage = stage ?? stageDetails ?? competitionName;
+
+  return stageDetails && stage
+    ? `${baseStage} - ${stageDetails}`
+    : !stageDetails && !stage
+      ? 'Regular Season'
+      : baseStage;
 }
 
 function cleanLegaText(value: string): string {
@@ -465,7 +528,7 @@ function cleanLegaText(value: string): string {
     .trim();
 }
 
-function extractLegaDateRange(html: string): ILegaDateRange {
+export function readLegaDateRange(html: string): ILegaDateRange {
   const dates = [...html.matchAll(/\b(\d{2})\/(\d{2})\/(\d{4})\b/g)].map(
     ([, day, month, year]) =>
       new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))),
@@ -478,18 +541,6 @@ function extractLegaDateRange(html: string): ILegaDateRange {
       Math.max(...dates.map((date) => date.getTime() + 86_399_999)),
     ),
   };
-}
-
-function minLegaDate(first?: Date, second?: Date): Date | undefined {
-  if (!first) return second;
-  if (!second) return first;
-  return first <= second ? first : second;
-}
-
-function maxLegaDate(first?: Date, second?: Date): Date | undefined {
-  if (!first) return second;
-  if (!second) return first;
-  return first >= second ? first : second;
 }
 
 function hashLegaId(value: string): number {

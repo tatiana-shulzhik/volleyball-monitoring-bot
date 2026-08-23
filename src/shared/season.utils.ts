@@ -1,22 +1,8 @@
 import { ECompetitionType } from './enums';
 import { PREVIOUS_YEARS_COUNT } from './consts/constants';
 
-const SEASON_START_MONTH = 6;
-
 export function getEarliestCatalogYear(date = new Date()): number {
   return date.getFullYear() - PREVIOUS_YEARS_COUNT;
-}
-
-export function getSeasonStartYear(date: Date): number {
-  const year = date.getUTCFullYear();
-
-  return date.getUTCMonth() >= SEASON_START_MONTH ? year : year - 1;
-}
-
-export function getSeasonName(date: Date): string {
-  const startYear = getSeasonStartYear(date);
-
-  return `${startYear}/${String(startYear + 1).slice(-2)}`;
 }
 
 export function getCompetitionSeasonName(

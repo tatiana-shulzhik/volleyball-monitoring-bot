@@ -9,6 +9,7 @@ import { ICevTeam } from '../interfaces/requests/teams.interface';
 import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
 import {
   ILegaCatalog,
+  ILegaDateRange,
   IMapSettledParams,
   ILegaLeagueSchedule,
   ILegaPlayer,
@@ -33,6 +34,7 @@ import {
   readLegaMatchReferences,
   readLegaOptions,
   readLegaTeams,
+  readLegaDateRange,
 } from '../shared/lega-volley.utils';
 import { HttpService } from '../shared/http/http.service';
 import { getErrorMessage } from '../shared/error.utils';
@@ -42,6 +44,7 @@ import { parseSeasonEndYear } from '../shared/season.utils';
 export class LegaVolleyGateway {
   private readonly logger = new Logger(LegaVolleyGateway.name);
   private readonly catalogs = new Map<number, ILegaCatalog>();
+  private readonly leagueScheduleRequests = new Map<string, Promise<string>>();
   private activeRequests = 0;
   private readonly requestWaiters: Array<() => void> = [];
 
@@ -70,6 +73,7 @@ export class LegaVolleyGateway {
         return parseLegaSeason(year, name, html);
       }),
     );
+    const rangesComplete = await this.setStageDateRanges(results);
 
     const championships = new Map<number, ICevChampionship>();
     const stages = new Map<string, ICevCompetitionStage>();
@@ -90,7 +94,7 @@ export class LegaVolleyGateway {
     return {
       championships: [...championships.values()],
       stages: [...stages.values()],
-      isComplete: true,
+      isComplete: rangesComplete,
     };
   }
 
@@ -507,9 +511,68 @@ export class LegaVolleyGateway {
     year: number,
     leagueExternalId: number,
   ): Promise<string> {
-    return this.get(
+    const key = `${year}:${leagueExternalId}`;
+    const existing = this.leagueScheduleRequests.get(key);
+    if (existing) return existing;
+
+    const request = this.get(
       `${LEGA_VOLLEY_BASE_URL}/schedule?stagione=${year}&campionato=${leagueExternalId}&fase=&AllMatches=true`,
     );
+    this.leagueScheduleRequests.set(key, request);
+    void request.catch(() => this.leagueScheduleRequests.delete(key));
+
+    return request;
+  }
+
+  private async setStageDateRanges(catalogs: ILegaCatalog[]): Promise<boolean> {
+    const leagueSources = catalogs.flatMap(({ year, leagues }) =>
+      leagues.map((league) => ({ year, league })),
+    );
+    const results = await this.mapSettled({
+      items: leagueSources,
+      mapper: async ({ year, league }) =>
+        readLegaDateRange(
+          await this.fetchLeagueSchedule(year, league.externalId),
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+    const rangesByStageKey = new Map<string, ILegaDateRange>();
+
+    results.forEach((result, index) => {
+      const { year, league } = leagueSources[index];
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `League schedule request failed for ${league.externalId} ` +
+            `(${year}): ${getErrorMessage(result.reason)}`,
+        );
+        return;
+      }
+
+      const key = `${league.championshipExternalId}:${league.stageExternalId}`;
+      const range = rangesByStageKey.get(key) ?? {};
+      const { startsAt, endsAt } = result.value;
+      rangesByStageKey.set(key, {
+        startsAt:
+          !range.startsAt || (startsAt && startsAt < range.startsAt)
+            ? startsAt
+            : range.startsAt,
+        endsAt:
+          !range.endsAt || (endsAt && endsAt > range.endsAt)
+            ? endsAt
+            : range.endsAt,
+      });
+    });
+
+    for (const catalog of catalogs) {
+      catalog.stages = catalog.stages.map((stage) => ({
+        ...stage,
+        ...rangesByStageKey.get(
+          `${stage.championshipExternalId}:${stage.externalId}`,
+        ),
+      }));
+    }
+
+    return results.every((result) => result.status === 'fulfilled');
   }
 
   private fetchSchedule(year: number): Promise<string> {
