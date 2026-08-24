@@ -236,11 +236,19 @@ export class PlayersService {
         displayedRelations.map(({ league }) => league.stage.championship.id),
       ),
     ];
+    const seasonIds = [
+      ...new Set(
+        displayedRelations.flatMap(({ league }) =>
+          league.stage.season ? [league.stage.season.id] : [],
+        ),
+      ),
+    ];
     const attacks =
       championshipIds.length && playerIds.length
         ? await this.matchAttacksRepository.aggregateByChampionshipIds(
             championshipIds,
             playerIds,
+            sourceCode === ESourceCode.LegaVolley ? seasonIds : undefined,
           )
         : [];
     const result = createTeamStatistics(

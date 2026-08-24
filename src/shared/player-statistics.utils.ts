@@ -330,11 +330,22 @@ function formatTeamStatisticsHeader(data: ITeamStatistics): string {
 
   return [
     '<p><b>📊 Статистика команды</b></p>',
+    `<p>🔗 ${formatStatisticsSource(data.sourceCode)}</p>`,
     `<p>📅 ${escapeHtml(data.seasonName)}</p>`,
     `<p>🌍 ${data.country ? escapeHtml(data.country) : '—'}</p>`,
     `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
     `<p>👥 ${escapeHtml(data.teamName)}${teamSeason}</p>`,
   ].join('');
+}
+
+function formatStatisticsSource(sourceCode: ESourceCode): string {
+  const sources: Record<ESourceCode, string> = {
+    [ESourceCode.Cev]: '🇪🇺 CEV',
+    [ESourceCode.LegaVolley]: '🇮🇹 Lega Volley',
+    [ESourceCode.LegaVolleyFemminile]: '🇮🇹 Lega Volley Femminile',
+  };
+
+  return sources[sourceCode];
 }
 
 function formatRetroPlayers(players: ITeamStatistics['players']): string {
