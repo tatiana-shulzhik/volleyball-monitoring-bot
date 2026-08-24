@@ -136,12 +136,21 @@ export class LegaVolleyCatalogService {
   ): Promise<void> {
     const pendingMatches = (
       await this.playerStatisticsService.findPendingLegaMatches()
-    ).filter(
-      (match) =>
-        (parseSeasonEndYear(match.league.stage.season?.name) ?? 0) >=
-        earliestYear,
-    );
-    const matchesWithStoredStatisticsId = pendingMatches.flatMap((match) =>
+    ).filter((match) => {
+      const seasonEndYear = parseSeasonEndYear(match.league.stage.season?.name);
+      const matchYear = seasonEndYear ?? match.scheduledAt?.getFullYear();
+
+      if (matchYear === undefined) {
+        this.logger.warn(
+          `[MATCH YEAR NOT RESOLVED] match=${match.id} ` +
+            `league=${match.league.externalId}`,
+        );
+        return false;
+      }
+
+      return matchYear >= earliestYear;
+    });
+    const matchesWithExternalId = pendingMatches.flatMap((match) =>
       match.externalId?.match(/^\d+$/)
         ? [
             {
@@ -155,36 +164,60 @@ export class LegaVolleyCatalogService {
         : [],
     );
     const storedStatisticsMatchIds = new Set(
-      matchesWithStoredStatisticsId.map(({ sourceMatchId }) => sourceMatchId),
+      matchesWithExternalId.map(({ sourceMatchId }) => sourceMatchId),
     );
-    const pendingMatchKeys = new Set(
-      pendingMatches.flatMap((match) =>
-        storedStatisticsMatchIds.has(match.externalId ?? '')
-          ? []
-          : [
-              createLegaMatchLookupKey(
-                match.league.externalId,
-                match.homeTeam.name,
-                match.awayTeam.name,
-                match.scheduledAt,
-              ),
-              createLegaMatchLookupKey(
-                match.league.externalId,
-                match.homeTeam.name,
-                match.awayTeam.name,
-                null,
-              ),
-            ],
-      ),
-    );
-    const earliestPendingSeasonYear = pendingMatches
-      .filter((match) => !storedStatisticsMatchIds.has(match.externalId ?? ''))
-      .map((match) => parseSeasonStartYear(match.league.stage.season?.name))
-      .filter((year): year is number => year !== undefined)
-      .reduce(
-        (earliestYear, year) => Math.min(earliestYear, year),
-        earliestYear,
+    const pendingMatchKeysByYearAndLeague = new Map<
+      number,
+      Map<number, Set<string>>
+    >();
+
+    for (const match of pendingMatches) {
+      if (storedStatisticsMatchIds.has(match.externalId ?? '')) {
+        continue;
+      }
+
+      const year =
+        parseSeasonStartYear(match.league.stage.season?.name) ??
+        match.scheduledAt?.getFullYear();
+      if (year === undefined) {
+        this.logger.warn(
+          `[MATCH YEAR NOT RESOLVED] match=${match.id} ` +
+            `league=${match.league.externalId}`,
+        );
+        continue;
+      }
+
+      let pendingMatchKeysByLeague = pendingMatchKeysByYearAndLeague.get(year);
+      if (!pendingMatchKeysByLeague) {
+        pendingMatchKeysByLeague = new Map();
+        pendingMatchKeysByYearAndLeague.set(year, pendingMatchKeysByLeague);
+      }
+
+      let pendingMatchKeys = pendingMatchKeysByLeague.get(
+        match.league.externalId,
       );
+      if (!pendingMatchKeys) {
+        pendingMatchKeys = new Set();
+        pendingMatchKeysByLeague.set(match.league.externalId, pendingMatchKeys);
+      }
+
+      pendingMatchKeys.add(
+        createLegaMatchLookupKey(
+          match.league.externalId,
+          match.homeTeam.name,
+          match.awayTeam.name,
+          match.scheduledAt,
+        ),
+      );
+      pendingMatchKeys.add(
+        createLegaMatchLookupKey(
+          match.league.externalId,
+          match.homeTeam.name,
+          match.awayTeam.name,
+          null,
+        ),
+      );
+    }
 
     if (!pendingMatches.length) {
       this.logger.log('No pending LegaVolley match statistics found');
@@ -196,16 +229,17 @@ export class LegaVolleyCatalogService {
         `${pendingMatches.length} pending matches`,
     );
 
-    const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
-      ...(await this.gateway.fetchMatchStatisticsByIds(
-        matchesWithStoredStatisticsId,
-      )),
-      ...(pendingMatchKeys.size
-        ? await this.gateway.fetchMatchStatisticsSince(
-            earliestPendingSeasonYear,
-            pendingMatchKeys,
+    const [statisticsById, resolvedStatistics] = await Promise.all([
+      this.gateway.fetchMatchStatisticsByIds(matchesWithExternalId),
+      pendingMatchKeysByYearAndLeague.size
+        ? this.gateway.fetchPendingMatchStatistics(
+            pendingMatchKeysByYearAndLeague,
           )
-        : []),
+        : Promise.resolve([]),
+    ]);
+    const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
+      ...statisticsById,
+      ...resolvedStatistics,
     ]);
 
     this.logger.log(`LegaVolley match statistics synchronized: ${rows} rows`);
