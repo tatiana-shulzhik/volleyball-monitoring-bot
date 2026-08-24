@@ -193,9 +193,11 @@ export function parseLegaTeamPage(
   teamExternalId = '',
   fallbackCountry?: string,
 ): { name: string; country: string; players: ILegaPlayer[] } {
-  const title = html.match(
-    /<(?:h1|h2|title)[^>]*>([\s\S]*?)<\/(?:h1|h2|title)>/i,
-  )?.[1];
+  const title =
+    html.match(
+      /<div\b[^>]*class=["'][^"']*\bsquadra-nome-main\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    )?.[1] ??
+    html.match(/<(?:h1|h2|title)[^>]*>([\s\S]*?)<\/(?:h1|h2|title)>/i)?.[1];
   return {
     name: title ? cleanLegaText(title) : fallbackName,
     country: fallbackCountry ?? 'ITA',
@@ -215,17 +217,32 @@ export function parseLegaMatchStatistics(
       /<table\b[^>]*id=["']Tabellino["'][^>]*>[\s\S]*?<\/table>/gi,
     ),
   ];
+  const playedOnFromMatch = parseLegaPostGaraDate(
+    tables
+      .find(([table]) => /<th\b[^>]*>\s*Data\s*<\/th>/i.test(table))?.[0]
+      .match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/)?.[0] ?? '',
+  );
+  const actualPlayedOn = playedOnFromMatch ?? playedOn;
   const teamTables = tables.filter(
-    (table) => /Atleta=/i.test(table[0]) && /Totali squadra/i.test(table[0]),
+    ([table]) =>
+      /Atleta=/i.test(table) && /<th\b[^>]*>\s*Voto\s*<\/th>/i.test(table),
   );
   if (teamTables.length < 2) {
-    return teamNames
+    const summaryTeamNames = [
+      ...(tables[0]?.[0].matchAll(
+        /<td\b[^>]*title=["']Statistiche Squadra["'][^>]*>[\s\S]*?<span\b[^>]*>([\s\S]*?)<\/span>/gi,
+      ) ?? []),
+    ].map((match) => cleanLegaText(match[1]));
+    const homeTeamName = teamNames?.homeTeamName ?? summaryTeamNames[0];
+    const awayTeamName = teamNames?.awayTeamName ?? summaryTeamNames[1];
+
+    return homeTeamName && awayTeamName
       ? {
           sourceMatchId,
           leagueExternalId,
-          playedOn,
-          homeTeamName: teamNames.homeTeamName,
-          awayTeamName: teamNames.awayTeamName,
+          playedOn: actualPlayedOn,
+          homeTeamName,
+          awayTeamName,
           home: [],
           away: [],
         }
@@ -233,9 +250,10 @@ export function parseLegaMatchStatistics(
   }
 
   const parseTeam = (table: string) => {
-    const title = table.match(
-      /class=["']HeadCol["'][^>]*>[\s\S]*?([^<]+?)\s*<\/td>/i,
-    )?.[1];
+    const title =
+      table.match(
+        /class=["']HeadCol["'][^>]*>[\s\S]*?([^<]+?)\s*<\/td>/i,
+      )?.[1] ?? table.match(/<th\b[^>]*>[\s\S]*?([^<]+?)\s*<\/th>/i)?.[1];
     const players: ILegaMatchPlayerStatistic[] = [];
     for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
       const player = row[1].match(/Atleta=([^&"']+)/i)?.[1];
@@ -243,13 +261,15 @@ export function parseLegaMatchStatistics(
       const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
         (cell) => cleanLegaText(cell[1]),
       );
+      const compactTable = cells.length <= 5;
       players.push({
         externalId: player,
-        attempts: parseLegaNumber(cells[18]) ?? 0,
-        successful: parseLegaNumber(cells[21]) ?? 0,
-        points: parseLegaNumber(cells[8]) ?? 0,
-        setsPlayed: cells.slice(3, 8).filter((value) => value.length > 0)
-          .length,
+        attempts: compactTable ? 0 : (parseLegaNumber(cells[18]) ?? 0),
+        successful: compactTable ? 0 : (parseLegaNumber(cells[21]) ?? 0),
+        points: parseLegaNumber(compactTable ? cells.at(-1) : cells[8]) ?? 0,
+        setsPlayed: compactTable
+          ? (parseLegaNumber(cells[0]) ?? 0)
+          : cells.slice(3, 8).filter((value) => value.length > 0).length,
       });
     }
     return { name: title ? cleanLegaText(title) : '', players };
@@ -257,13 +277,15 @@ export function parseLegaMatchStatistics(
 
   const home = parseTeam(teamTables[0][0]);
   const away = parseTeam(teamTables[1][0]);
-  return home.name && away.name
+  const homeTeamName = home.name || teamNames?.homeTeamName;
+  const awayTeamName = away.name || teamNames?.awayTeamName;
+  return homeTeamName && awayTeamName
     ? {
         sourceMatchId,
         leagueExternalId,
-        playedOn,
-        homeTeamName: home.name,
-        awayTeamName: away.name,
+        playedOn: actualPlayedOn,
+        homeTeamName,
+        awayTeamName,
         home: home.players,
         away: away.players,
       }
@@ -299,7 +321,7 @@ export function readLegaMatchReferences(html: string): ILegaMatchReference[] {
 }
 
 export function parseLegaPostGaraDate(value: string): Date | null {
-  const match = value.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  const match = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   return match
     ? new Date(
         Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])),

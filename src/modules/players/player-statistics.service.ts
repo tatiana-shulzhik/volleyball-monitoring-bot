@@ -96,7 +96,25 @@ export class PlayerStatisticsService {
       const match =
         matchesByKey.get(matchKey) ??
         (candidates.length === 1 ? candidates[0] : undefined);
-      if (!match) continue;
+      if (!match) {
+        this.logger.warn(
+          `[MATCH NOT FOUND] externalId=${item.sourceMatchId} ` +
+            `league=${item.leagueExternalId} home="${item.homeTeamName}" ` +
+            `away="${item.awayTeamName}" ` +
+            `date=${item.playedOn?.toISOString() ?? 'null'} ` +
+            `candidates=${candidates.length}`,
+        );
+        for (const candidate of candidates) {
+          this.logger.debug(
+            `[DB CANDIDATE] id=${candidate.id} ` +
+              `home="${candidate.homeTeam.name}" ` +
+              `away="${candidate.awayTeam.name}" ` +
+              `date=${candidate.scheduledAt?.toISOString() ?? 'null'}`,
+          );
+        }
+        continue;
+      }
+
       externalIdsByMatchId.set(match.id, item.sourceMatchId);
 
       for (const [team, playersStatistics] of [

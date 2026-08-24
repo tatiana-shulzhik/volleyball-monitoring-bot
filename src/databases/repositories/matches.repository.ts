@@ -181,6 +181,7 @@ export class MatchesRepository {
       .createQueryBuilder('match')
       .innerJoinAndSelect('match.league', 'league')
       .innerJoinAndSelect('league.stage', 'stage')
+      .leftJoinAndSelect('stage.season', 'season')
       .innerJoinAndSelect('stage.championship', 'championship')
       .innerJoin('championship.source', 'source')
       .innerJoinAndSelect('match.homeTeam', 'homeTeam')

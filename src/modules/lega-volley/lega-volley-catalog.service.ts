@@ -9,7 +9,11 @@ import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { ESourceCode } from '../../shared/enums';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
-import { getEarliestCatalogYear } from '../../shared/season.utils';
+import {
+  getEarliestCatalogYear,
+  parseSeasonEndYear,
+  parseSeasonStartYear,
+} from '../../shared/season.utils';
 
 @Injectable()
 export class LegaVolleyCatalogService {
@@ -68,7 +72,7 @@ export class LegaVolleyCatalogService {
   }
 
   async synchronizeMatchStatisticsStoredRange(): Promise<void> {
-    await this.synchronizeMatchStatisticsSince(getEarliestCatalogYear(), false);
+    await this.synchronizeMatchStatisticsSince(getEarliestCatalogYear());
   }
 
   async synchronizeCurrentMatchStatistics(): Promise<void> {
@@ -129,10 +133,14 @@ export class LegaVolleyCatalogService {
 
   private async synchronizeMatchStatisticsSince(
     earliestYear: number,
-    loadStatistics = true,
   ): Promise<void> {
-    const pendingMatches =
-      await this.playerStatisticsService.findPendingLegaMatches();
+    const pendingMatches = (
+      await this.playerStatisticsService.findPendingLegaMatches()
+    ).filter(
+      (match) =>
+        (parseSeasonEndYear(match.league.stage.season?.name) ?? 0) >=
+        earliestYear,
+    );
     const matchesWithStoredStatisticsId = pendingMatches.flatMap((match) =>
       match.externalId?.match(/^\d+$/)
         ? [
@@ -140,6 +148,8 @@ export class LegaVolleyCatalogService {
               sourceMatchId: match.externalId,
               leagueExternalId: match.league.externalId,
               playedOn: match.scheduledAt,
+              homeTeamName: match.homeTeam.name,
+              awayTeamName: match.awayTeam.name,
             },
           ]
         : [],
@@ -167,6 +177,14 @@ export class LegaVolleyCatalogService {
             ],
       ),
     );
+    const earliestPendingSeasonYear = pendingMatches
+      .filter((match) => !storedStatisticsMatchIds.has(match.externalId ?? ''))
+      .map((match) => parseSeasonStartYear(match.league.stage.season?.name))
+      .filter((year): year is number => year !== undefined)
+      .reduce(
+        (earliestYear, year) => Math.min(earliestYear, year),
+        earliestYear,
+      );
 
     if (!pendingMatches.length) {
       this.logger.log('No pending LegaVolley match statistics found');
@@ -179,16 +197,13 @@ export class LegaVolleyCatalogService {
     );
 
     const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
-      ...(loadStatistics
-        ? await this.gateway.fetchMatchStatisticsByIds(
-            matchesWithStoredStatisticsId,
-          )
-        : []),
+      ...(await this.gateway.fetchMatchStatisticsByIds(
+        matchesWithStoredStatisticsId,
+      )),
       ...(pendingMatchKeys.size
         ? await this.gateway.fetchMatchStatisticsSince(
-            earliestYear,
+            earliestPendingSeasonYear,
             pendingMatchKeys,
-            loadStatistics,
           )
         : []),
     ]);
