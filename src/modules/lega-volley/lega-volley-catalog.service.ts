@@ -68,7 +68,7 @@ export class LegaVolleyCatalogService {
   }
 
   async synchronizeMatchStatisticsStoredRange(): Promise<void> {
-    await this.synchronizeMatchStatisticsSince(getEarliestCatalogYear());
+    await this.synchronizeMatchStatisticsSince(getEarliestCatalogYear(), false);
   }
 
   async synchronizeCurrentMatchStatistics(): Promise<void> {
@@ -129,6 +129,7 @@ export class LegaVolleyCatalogService {
 
   private async synchronizeMatchStatisticsSince(
     earliestYear: number,
+    loadStatistics = true,
   ): Promise<void> {
     const pendingMatches =
       await this.playerStatisticsService.findPendingLegaMatches();
@@ -157,6 +158,12 @@ export class LegaVolleyCatalogService {
                 match.awayTeam.name,
                 match.scheduledAt,
               ),
+              createLegaMatchLookupKey(
+                match.league.externalId,
+                match.homeTeam.name,
+                match.awayTeam.name,
+                null,
+              ),
             ],
       ),
     );
@@ -172,13 +179,16 @@ export class LegaVolleyCatalogService {
     );
 
     const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
-      ...(await this.gateway.fetchMatchStatisticsByIds(
-        matchesWithStoredStatisticsId,
-      )),
+      ...(loadStatistics
+        ? await this.gateway.fetchMatchStatisticsByIds(
+            matchesWithStoredStatisticsId,
+          )
+        : []),
       ...(pendingMatchKeys.size
         ? await this.gateway.fetchMatchStatisticsSince(
             earliestYear,
             pendingMatchKeys,
+            loadStatistics,
           )
         : []),
     ]);

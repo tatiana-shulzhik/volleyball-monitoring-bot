@@ -208,6 +208,7 @@ export function parseLegaMatchStatistics(
   sourceMatchId: string,
   leagueExternalId: number,
   playedOn: Date | null,
+  teamNames?: Pick<ILegaMatchReference, 'homeTeamName' | 'awayTeamName'>,
 ): ILegaMatchStatistics | null {
   const tables = [
     ...html.matchAll(
@@ -217,7 +218,19 @@ export function parseLegaMatchStatistics(
   const teamTables = tables.filter(
     (table) => /Atleta=/i.test(table[0]) && /Totali squadra/i.test(table[0]),
   );
-  if (teamTables.length < 2) return null;
+  if (teamTables.length < 2) {
+    return teamNames
+      ? {
+          sourceMatchId,
+          leagueExternalId,
+          playedOn,
+          homeTeamName: teamNames.homeTeamName,
+          awayTeamName: teamNames.awayTeamName,
+          home: [],
+          away: [],
+        }
+      : null;
+  }
 
   const parseTeam = (table: string) => {
     const title = table.match(

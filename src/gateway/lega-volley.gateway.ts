@@ -13,6 +13,7 @@ import {
   IMapSettledParams,
   ILegaLeagueSchedule,
   ILegaPlayer,
+  ILegaMatchReference,
   ILegaMatchStatistics,
   ILegaOption,
 } from '../interfaces/requests/lega-volley.interface';
@@ -260,6 +261,7 @@ export class LegaVolleyGateway {
   async fetchMatchStatisticsSince(
     earliestYear: number,
     pendingMatchKeys?: ReadonlySet<string>,
+    loadStatistics = true,
   ): Promise<ILegaMatchStatistics[]> {
     const years = Array.from(
       { length: new Date().getFullYear() - earliestYear + 1 },
@@ -267,7 +269,8 @@ export class LegaVolleyGateway {
     );
     const results = await this.mapSettled({
       items: years,
-      mapper: (year) => this.fetchSeasonMatchStatistics(year, pendingMatchKeys),
+      mapper: (year) =>
+        this.fetchSeasonMatchStatistics(year, pendingMatchKeys, loadStatistics),
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
 
@@ -317,13 +320,19 @@ export class LegaVolleyGateway {
   private async fetchSeasonMatchStatistics(
     year: number,
     pendingMatchKeys?: ReadonlySet<string>,
+    loadStatistics = true,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({ year });
     const series = readLegaOptions(html, 'serie');
     const results = await this.mapSettled({
       items: series,
       mapper: (item) =>
-        this.fetchSeriesMatchStatistics(year, item, pendingMatchKeys),
+        this.fetchSeriesMatchStatistics(
+          year,
+          item,
+          pendingMatchKeys,
+          loadStatistics,
+        ),
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
 
@@ -344,6 +353,7 @@ export class LegaVolleyGateway {
     year: number,
     series: ILegaOption,
     pendingMatchKeys?: ReadonlySet<string>,
+    loadStatistics = true,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({ year, series: series.value });
     const championships = readLegaOptions(html, 'campionato');
@@ -355,6 +365,7 @@ export class LegaVolleyGateway {
           series.value,
           item,
           pendingMatchKeys,
+          loadStatistics,
         ),
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
@@ -377,6 +388,7 @@ export class LegaVolleyGateway {
     series: string,
     championship: ILegaOption,
     pendingMatchKeys?: ReadonlySet<string>,
+    loadStatistics = true,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({
       year,
@@ -393,6 +405,7 @@ export class LegaVolleyGateway {
           championship.value,
           item,
           pendingMatchKeys,
+          loadStatistics,
         ),
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
@@ -416,6 +429,7 @@ export class LegaVolleyGateway {
     championship: string,
     phase: ILegaOption,
     pendingMatchKeys?: ReadonlySet<string>,
+    loadStatistics = true,
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({
       year,
@@ -438,7 +452,11 @@ export class LegaVolleyGateway {
       }),
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
-    const matches = dayResults.flatMap((result) => {
+    const matches: Array<{
+      id: string;
+      playedOn: Date | null;
+      teamNames?: Pick<ILegaMatchReference, 'homeTeamName' | 'awayTeamName'>;
+    }> = dayResults.flatMap((result) => {
       if (result.status === 'rejected') {
         this.logger.warn(
           `Post-gara match day request failed for ${championship}: ` +
@@ -452,19 +470,31 @@ export class LegaVolleyGateway {
         references.map(({ sourceMatchId }) => sourceMatchId),
       );
       const matches = references
-        .filter(
-          ({ homeTeamName, awayTeamName }) =>
+        .filter(({ homeTeamName, awayTeamName }) => {
+          const matchKey = createLegaMatchLookupKey(
+            Number(championship),
+            homeTeamName,
+            awayTeamName,
+            playedOn,
+          );
+          const teamsKey = createLegaMatchLookupKey(
+            Number(championship),
+            homeTeamName,
+            awayTeamName,
+            null,
+          );
+
+          return (
             !pendingMatchKeys ||
-            pendingMatchKeys.has(
-              createLegaMatchLookupKey(
-                Number(championship),
-                homeTeamName,
-                awayTeamName,
-                playedOn,
-              ),
-            ),
-        )
-        .map(({ sourceMatchId }) => ({ id: sourceMatchId, playedOn }));
+            pendingMatchKeys.has(matchKey) ||
+            pendingMatchKeys.has(teamsKey)
+          );
+        })
+        .map(({ sourceMatchId, homeTeamName, awayTeamName }) => ({
+          id: sourceMatchId,
+          playedOn,
+          teamNames: { homeTeamName, awayTeamName },
+        }));
 
       return [
         ...matches,
@@ -473,14 +503,32 @@ export class LegaVolleyGateway {
           .map((id) => ({ id, playedOn })),
       ];
     });
+    if (!loadStatistics) {
+      return matches.flatMap(({ id, playedOn, teamNames }) =>
+        teamNames
+          ? [
+              {
+                sourceMatchId: id,
+                leagueExternalId: Number(championship),
+                playedOn,
+                homeTeamName: teamNames.homeTeamName,
+                awayTeamName: teamNames.awayTeamName,
+                home: [],
+                away: [],
+              },
+            ]
+          : [],
+      );
+    }
     const matchResults = await this.mapSettled({
       items: matches,
-      mapper: async ({ id, playedOn }) => {
+      mapper: async ({ id, playedOn, teamNames }) => {
         const statistics = parseLegaMatchStatistics(
           await this.get(`${LEGA_VOLLEY_BASE_URL}/match/${id}`),
           id,
           Number(championship),
           playedOn,
+          teamNames,
         );
         return statistics;
       },
