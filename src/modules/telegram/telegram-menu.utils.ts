@@ -70,7 +70,6 @@ export function formatChampionshipButton(name: string): string {
       '$1 European Champ.',
     )
     .replace(/\bCEV Volleyball Challenge Cup\b/gi, 'Challenge Cup')
-    .replace(/\bCEV Volleyball Cup\b/gi, 'CEV Cup')
     .replace(/\bCEV Volleyball European League\b/gi, 'European League')
     .replace(/\bCEV(?:\s+[A-Z0-9]+){0,2}\s+(EuroVolley)\b/gi, '$1')
     .replace(

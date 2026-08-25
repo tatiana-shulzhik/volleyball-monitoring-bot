@@ -69,3 +69,10 @@ export interface ILegaMatchReference {
   homeTeamName: string;
   awayTeamName: string;
 }
+
+export interface ILegaPendingMatchKeys {
+  exactMatchKeys: Set<string>;
+  exactMatchKeysByTeam: Map<string, Set<string>>;
+  dates: Set<string>;
+  dateUnknownTeamKeys: Set<string>;
+}

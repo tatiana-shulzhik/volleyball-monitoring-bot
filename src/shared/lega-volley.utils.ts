@@ -23,8 +23,9 @@ export function parseLegaSeason(
   const championships = new Map<number, ICevChampionship>();
   const stages = new Map<string, ICevCompetitionStage>();
   const leagues: ICevLeague[] = [];
+  const championshipOptions = readLegaOptions(html, 'campionato');
 
-  for (const option of readLegaOptions(html, 'campionato')) {
+  for (const option of championshipOptions) {
     const parsedName = parseCompetitionName(option.label);
     const competitionName = parsedName.championshipName;
     const stageName = parsedName.stageName;
@@ -157,12 +158,14 @@ export function readLegaMatches(
       teamMatches[1]?.[1] ?? teamsByName.get(normalizeLegaName(cells[4] ?? ''));
     if (!homeTeamExternalId || !awayTeamExternalId) continue;
 
-    const matchNumber = (
-      teamMatches.length >= 2 ? cells[0] : cells.at(-1)
-    )?.match(/^\d+$/)?.[0];
-    if (!matchNumber) continue;
-
-    const externalId = `legavolley:${year}:${leagueExternalId}:${matchNumber}`;
+    const matchNumber =
+      teamMatches.length >= 2 ? cells[0]?.match(/^\d+$/)?.[0] : undefined;
+    const externalId = `legavolley:${year}:${leagueExternalId}:${
+      matchNumber ??
+      [cells[0], cells[1], cells[2], cells[4]]
+        .map((cell) => normalizeLegaName(cell ?? ''))
+        .join(':')
+    }`;
     const rowText = cleanLegaText(row);
     const score = (cells[5] ?? '').match(/\b(\d+)\s*-\s*(\d+)\b/);
     const status = /annullat|cancel/i.test(rowText)

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
+import { ILegaPendingMatchKeys } from '../../interfaces/requests/lega-volley.interface';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
 import { MatchesService } from '../matches/matches.service';
@@ -168,7 +169,7 @@ export class LegaVolleyCatalogService {
     );
     const pendingMatchKeysByYearAndLeague = new Map<
       number,
-      Map<number, Set<string>>
+      Map<number, ILegaPendingMatchKeys>
     >();
 
     for (const match of pendingMatches) {
@@ -197,26 +198,38 @@ export class LegaVolleyCatalogService {
         match.league.externalId,
       );
       if (!pendingMatchKeys) {
-        pendingMatchKeys = new Set();
+        pendingMatchKeys = {
+          exactMatchKeys: new Set(),
+          exactMatchKeysByTeam: new Map(),
+          dates: new Set(),
+          dateUnknownTeamKeys: new Set(),
+        };
         pendingMatchKeysByLeague.set(match.league.externalId, pendingMatchKeys);
       }
 
-      pendingMatchKeys.add(
-        createLegaMatchLookupKey(
-          match.league.externalId,
-          match.homeTeam.name,
-          match.awayTeam.name,
-          match.scheduledAt,
-        ),
+      const teamsKey = createLegaMatchLookupKey(
+        match.league.externalId,
+        match.homeTeam.name,
+        match.awayTeam.name,
+        null,
       );
-      pendingMatchKeys.add(
-        createLegaMatchLookupKey(
-          match.league.externalId,
-          match.homeTeam.name,
-          match.awayTeam.name,
-          null,
-        ),
+      if (!match.scheduledAt) {
+        pendingMatchKeys.dateUnknownTeamKeys.add(teamsKey);
+        continue;
+      }
+
+      const matchKey = createLegaMatchLookupKey(
+        match.league.externalId,
+        match.homeTeam.name,
+        match.awayTeam.name,
+        match.scheduledAt,
       );
+      pendingMatchKeys.exactMatchKeys.add(matchKey);
+      pendingMatchKeys.dates.add(match.scheduledAt.toISOString().slice(0, 10));
+      const exactMatchKeysByTeam =
+        pendingMatchKeys.exactMatchKeysByTeam.get(teamsKey) ?? new Set();
+      exactMatchKeysByTeam.add(matchKey);
+      pendingMatchKeys.exactMatchKeysByTeam.set(teamsKey, exactMatchKeysByTeam);
     }
 
     if (!pendingMatches.length) {
