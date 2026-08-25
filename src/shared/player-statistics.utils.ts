@@ -279,7 +279,10 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
   const statistics =
     data.teamSeasonName !== data.seasonName || seasons.length > 1
       ? formatRetroPlayers(data.players)
-      : formatPlayersTable(data.players);
+      : formatPlayersTable(
+          data.players,
+          data.championshipName === 'Все чемпионаты',
+        );
 
   return formatTeamStatisticsHeader(data) + statistics;
 }
@@ -464,8 +467,14 @@ function getLatestPlayerSeason(players: ITeamStatistics['players']): {
   };
 }
 
-function formatPlayersTable(players: ITeamStatistics['players']): string {
-  const rows = players.map((player) => {
+function formatPlayersTable(
+  players: ITeamStatistics['players'],
+  aggregateChampionships = false,
+): string {
+  const displayedPlayers = aggregateChampionships
+    ? aggregateCurrentSeasonStatistics(players)
+    : players;
+  const rows = displayedPlayers.map((player) => {
     const number = player.shirtNumber ?? '—';
     const position = formatPlayerPosition(player.position);
 
@@ -494,6 +503,36 @@ function formatPlayersTable(players: ITeamStatistics['players']): string {
     ...rows,
     '</table>',
   ].join('');
+}
+
+function aggregateCurrentSeasonStatistics(
+  players: ITeamStatistics['players'],
+): ITeamStatistics['players'] {
+  const totals = new Map<string, ITeamStatistics['players'][number]>();
+  const fields = [
+    'points',
+    'setsPlayed',
+    'attackAttempts',
+    'successfulAttacks',
+  ] as const;
+
+  for (const player of players) {
+    const key = `${player.fullName}:${player.teamName}:${player.seasonName}`;
+    const stored = totals.get(key);
+
+    if (!stored) {
+      totals.set(key, { ...player });
+      continue;
+    }
+
+    for (const field of fields) {
+      if (stored[field] !== null || player[field] !== null) {
+        stored[field] = (stored[field] ?? 0) + (player[field] ?? 0);
+      }
+    }
+  }
+
+  return [...totals.values()];
 }
 
 function formatPlayerRating(

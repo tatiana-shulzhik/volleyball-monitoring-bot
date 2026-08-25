@@ -541,7 +541,7 @@ export class LegaVolleyGateway {
             unresolvedExactMatchKeys.delete(matchKey);
           } else if (fallbackExactMatchKeys?.size === 1) {
             unresolvedExactMatchKeys.delete(
-              fallbackExactMatchKeys.values().next().value!,
+              fallbackExactMatchKeys.values().next().value,
             );
           }
           unresolvedDateUnknownTeamKeys.delete(teamsKey);
@@ -684,7 +684,7 @@ export class LegaVolleyGateway {
             unresolvedExactMatchKeys.delete(matchKey);
           } else if (fallbackExactMatchKeys?.size === 1) {
             unresolvedExactMatchKeys.delete(
-              fallbackExactMatchKeys.values().next().value!,
+              fallbackExactMatchKeys.values().next().value,
             );
           }
           unresolvedDateUnknownTeamKeys.delete(teamsKey);
