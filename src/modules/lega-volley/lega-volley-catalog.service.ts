@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
+import { ILegaPendingMatchKeys } from '../../interfaces/requests/lega-volley.interface';
 import { ChampionshipsService } from '../championships/championships.service';
 import { LeaguesService } from '../leagues/leagues.service';
 import { MatchesService } from '../matches/matches.service';
@@ -9,7 +10,11 @@ import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { ESourceCode } from '../../shared/enums';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
-import { getEarliestCatalogYear } from '../../shared/season.utils';
+import {
+  getEarliestCatalogYear,
+  parseSeasonEndYear,
+  parseSeasonStartYear,
+} from '../../shared/season.utils';
 
 @Injectable()
 export class LegaVolleyCatalogService {
@@ -130,36 +135,102 @@ export class LegaVolleyCatalogService {
   private async synchronizeMatchStatisticsSince(
     earliestYear: number,
   ): Promise<void> {
-    const pendingMatches =
-      await this.playerStatisticsService.findPendingLegaMatches();
-    const matchesWithStoredStatisticsId = pendingMatches.flatMap((match) =>
+    const pendingMatches = (
+      await this.playerStatisticsService.findPendingLegaMatches()
+    ).filter((match) => {
+      const seasonEndYear = parseSeasonEndYear(match.league.stage.season?.name);
+      const matchYear = seasonEndYear ?? match.scheduledAt?.getFullYear();
+
+      if (matchYear === undefined) {
+        this.logger.warn(
+          `[MATCH YEAR NOT RESOLVED] match=${match.id} ` +
+            `league=${match.league.externalId}`,
+        );
+        return false;
+      }
+
+      return matchYear >= earliestYear;
+    });
+    const matchesWithExternalId = pendingMatches.flatMap((match) =>
       match.externalId?.match(/^\d+$/)
         ? [
             {
               sourceMatchId: match.externalId,
               leagueExternalId: match.league.externalId,
               playedOn: match.scheduledAt,
+              homeTeamName: match.homeTeam.name,
+              awayTeamName: match.awayTeam.name,
             },
           ]
         : [],
     );
     const storedStatisticsMatchIds = new Set(
-      matchesWithStoredStatisticsId.map(({ sourceMatchId }) => sourceMatchId),
+      matchesWithExternalId.map(({ sourceMatchId }) => sourceMatchId),
     );
-    const pendingMatchKeys = new Set(
-      pendingMatches.flatMap((match) =>
-        storedStatisticsMatchIds.has(match.externalId ?? '')
-          ? []
-          : [
-              createLegaMatchLookupKey(
-                match.league.externalId,
-                match.homeTeam.name,
-                match.awayTeam.name,
-                match.scheduledAt,
-              ),
-            ],
-      ),
-    );
+    const pendingMatchKeysByYearAndLeague = new Map<
+      number,
+      Map<number, ILegaPendingMatchKeys>
+    >();
+
+    for (const match of pendingMatches) {
+      if (storedStatisticsMatchIds.has(match.externalId ?? '')) {
+        continue;
+      }
+
+      const year =
+        parseSeasonStartYear(match.league.stage.season?.name) ??
+        match.scheduledAt?.getFullYear();
+      if (year === undefined) {
+        this.logger.warn(
+          `[MATCH YEAR NOT RESOLVED] match=${match.id} ` +
+            `league=${match.league.externalId}`,
+        );
+        continue;
+      }
+
+      let pendingMatchKeysByLeague = pendingMatchKeysByYearAndLeague.get(year);
+      if (!pendingMatchKeysByLeague) {
+        pendingMatchKeysByLeague = new Map();
+        pendingMatchKeysByYearAndLeague.set(year, pendingMatchKeysByLeague);
+      }
+
+      let pendingMatchKeys = pendingMatchKeysByLeague.get(
+        match.league.externalId,
+      );
+      if (!pendingMatchKeys) {
+        pendingMatchKeys = {
+          exactMatchKeys: new Set(),
+          exactMatchKeysByTeam: new Map(),
+          dates: new Set(),
+          dateUnknownTeamKeys: new Set(),
+        };
+        pendingMatchKeysByLeague.set(match.league.externalId, pendingMatchKeys);
+      }
+
+      const teamsKey = createLegaMatchLookupKey(
+        match.league.externalId,
+        match.homeTeam.name,
+        match.awayTeam.name,
+        null,
+      );
+      if (!match.scheduledAt) {
+        pendingMatchKeys.dateUnknownTeamKeys.add(teamsKey);
+        continue;
+      }
+
+      const matchKey = createLegaMatchLookupKey(
+        match.league.externalId,
+        match.homeTeam.name,
+        match.awayTeam.name,
+        match.scheduledAt,
+      );
+      pendingMatchKeys.exactMatchKeys.add(matchKey);
+      pendingMatchKeys.dates.add(match.scheduledAt.toISOString().slice(0, 10));
+      const exactMatchKeysByTeam =
+        pendingMatchKeys.exactMatchKeysByTeam.get(teamsKey) ?? new Set();
+      exactMatchKeysByTeam.add(matchKey);
+      pendingMatchKeys.exactMatchKeysByTeam.set(teamsKey, exactMatchKeysByTeam);
+    }
 
     if (!pendingMatches.length) {
       this.logger.log('No pending LegaVolley match statistics found');
@@ -171,16 +242,17 @@ export class LegaVolleyCatalogService {
         `${pendingMatches.length} pending matches`,
     );
 
-    const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
-      ...(await this.gateway.fetchMatchStatisticsByIds(
-        matchesWithStoredStatisticsId,
-      )),
-      ...(pendingMatchKeys.size
-        ? await this.gateway.fetchMatchStatisticsSince(
-            earliestYear,
-            pendingMatchKeys,
+    const [statisticsById, resolvedStatistics] = await Promise.all([
+      this.gateway.fetchMatchStatisticsByIds(matchesWithExternalId),
+      pendingMatchKeysByYearAndLeague.size
+        ? this.gateway.fetchPendingMatchStatistics(
+            pendingMatchKeysByYearAndLeague,
           )
-        : []),
+        : Promise.resolve([]),
+    ]);
+    const rows = await this.playerStatisticsService.upsertLegaMatchStatistics([
+      ...statisticsById,
+      ...resolvedStatistics,
     ]);
 
     this.logger.log(`LegaVolley match statistics synchronized: ${rows} rows`);

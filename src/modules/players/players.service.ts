@@ -192,41 +192,63 @@ export class PlayersService {
     }
 
     const { team, league } = relations[0];
-    const seasonId = league.stage.season?.id;
-    const sourceCode =
-      league.stage.championship.source?.code ?? ESourceCode.Cev;
+    const { stage } = league;
+    const { season, championship } = stage;
 
-    if (!seasonId) {
+    if (!season) {
       return null;
     }
 
+    const sourceCode = championship.source?.code ?? ESourceCode.Cev;
+    const isLegaVolley =
+      sourceCode === ESourceCode.LegaVolley ||
+      sourceCode === ESourceCode.LegaVolleyFemminile;
+
     if (
       aggregateSeasons?.length &&
-      !aggregateSeasons.some(({ id }) => id === seasonId)
+      !aggregateSeasons.some(({ id }) => id === season.id)
     ) {
-      aggregateSeasons = [league.stage.season!, ...aggregateSeasons].slice(
+      aggregateSeasons = [season, ...aggregateSeasons].slice(
         0,
         PREVIOUS_YEARS_COUNT,
       );
     }
 
     const isAggregate = Boolean(aggregateSeasons?.length);
-    const displayedRelations = isAggregate
-      ? await this.relationsRepository.getWhere({
-          player: {
-            id: In(relations.map(({ player }) => player.id)),
-          },
-          league: {
-            stage: {
-              season: { id: In(aggregateSeasons!.map(({ id }) => id)) },
-              championship: {
-                competitionType: league.stage.championship.competitionType,
-                source: { code: sourceCode },
-              },
+    const selectedSeasonIds = isAggregate
+      ? aggregateSeasons!.map(({ id }) => id)
+      : [season.id];
+    let displayedRelations = relations;
+
+    if (isLegaVolley && !isAggregate) {
+      displayedRelations = await this.relationsRepository.getWhere({
+        team: { id: team.id },
+        league: {
+          stage: {
+            season: { id: In(selectedSeasonIds) },
+            championship: {
+              competitionType: championship.competitionType,
+              source: { code: sourceCode },
             },
           },
-        })
-      : relations;
+        },
+      });
+    } else if (isAggregate) {
+      displayedRelations = await this.relationsRepository.getWhere({
+        player: {
+          id: In(relations.map(({ player }) => player.id)),
+        },
+        league: {
+          stage: {
+            season: { id: In(selectedSeasonIds) },
+            championship: {
+              competitionType: championship.competitionType,
+              source: { code: sourceCode },
+            },
+          },
+        },
+      });
+    }
 
     const playerIds = [
       ...new Set(displayedRelations.map(({ player }) => player.id)),
@@ -236,11 +258,19 @@ export class PlayersService {
         displayedRelations.map(({ league }) => league.stage.championship.id),
       ),
     ];
+    const relationSeasonIds = [
+      ...new Set(
+        displayedRelations.flatMap(({ league }) =>
+          league.stage.season ? [league.stage.season.id] : [],
+        ),
+      ),
+    ];
     const attacks =
       championshipIds.length && playerIds.length
         ? await this.matchAttacksRepository.aggregateByChampionshipIds(
             championshipIds,
             playerIds,
+            isLegaVolley ? relationSeasonIds : undefined,
           )
         : [];
     const result = createTeamStatistics(
@@ -249,15 +279,25 @@ export class PlayersService {
       sourceCode,
     );
 
-    if (result && aggregateSeasons?.length) {
-      result.seasonName = aggregateSeasons
+    if (!result) {
+      return null;
+    }
+
+    if (isLegaVolley || isAggregate) {
+      result.teamName = team.name;
+      result.country = team.country;
+    }
+
+    if (isLegaVolley) {
+      result.championshipName = 'Все чемпионаты';
+    }
+
+    if (isAggregate) {
+      result.seasonName = aggregateSeasons!
         .map(({ name }) => name)
         .sort((left, right) => right.localeCompare(left))
         .join('–');
-      result.teamSeasonName = league.stage.season?.name ?? '—';
-      result.teamName = team.name;
-      result.country = team.country;
-      result.championshipName = 'Все чемпионаты';
+      result.teamSeasonName = season.name;
     }
 
     return result;

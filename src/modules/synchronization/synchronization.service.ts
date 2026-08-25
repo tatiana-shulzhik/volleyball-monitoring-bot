@@ -84,6 +84,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
   async synchronizePlayerStatisticsByCron(): Promise<void> {
     await this.runExclusive(async () => {
       await this.cevCatalogService.synchronizeCurrentPlayerStatistics();
+      await this.legaVolleyCatalogService.synchronizeCurrentMatchStatistics();
       await this.legaVolleyFemminileCatalogService.synchronizeCurrentMatchStatistics();
     }, false);
   }

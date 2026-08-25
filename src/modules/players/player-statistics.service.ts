@@ -62,21 +62,59 @@ export class PlayerStatisticsService {
         match,
       ]),
     );
+    const matchesByTeams = new Map<string, MatchEntity[]>();
+    for (const match of matches) {
+      const key = createLegaMatchLookupKey(
+        match.league.externalId,
+        match.homeTeam.name,
+        match.awayTeam.name,
+        null,
+      );
+      const candidates = matchesByTeams.get(key) ?? [];
+      candidates.push(match);
+      matchesByTeams.set(key, candidates);
+    }
     const sourceUpdatedAt = new Date();
     const rows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
     const loadedMatchIds = new Set<number>();
     const externalIdsByMatchId = new Map<number, string>();
 
     for (const item of statistics) {
-      const match = matchesByKey.get(
-        createLegaMatchLookupKey(
-          item.leagueExternalId,
-          item.homeTeamName,
-          item.awayTeamName,
-          item.playedOn,
-        ),
+      const matchKey = createLegaMatchLookupKey(
+        item.leagueExternalId,
+        item.homeTeamName,
+        item.awayTeamName,
+        item.playedOn,
       );
-      if (!match) continue;
+      const teamsKey = createLegaMatchLookupKey(
+        item.leagueExternalId,
+        item.homeTeamName,
+        item.awayTeamName,
+        null,
+      );
+      const candidates = matchesByTeams.get(teamsKey) ?? [];
+      const match =
+        matchesByKey.get(matchKey) ??
+        (candidates.length === 1 ? candidates[0] : undefined);
+      if (!match) {
+        this.logger.warn(
+          `[MATCH NOT FOUND] externalId=${item.sourceMatchId} ` +
+            `league=${item.leagueExternalId} home="${item.homeTeamName}" ` +
+            `away="${item.awayTeamName}" ` +
+            `date=${item.playedOn?.toISOString() ?? 'null'} ` +
+            `candidates=${candidates.length}`,
+        );
+        for (const candidate of candidates) {
+          this.logger.debug(
+            `[DB CANDIDATE] id=${candidate.id} ` +
+              `home="${candidate.homeTeam.name}" ` +
+              `away="${candidate.awayTeam.name}" ` +
+              `date=${candidate.scheduledAt?.toISOString() ?? 'null'}`,
+          );
+        }
+        continue;
+      }
+
       externalIdsByMatchId.set(match.id, item.sourceMatchId);
 
       for (const [team, playersStatistics] of [

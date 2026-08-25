@@ -46,6 +46,7 @@ export class MatchPlayerAttackStatisticsRepository {
   async aggregateByChampionshipIds(
     championshipIds: number[],
     playerIds: number[],
+    seasonIds?: number[],
   ): Promise<IPlayerAttackStatisticsAggregate[]> {
     const query = this.repository
       .createQueryBuilder('attack')
@@ -75,6 +76,10 @@ export class MatchPlayerAttackStatisticsRepository {
       });
 
     query.andWhere('attack.player_id IN (:...playerIds)', { playerIds });
+
+    if (seasonIds?.length) {
+      query.andWhere('stage.season_id IN (:...seasonIds)', { seasonIds });
+    }
 
     const rows: IPlayerAttackStatisticsAggregateRow[] = await query
       .groupBy('stage.championship_id')

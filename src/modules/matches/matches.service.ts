@@ -76,13 +76,7 @@ export class MatchesService {
 
         return {
           id: stored?.id,
-          externalId:
-            sourceCode === ESourceCode.LegaVolleyFemminile
-              ? match.externalId
-              : (stored?.externalId ??
-                (sourceCode === ESourceCode.LegaVolley
-                  ? null
-                  : match.externalId)),
+          externalId: stored?.externalId ?? match.externalId,
           league,
           homeTeam,
           awayTeam,

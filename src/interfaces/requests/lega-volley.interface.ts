@@ -35,16 +35,6 @@ export interface ILegaPlayer {
   leagueExternalId: number;
 }
 
-export interface ILegaCompetitionRule {
-  pattern: RegExp;
-  name: string;
-}
-
-export interface ILegaStageRule {
-  pattern: RegExp;
-  name: string;
-}
-
 export interface IMapSettledParams<TInput, TOutput> {
   items: TInput[];
   mapper: (item: TInput) => Promise<TOutput>;
@@ -78,4 +68,11 @@ export interface ILegaMatchReference {
   sourceMatchId: string;
   homeTeamName: string;
   awayTeamName: string;
+}
+
+export interface ILegaPendingMatchKeys {
+  exactMatchKeys: Set<string>;
+  exactMatchKeysByTeam: Map<string, Set<string>>;
+  dates: Set<string>;
+  dateUnknownTeamKeys: Set<string>;
 }
