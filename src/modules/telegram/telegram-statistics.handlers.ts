@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Markup, Telegraf } from 'telegraf';
+import { Context, Markup, Telegraf } from 'telegraf';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { TEAM_STATISTICS_CACHE_TTL_SECONDS } from '../../shared/consts/constants';
-import { ESourceCode } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import {
   formatTeamStatistics,
   formatTeamStatisticsPages,
@@ -238,6 +238,27 @@ export class TelegramStatisticsHandlers {
           seasonId,
         );
 
+        if (
+          this.getSource(context.chat?.id) ===
+            ESourceCode.LegaVolleyFemminile &&
+          stages.length === 1
+        ) {
+          await this.showTeams(context, {
+            stageId: stages[0].id,
+            championshipId,
+            seasonId,
+            competitionType,
+            backText: '⬅️ К чемпионатам',
+            backCallbackData: seasonId
+              ? TELEGRAM_CALLBACKS.retroStatistics.season(
+                  seasonId,
+                  competitionType,
+                )
+              : TELEGRAM_CALLBACKS.statistics.season(competitionType),
+          });
+          return;
+        }
+
         await showList(context, {
           items: stages.map(({ id, name }) => ({
             text: name,
@@ -280,30 +301,11 @@ export class TelegramStatisticsHandlers {
         const competitionType = parseCompetitionType(
           context.match[isRetro ? 4 : 3],
         );
-        const teams = await this.queries.findTeamsForStage(stageId);
-
-        await showList(context, {
-          items: teams.map(({ team, leagueId }) => ({
-            text: team.name,
-            callbackData: seasonId
-              ? TELEGRAM_CALLBACKS.retroStatistics.team(
-                  team.id,
-                  leagueId,
-                  stageId,
-                  championshipId,
-                  seasonId,
-                  competitionType,
-                )
-              : TELEGRAM_CALLBACKS.statistics.team(
-                  team.id,
-                  leagueId,
-                  stageId,
-                  championshipId,
-                  competitionType,
-                ),
-          })),
-          message: TELEGRAM_MESSAGES.teams.select,
-          emptyMessage: TELEGRAM_MESSAGES.teams.empty,
+        await this.showTeams(context, {
+          stageId,
+          championshipId,
+          seasonId,
+          competitionType,
           backText: '⬅️ К этапам',
           backCallbackData: seasonId
             ? TELEGRAM_CALLBACKS.retroStatistics.championship(
@@ -490,5 +492,45 @@ export class TelegramStatisticsHandlers {
     return chatId === undefined
       ? ESourceCode.Cev
       : (this.selectedSources.get(chatId) ?? ESourceCode.Cev);
+  }
+
+  private async showTeams(
+    context: Context,
+    options: {
+      stageId: number;
+      championshipId: number;
+      seasonId: number | undefined;
+      competitionType: ECompetitionType;
+      backText: string;
+      backCallbackData: string;
+    },
+  ): Promise<void> {
+    const teams = await this.queries.findTeamsForStage(options.stageId);
+
+    await showList(context, {
+      items: teams.map(({ team, leagueId }) => ({
+        text: team.name,
+        callbackData: options.seasonId
+          ? TELEGRAM_CALLBACKS.retroStatistics.team(
+              team.id,
+              leagueId,
+              options.stageId,
+              options.championshipId,
+              options.seasonId,
+              options.competitionType,
+            )
+          : TELEGRAM_CALLBACKS.statistics.team(
+              team.id,
+              leagueId,
+              options.stageId,
+              options.championshipId,
+              options.competitionType,
+            ),
+      })),
+      message: TELEGRAM_MESSAGES.teams.select,
+      emptyMessage: TELEGRAM_MESSAGES.teams.empty,
+      backText: options.backText,
+      backCallbackData: options.backCallbackData,
+    });
   }
 }

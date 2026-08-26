@@ -60,7 +60,7 @@ export function parseLegaVolleyFemminileCatalog(
         `championship:${hierarchy.championshipName}`,
       );
       const stageExternalId = hashId(
-        `stage:${competition.seasonYear}:${hierarchy.stageName}`,
+        `stage:${competition.seasonYear}:${hierarchy.championshipName}:${hierarchy.stageName}`,
       );
       const stageKey = `${championshipExternalId}:${stageExternalId}`;
       championships.set(championshipExternalId, {
@@ -315,6 +315,16 @@ export function parseLegaVolleyFemminileTeamRoster(
   return players;
 }
 
+export function readLegaVolleyFemminilePlayerBirthYear(
+  html: string,
+): number | null {
+  const date = cleanText(html).match(
+    /(?:Data di nascita|Date of birth)\s*:\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-](\d{4})/i,
+  );
+
+  return date ? Number(date[1]) : null;
+}
+
 export function parseLegaVolleyFemminileSummerTourRosters(
   html: string,
   knownPlayerNamesBySurname = new Map<string, string>(),
@@ -465,14 +475,103 @@ function getCompetitionHierarchy(name: string): {
   stageName: string;
   leagueName: string;
 } {
-  const group = name.match(/\s+(Girone\s+[A-Z0-9]+)$/i)?.[1];
-  const stageName = group ? name.slice(0, -group.length).trim() : name;
+  const groupMatch = name.match(/\s+((?:Girone|Gir\.?)\s+([A-Z0-9]+))$/i);
+  const group = groupMatch ? `Girone ${groupMatch[2]}` : undefined;
+  const competitionName = groupMatch
+    ? name.slice(0, -groupMatch[1].length).trim()
+    : name;
+  const championshipName =
+    getLegaVolleyFemminileChampionshipName(competitionName);
+  const hierarchy = getLegaVolleyFemminileStageHierarchy(competitionName);
 
   return {
-    championshipName: /\bA2\b/i.test(stageName) ? 'Serie A2' : 'Serie A1',
-    stageName,
-    leagueName: group ?? stageName,
+    championshipName,
+    stageName: hierarchy.stageName,
+    leagueName: group ?? hierarchy.leagueName,
   };
+}
+
+function getLegaVolleyFemminileChampionshipName(name: string): string {
+  if (isLegaVolleySummerTour(name)) {
+    return 'Lega Volley Summer Tour';
+  }
+
+  if (/\bCoppa Italia\b/i.test(name)) {
+    return /\bA2\b/i.test(name) ? 'Coppa Italia A2' : 'Coppa Italia A1';
+  }
+
+  if (/\bSupercoppa\b/i.test(name)) {
+    return /\bA2\b/i.test(name) ? 'Supercoppa A2' : 'Supercoppa A1';
+  }
+
+  if (/\bA2\b/i.test(name)) {
+    return 'Serie A2';
+  }
+
+  if (/\bA1\b/i.test(name)) {
+    return 'Serie A1';
+  }
+
+  if (
+    /^(?:Playoff\s+Scudetto|(?:Finale\s+)?(?:Playoff\s+)?Challenge)\b/i.test(
+      name,
+    )
+  ) {
+    return 'Serie A1';
+  }
+
+  return name;
+}
+
+function getLegaVolleyFemminileStageHierarchy(name: string): {
+  stageName: string;
+  leagueName: string;
+} {
+  if (isLegaVolleySummerTour(name)) {
+    const stage = name.match(/\b(Fase A Incroci|Finali|Gironi)\b/i)?.[1];
+    const stageName = stage ?? 'Main';
+    return { stageName, leagueName: stageName };
+  }
+
+  if (/^Finale\s+(?:Playoff\s+)?Challenge\b/i.test(name)) {
+    return { stageName: 'Playoff Challenge', leagueName: 'Finale' };
+  }
+
+  if (/^(?:Playoff\s+)?Challenge\b/i.test(name)) {
+    return { stageName: 'Playoff Challenge', leagueName: 'Main' };
+  }
+
+  if (/^Playoff\s+Scudetto\b/i.test(name)) {
+    return { stageName: 'Playoff Scudetto', leagueName: 'Main' };
+  }
+
+  if (/^Playoff\b/i.test(name)) {
+    return { stageName: 'Playoff', leagueName: 'Main' };
+  }
+
+  if (/^Pool\s+Promozione\b/i.test(name)) {
+    return { stageName: 'Pool Promozione', leagueName: 'Main' };
+  }
+
+  if (/^Pool\s+Salvezza\b/i.test(name)) {
+    return { stageName: 'Pool Salvezza', leagueName: 'Main' };
+  }
+
+  if (
+    /^(?:(?:LVF|Serie)\s+)?A[12]\b/i.test(name) ||
+    /\bCampionato Italiano\b.*\bA[12]\b/i.test(name)
+  ) {
+    return { stageName: 'Regular Season', leagueName: 'Main' };
+  }
+
+  return { stageName: 'Main', leagueName: 'Main' };
+}
+
+function isLegaVolleySummerTour(name: string): boolean {
+  return (
+    /\bLega Volley Summer Tour\b/i.test(name) ||
+    /^\d+\s*(?:°|º)\s+Campionato Italiano\b/i.test(name)
+  );
 }
 
 function readMatchDate(html: string): Date | null {
