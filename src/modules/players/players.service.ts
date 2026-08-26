@@ -37,6 +37,23 @@ export class PlayersService {
     private readonly matchAttacksRepository: MatchPlayerAttackStatisticsRepository,
   ) {}
 
+  async getBirthYearsByExternalIds(
+    externalIds: string[],
+    sourceCode: ESourceCode,
+  ): Promise<Map<string, number>> {
+    if (!externalIds.length) return new Map();
+
+    const players = await this.playersRepository.getWhere({
+      externalId: In([...new Set(externalIds)]),
+      source: { code: sourceCode },
+    });
+    return new Map(
+      players.flatMap(({ externalId, birthYear }) =>
+        birthYear === null ? [] : [[externalId, birthYear] as const],
+      ),
+    );
+  }
+
   async upsertCatalogPlayers(
     incomingPlayers: ILegaPlayer[],
     teamsByExternalId: Map<string, TeamEntity>,
@@ -63,7 +80,7 @@ export class PlayersService {
           ? {
               ...player,
               fullName: stored.fullName,
-              birthYear: stored.birthYear,
+              birthYear: player.birthYear ?? stored.birthYear,
             }
           : player;
       }),

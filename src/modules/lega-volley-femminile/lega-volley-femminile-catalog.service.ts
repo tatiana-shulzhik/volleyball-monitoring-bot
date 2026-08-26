@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
+import { ILegaPlayer } from '../../interfaces/requests/lega-volley.interface';
 import { ESourceCode } from '../../shared/enums';
 import { getEarliestCatalogYear } from '../../shared/season.utils';
 import { ChampionshipsService } from '../championships/championships.service';
@@ -243,25 +244,24 @@ export class LegaVolleyFemminileCatalogService {
         match.externalId ? [[match.externalId, match] as const] : [],
       ),
     );
-    const players = statistics.flatMap((item) => {
+    const playerSources = statistics.flatMap((item) => {
       const match = matchesByExternalId.get(item.matchExternalId);
       if (!match) return [];
 
       return [
         ...item.home.map((player) => ({
           ...player,
-          birthYear: null,
           teamExternalId: match.homeTeam.externalId,
           leagueExternalId: match.league.externalId,
         })),
         ...item.away.map((player) => ({
           ...player,
-          birthYear: null,
           teamExternalId: match.awayTeam.externalId,
           leagueExternalId: match.league.externalId,
         })),
       ];
     });
+    const players = await this.enrichPlayerBirthYears(playerSources);
     const teamsByExternalId = new Map(
       pendingMatches.flatMap(({ homeTeam, awayTeam }) => [
         [homeTeam.externalId, homeTeam] as const,
@@ -287,5 +287,35 @@ export class LegaVolleyFemminileCatalogService {
       `LegaVolleyFemminile match statistics synchronized: ` +
         `${synchronizedPlayers} players, ${rows} rows`,
     );
+  }
+
+  private async enrichPlayerBirthYears(
+    players: ILegaPlayer[],
+  ): Promise<ILegaPlayer[]> {
+    const sourceCode = ESourceCode.LegaVolleyFemminile;
+    const storedBirthYears =
+      await this.playersService.getBirthYearsByExternalIds(
+        players.map(({ externalId }) => externalId),
+        sourceCode,
+      );
+    const missingPlayerIds = new Set(
+      players.flatMap(({ externalId, birthYear }) =>
+        birthYear === null && !storedBirthYears.has(externalId)
+          ? [externalId]
+          : [],
+      ),
+    );
+    const profileBirthYears = await this.gateway.fetchPlayerBirthYears([
+      ...missingPlayerIds,
+    ]);
+
+    return players.map((player) => ({
+      ...player,
+      birthYear:
+        player.birthYear ??
+        storedBirthYears.get(player.externalId) ??
+        profileBirthYears.get(player.externalId) ??
+        null,
+    }));
   }
 }
