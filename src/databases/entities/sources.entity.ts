@@ -18,6 +18,9 @@ export class SourcesEntity {
   @Column({ name: 'base_url' })
   baseUrl: string;
 
+  @Column({ name: 'live_matches_notification_enabled', default: false })
+  liveMatchesNotificationEnabled: boolean;
+
   @OneToMany(() => ChampionshipsEntity, (championship) => championship.source)
   championships: ChampionshipsEntity[];
 

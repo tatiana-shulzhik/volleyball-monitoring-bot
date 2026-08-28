@@ -9,6 +9,8 @@ import { TelegramService } from './telegram.service';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
 import { TelegramAccessService } from './telegram-access.service';
+import { MatchesRepository } from '../../databases/repositories/matches.repository';
+import { SourcesRepository } from '../../databases/repositories/sources.repository';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { TelegramAccessService } from './telegram-access.service';
     TelegramStatisticsQueryService,
     TelegramAccessRepository,
     TelegramAccessService,
+    MatchesRepository,
+    SourcesRepository,
   ],
 })
 export class TelegramModule {}

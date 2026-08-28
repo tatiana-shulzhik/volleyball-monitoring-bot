@@ -4,15 +4,27 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
-import { Telegraf } from 'telegraf';
+import { Cron } from '@nestjs/schedule';
+import { Context, Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
+import { MatchesRepository } from '../../databases/repositories/matches.repository';
+import { SourcesRepository } from '../../databases/repositories/sources.repository';
+import { MOSCOW_TIME_ZONE } from '../../shared/consts/constants';
+import { ESourceCode } from '../../shared/enums';
 import { getErrorMessage } from '../../shared/error.utils';
 import { isTelegramMenuCommand } from '../../shared/telegram.utils';
-import { TELEGRAM_CALLBACK_PATTERNS } from './telegram-callbacks';
+import {
+  TELEGRAM_CALLBACK_PATTERNS,
+  TELEGRAM_CALLBACKS,
+} from './telegram-callbacks';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { SOURCE_MENU } from './telegram-menu.utils';
-import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { TelegramAccessService } from './telegram-access.service';
+import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
+import {
+  formatTodayMatches,
+  getMoscowDayBounds,
+} from './telegram-today-matches.utils';
 
 @Injectable()
 export class TelegramService
@@ -26,6 +38,8 @@ export class TelegramService
     private readonly config: TelegramConfig,
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
     private readonly accessService: TelegramAccessService,
+    private readonly matchesRepository: MatchesRepository,
+    private readonly sourcesRepository: SourcesRepository,
   ) {
     this.bot = new Telegraf(config.token);
     this.registerHandlers();
@@ -44,20 +58,30 @@ export class TelegramService
   }
 
   onApplicationShutdown(signal?: string): void {
-    if (!this.isRunning) {
-      return;
-    }
+    if (!this.isRunning) return;
 
     this.bot.stop(signal ?? 'Application shutdown');
     this.isRunning = false;
     this.logger.log('Telegram bot stopped');
   }
 
+  @Cron('5 0 * * *', {
+    name: 'daily-today-matches-notification',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async sendTodayMatchesByCron(): Promise<void> {
+    const sources =
+      await this.sourcesRepository.findWithLiveMatchesNotifications();
+
+    for (const source of sources) {
+      await this.sendTodayMatches(this.config.groupId, source.code);
+    }
+  }
+
   private registerHandlers(): void {
     this.bot.use(async (context, next) => {
-      if (context.chat?.type !== 'private') {
-        return;
-      }
+      if (context.chat?.type !== 'private') return;
 
       if (await this.accessService.isAllowed(context.from?.username)) {
         await next();
@@ -76,6 +100,39 @@ export class TelegramService
     this.bot.command(['start', 'menu'], async (context) => {
       await context.reply(TELEGRAM_MESSAGES.sources.select, SOURCE_MENU);
     });
+
+    this.bot.command('today', async (context) => {
+      const chatId = context.chat?.id;
+      if (chatId !== undefined) {
+        await this.sendTodayMatches(
+          chatId,
+          this.statisticsHandlers.getSelectedSource(chatId),
+        );
+      }
+    });
+
+    this.bot.action(TELEGRAM_CALLBACKS.menu.live, async (context) => {
+      await this.showLiveMatches(
+        context,
+        this.statisticsHandlers.getSelectedSource(context.chat?.id),
+      );
+    });
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.liveMatchesNotification,
+      async (context) => {
+        const source =
+          await this.sourcesRepository.toggleLiveMatchesNotification(
+            context.match[1] as ESourceCode,
+          );
+        await context.answerCbQuery(
+          source.liveMatchesNotificationEnabled
+            ? 'Автоотправка включена'
+            : 'Автоотправка выключена',
+        );
+        await this.showLiveMatches(context, source.code, false);
+      },
+    );
 
     this.statisticsHandlers.register(this.bot);
 
@@ -96,5 +153,77 @@ export class TelegramService
           });
       }
     });
+  }
+
+  private async sendTodayMatches(
+    chatId: number,
+    sourceCode: ESourceCode,
+  ): Promise<void> {
+    try {
+      const sendRichMessage = this.bot.telegram.callApi.bind(
+        this.bot.telegram,
+      ) as unknown as (
+        method: string,
+        payload: Record<string, unknown>,
+      ) => Promise<unknown>;
+      await sendRichMessage('sendMessage', {
+        chat_id: chatId,
+        rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
+      });
+    } catch (error) {
+      this.logger.error(
+        'Unable to send today matches notification',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async showLiveMatches(
+    context: Context,
+    sourceCode: ESourceCode,
+    answerCallback = true,
+  ): Promise<void> {
+    const source = await this.sourcesRepository.findByCodeOrFail(sourceCode);
+    if (answerCallback) await context.answerCbQuery();
+
+    const message = context.callbackQuery?.message;
+    if (!message) return;
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          source.liveMatchesNotificationEnabled
+            ? '🔕 Выключить автоотправку'
+            : '🔔 Включить автоотправку в 00:05',
+          TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(sourceCode),
+        ),
+      ],
+      [Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back)],
+    ]);
+    const editRichMessage = context.telegram.callApi.bind(
+      context.telegram,
+    ) as unknown as (
+      method: string,
+      payload: Record<string, unknown>,
+    ) => Promise<unknown>;
+
+    await editRichMessage('editMessageText', {
+      chat_id: message.chat.id,
+      message_id: message.message_id,
+      rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
+      reply_markup: keyboard.reply_markup,
+    });
+  }
+
+  private async getTodayMatchesMessage(
+    sourceCode: ESourceCode,
+  ): Promise<string> {
+    const { start, end } = getMoscowDayBounds();
+    const matches = await this.matchesRepository.findScheduledBetween(
+      start,
+      end,
+      sourceCode,
+    );
+    return formatTodayMatches(matches);
   }
 }

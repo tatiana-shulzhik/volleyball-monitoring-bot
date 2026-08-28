@@ -34,6 +34,7 @@ import { MakeLegaMatchExternalIdNullable1760000017000 } from '../databases/migra
 import { DropLegaMatchPlayerStatistics1760000018000 } from '../databases/migrations/1760000018000-DropLegaMatchPlayerStatistics';
 import { SeedLegaVolleyFemminileSource1760000019000 } from '../databases/migrations/1760000019000-SeedLegaVolleyFemminileSource';
 import { ScopeExternalIdsBySource1760000020000 } from '../databases/migrations/1760000020000-ScopeExternalIdsBySource';
+import { AddLiveMatchesNotificationToSources1760000021000 } from '../databases/migrations/1760000021000-AddLiveMatchesNotificationToSources';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -100,6 +101,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         DropLegaMatchPlayerStatistics1760000018000,
         SeedLegaVolleyFemminileSource1760000019000,
         ScopeExternalIdsBySource1760000020000,
+        AddLiveMatchesNotificationToSources1760000021000,
       ],
     };
   }

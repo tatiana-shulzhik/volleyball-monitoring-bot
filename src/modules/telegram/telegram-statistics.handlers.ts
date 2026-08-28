@@ -44,6 +44,10 @@ export class TelegramStatisticsHandlers {
     this.registerCatalogNavigation(bot);
   }
 
+  getSelectedSource(chatId: number | undefined): ESourceCode {
+    return this.getSource(chatId);
+  }
+
   private registerSourceSelection(bot: Telegraf): void {
     bot.action(TELEGRAM_CALLBACKS.menu.source, async (context) => {
       await context.answerCbQuery();

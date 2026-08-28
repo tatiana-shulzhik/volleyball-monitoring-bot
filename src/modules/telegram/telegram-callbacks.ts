@@ -18,6 +18,8 @@ export const TELEGRAM_CALLBACKS = {
     monitoring: 'menu:monitoring',
     currentMonitoring: 'menu:current-monitoring',
     live: 'menu:live',
+    toggleLiveMatchesNotification: (source: ESourceCode) =>
+      `menu:live:notification:${source}`,
     back: 'menu:back',
     source: 'menu:source',
     selectSource: (source: ESourceCode) => `menu:source:${source}`,
@@ -136,4 +138,7 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
   },
   development: /^menu:(?!back|statistics|retro-statistics)/,
   source: new RegExp(`^menu:source:(${Object.values(ESourceCode).join('|')})$`),
+  liveMatchesNotification: new RegExp(
+    `^menu:live:notification:(${Object.values(ESourceCode).join('|')})$`,
+  ),
 } as const;
