@@ -8,9 +8,9 @@ import { TelegramStatisticsQueryService } from './telegram-statistics-query.serv
 import { TelegramService } from './telegram.service';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
-import { TelegramAccessService } from './telegram-access.service';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
+import { TelegramLiveMatchesNotificationService } from './telegram-live-matches-notification.service';
 
 @Module({
   imports: [
@@ -25,7 +25,7 @@ import { SourcesRepository } from '../../databases/repositories/sources.reposito
     TelegramStatisticsHandlers,
     TelegramStatisticsQueryService,
     TelegramAccessRepository,
-    TelegramAccessService,
+    TelegramLiveMatchesNotificationService,
     MatchesRepository,
     SourcesRepository,
   ],

@@ -1,7 +1,7 @@
-import { MatchEntity } from '../../databases/entities/match.entity';
-import { MOSCOW_TIME_ZONE } from '../../shared/consts/constants';
-import { ESourceCode } from '../../shared/enums';
-import { SOURCE_BUTTONS } from './telegram.constants';
+import { MatchEntity } from '../databases/entities/match.entity';
+import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
+import { MOSCOW_TIME_ZONE } from './consts/constants';
+import { ESourceCode } from './enums';
 
 export function getMoscowDayBounds(date = new Date()): {
   start: Date;

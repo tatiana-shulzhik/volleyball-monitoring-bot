@@ -1,4 +1,4 @@
-import { ECompetitionType, ESourceCode } from '../../shared/enums';
+import { ECompetitionType, ESourceCode } from './enums';
 
 const COMPETITION_TYPE_CODES: Record<ECompetitionType, string> = {
   [ECompetitionType.Club]: 'c',

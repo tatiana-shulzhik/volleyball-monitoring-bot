@@ -4,27 +4,25 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
-import { MOSCOW_TIME_ZONE } from '../../shared/consts/constants';
+import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
 import { ESourceCode } from '../../shared/enums';
 import { getErrorMessage } from '../../shared/error.utils';
-import { isTelegramMenuCommand } from '../../shared/telegram.utils';
 import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
-} from './telegram-callbacks';
+} from '../../shared/telegram-callbacks';
+import { SOURCE_MENU } from '../../shared/telegram-menu.utils';
+import { isTelegramMenuCommand } from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
-import { SOURCE_MENU } from './telegram-menu.utils';
-import { TelegramAccessService } from './telegram-access.service';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import {
   formatTodayMatches,
   getMoscowDayBounds,
-} from './telegram-today-matches.utils';
+} from '../../shared/telegram-today-matches.utils';
 
 @Injectable()
 export class TelegramService
@@ -35,9 +33,9 @@ export class TelegramService
   private isRunning = false;
 
   constructor(
-    private readonly config: TelegramConfig,
+    config: TelegramConfig,
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
-    private readonly accessService: TelegramAccessService,
+    private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
     private readonly sourcesRepository: SourcesRepository,
   ) {
@@ -65,17 +63,26 @@ export class TelegramService
     this.logger.log('Telegram bot stopped');
   }
 
-  @Cron('5 0 * * *', {
-    name: 'daily-today-matches-notification',
-    timeZone: MOSCOW_TIME_ZONE,
-    waitForCompletion: true,
-  })
-  async sendTodayMatchesByCron(): Promise<void> {
-    const sources =
-      await this.sourcesRepository.findWithLiveMatchesNotifications();
-
-    for (const source of sources) {
-      await this.sendTodayMatches(this.config.groupId, source.code);
+  async sendTodayMatches(
+    chatId: number,
+    sourceCode: ESourceCode,
+  ): Promise<void> {
+    try {
+      const sendRichMessage = this.bot.telegram.callApi.bind(
+        this.bot.telegram,
+      ) as unknown as (
+        method: string,
+        payload: Record<string, unknown>,
+      ) => Promise<unknown>;
+      await sendRichMessage('sendMessage', {
+        chat_id: chatId,
+        rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
+      });
+    } catch (error) {
+      this.logger.error(
+        'Unable to send today matches notification',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 
@@ -83,7 +90,7 @@ export class TelegramService
     this.bot.use(async (context, next) => {
       if (context.chat?.type !== 'private') return;
 
-      if (await this.accessService.isAllowed(context.from?.username)) {
+      if (await this.isAllowed(context.from?.username)) {
         await next();
         return;
       }
@@ -155,29 +162,6 @@ export class TelegramService
     });
   }
 
-  private async sendTodayMatches(
-    chatId: number,
-    sourceCode: ESourceCode,
-  ): Promise<void> {
-    try {
-      const sendRichMessage = this.bot.telegram.callApi.bind(
-        this.bot.telegram,
-      ) as unknown as (
-        method: string,
-        payload: Record<string, unknown>,
-      ) => Promise<unknown>;
-      await sendRichMessage('sendMessage', {
-        chat_id: chatId,
-        rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
-      });
-    } catch (error) {
-      this.logger.error(
-        'Unable to send today matches notification',
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
-  }
-
   private async showLiveMatches(
     context: Context,
     sourceCode: ESourceCode,
@@ -213,6 +197,12 @@ export class TelegramService
       rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
       reply_markup: keyboard.reply_markup,
     });
+  }
+
+  private isAllowed(username: string | undefined): Promise<boolean> {
+    return username
+      ? this.accessRepository.isAllowed(username.toLowerCase())
+      : Promise.resolve(false);
   }
 
   private async getTodayMatchesMessage(

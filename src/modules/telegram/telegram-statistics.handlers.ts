@@ -7,17 +7,11 @@ import {
   formatTeamStatistics,
   formatTeamStatisticsPages,
 } from '../../shared/player-statistics.utils';
-import { PlayersService } from '../players/players.service';
 import {
   parseCompetitionType,
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
-} from './telegram-callbacks';
-import { TelegramStatisticsQueryService } from './telegram-statistics-query.service';
-import {
-  COMPETITION_TYPE_BUTTONS,
-  TELEGRAM_MESSAGES,
-} from './telegram.constants';
+} from '../../shared/telegram-callbacks';
 import {
   createMainMenu,
   formatChampionshipButton,
@@ -25,7 +19,13 @@ import {
   getAvailableCompetitionTypes,
   showList,
   SOURCE_MENU,
-} from './telegram-menu.utils';
+} from '../../shared/telegram-menu.utils';
+import { PlayersService } from '../players/players.service';
+import { TelegramStatisticsQueryService } from './telegram-statistics-query.service';
+import {
+  COMPETITION_TYPE_BUTTONS,
+  TELEGRAM_MESSAGES,
+} from './telegram.constants';
 
 @Injectable()
 export class TelegramStatisticsHandlers {
