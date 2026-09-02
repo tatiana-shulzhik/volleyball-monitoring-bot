@@ -115,9 +115,15 @@ export class SynchronizationService implements OnApplicationBootstrap {
       }
 
       this.logger.log('Starting full catalog synchronization');
-      await this.runExclusive(async () => {
-        await this.cevCatalogService.synchronizeStoredRange();
+      const matchesComplete = await this.runExclusive(async () => {
+        return this.cevCatalogService.synchronizeStoredRange();
       });
+      if (!matchesComplete) {
+        this.logger.warn(
+          'Full catalog synchronization is incomplete; it will be retried after restart',
+        );
+        return;
+      }
       this.logger.log('Full catalog synchronization completed');
 
       await this.runExclusive(() =>

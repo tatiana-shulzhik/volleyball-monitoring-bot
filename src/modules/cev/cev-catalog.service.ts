@@ -40,10 +40,10 @@ export class CevCatalogService {
     private readonly teamsRepository: TeamsRepository,
   ) {}
 
-  async synchronizeStoredRange(): Promise<void> {
+  async synchronizeStoredRange(): Promise<boolean> {
     const earliestYear = getEarliestCatalogYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(earliestYear));
-    await this.synchronizeMatches(false);
+    return this.synchronizeMatches(false);
   }
 
   async synchronizeCurrentAndFuture(): Promise<void> {
@@ -175,17 +175,16 @@ export class CevCatalogService {
     };
   }
 
-  private async synchronizeMatches(frequentOnly: boolean): Promise<void> {
+  private async synchronizeMatches(frequentOnly: boolean): Promise<boolean> {
     let stages = this.filterCevStages(await this.stagesRepository.getWhere({}));
 
     if (frequentOnly) {
       stages = await this.matchesService.getFrequentlyRelevantStages(stages);
     }
 
-    await this.matchesService.synchronize(
-      stages,
-      await this.gateway.fetchMatches(stages),
-    );
+    const fetched = await this.gateway.fetchMatches(stages);
+    await this.matchesService.synchronize(stages, fetched);
+    return fetched.isComplete;
   }
 
   private async loadPlayerStatistics(

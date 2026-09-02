@@ -18,6 +18,9 @@ import {
 import { uniqueBy } from '../../shared/array.utils';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
 import { ESourceCode } from '../../shared/enums';
+import { parseCevDate } from '../../shared/cev-matches.utils';
+import { CEV_COUNTRIES } from '../../shared/consts/constants';
+import { getErrorMessage } from '../../shared/error.utils';
 
 @Injectable()
 export class MatchesService {
@@ -153,13 +156,16 @@ export class MatchesService {
         league: { stage: { id: In(stages.map(({ id }) => id)) } },
       }),
     ]);
+    const teamsByExternalId = new Map(
+      teams.map((team) => [team.externalId, team]),
+    );
     const changes = calculateMatchChanges({
-      incoming: fetched.matches,
+      incoming: this.resolveCevMatchDates(fetched.matches, teamsByExternalId),
       existing,
       leaguesByExternalId: new Map(
         leagues.map((league) => [league.externalId, league]),
       ),
-      teamsByExternalId: new Map(teams.map((team) => [team.externalId, team])),
+      teamsByExternalId,
     });
 
     await applyEntityChanges({
@@ -209,6 +215,37 @@ export class MatchesService {
     return relevant;
   }
 
+  private resolveCevMatchDates(
+    matches: ICevMatch[],
+    teamsByExternalId: Map<string, TeamEntity>,
+  ): ICevMatch[] {
+    return matches.map((match) => {
+      const countryCode =
+        match.venueCountryCode ??
+        getCevCountryCode(
+          teamsByExternalId.get(match.homeTeamExternalId)?.country,
+        );
+
+      try {
+        return {
+          ...match,
+          scheduledAt: parseCevDate(
+            match.scheduledText ?? '',
+            match.venue ?? '',
+            countryCode,
+          ),
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Unable to resolve timezone for CEV match ${match.externalId}: ` +
+            getErrorMessage(error),
+        );
+
+        return match;
+      }
+    });
+  }
+
   async startMonitoring(): Promise<number> {
     const now = new Date();
     const windowEnd = new Date(
@@ -225,4 +262,14 @@ export class MatchesService {
 
     return started;
   }
+}
+
+function getCevCountryCode(
+  country: string | null | undefined,
+): string | undefined {
+  if (!country) return undefined;
+
+  return Object.entries(CEV_COUNTRIES).find(
+    ([, name]) => name === country,
+  )?.[0];
 }

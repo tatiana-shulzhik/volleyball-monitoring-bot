@@ -1,6 +1,9 @@
 import { Context, Markup } from 'telegraf';
 import { ListMenu } from '../interfaces/telegram/menu.models';
-import { MENU_BUTTONS, SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
+import {
+  MENU_BUTTONS,
+  SOURCE_BUTTONS,
+} from '../modules/telegram/telegram.constants';
 import { ECompetitionType, ESourceCode } from './enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
 

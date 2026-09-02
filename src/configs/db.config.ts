@@ -35,6 +35,7 @@ import { DropLegaMatchPlayerStatistics1760000018000 } from '../databases/migrati
 import { SeedLegaVolleyFemminileSource1760000019000 } from '../databases/migrations/1760000019000-SeedLegaVolleyFemminileSource';
 import { ScopeExternalIdsBySource1760000020000 } from '../databases/migrations/1760000020000-ScopeExternalIdsBySource';
 import { AddLiveMatchesNotificationToSources1760000021000 } from '../databases/migrations/1760000021000-AddLiveMatchesNotificationToSources';
+import { ResetCevInitialCatalogSync1760000022000 } from '../databases/migrations/1760000022000-ResetCevInitialCatalogSync';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -102,6 +103,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         SeedLegaVolleyFemminileSource1760000019000,
         ScopeExternalIdsBySource1760000020000,
         AddLiveMatchesNotificationToSources1760000021000,
+        ResetCevInitialCatalogSync1760000022000,
       ],
     };
   }

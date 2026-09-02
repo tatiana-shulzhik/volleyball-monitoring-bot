@@ -8,6 +8,9 @@ export function calculateMatchChanges(
   data: ICalculateMatchChangesParams,
 ): MatchChanges {
   const { incoming, existing, leaguesByExternalId, teamsByExternalId } = data;
+  const existingByExternalId = new Map(
+    existing.map((match) => [match.externalId, match]),
+  );
   const resolved = incoming.flatMap((match) => {
     const league = leaguesByExternalId.get(match.leagueExternalId);
     const homeTeam = teamsByExternalId.get(match.homeTeamExternalId);
@@ -20,7 +23,10 @@ export function calculateMatchChanges(
             league,
             homeTeam,
             awayTeam,
-            scheduledAt: match.scheduledAt,
+            scheduledAt:
+              match.scheduledAt ??
+              existingByExternalId.get(match.externalId)?.scheduledAt ??
+              null,
             monitoringStartedAt: null,
             attackStatisticsUpdatedAt: null,
             status: match.status,
