@@ -14,6 +14,13 @@ import { CEV_COUNTRIES } from './consts/constants';
 import { ESourceCode } from './enums';
 import { parseSeasonEndYear } from './season.utils';
 
+export function sumNullable(
+  left: number | null,
+  right: number | null,
+): number | null {
+  return left === null || right === null ? null : left + right;
+}
+
 export function normalizeName(value: string): string {
   return foldLatinText(value)
     .replace(/[^\p{Letter}\p{Number}]/gu, '')
@@ -289,7 +296,7 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
 
 export function formatTeamStatisticsPages(
   data: ITeamStatistics,
-  maxLength = 20000,
+  maxLength = 12000,
 ): string[] {
   const formatted = formatTeamStatistics(data);
   const seasons = new Set(data.players.map(({ seasonName }) => seasonName));
@@ -330,6 +337,9 @@ function formatTeamStatisticsHeader(data: ITeamStatistics): string {
     data.teamSeasonName === data.seasonName
       ? ''
       : ` (${escapeHtml(data.teamSeasonName)})`;
+  const rosterLegend = data.players.some(({ rosterChange }) => rosterChange)
+    ? '<p>🟢 новый · 🔴 ушёл · 🔵 остался · ⚪ нет данных</p>'
+    : '';
 
   return [
     '<p><b>📊 Статистика команды</b></p>',
@@ -338,6 +348,7 @@ function formatTeamStatisticsHeader(data: ITeamStatistics): string {
     `<p>🌍 ${data.country ? escapeHtml(data.country) : '—'}</p>`,
     `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
     `<p>👥 ${escapeHtml(data.teamName)}${teamSeason}</p>`,
+    rosterLegend,
   ].join('');
 }
 
@@ -365,12 +376,38 @@ function groupRetroPlayers(
     return groups;
   }, new Map<string, ITeamStatistics['players']>());
 
-  return [...playersByName.values()].sort(compareRetroPlayerGroups);
+  return [...playersByName.values()].sort((left, right) => {
+    const leftChange = getRosterChange(left);
+    const rightChange = getRosterChange(right);
+
+    if (leftChange || rightChange) {
+      const priority: Record<NonNullable<typeof leftChange>, number> = {
+        new: 0,
+        stayed: 1,
+        left: 2,
+        unknown: 3,
+      };
+      const difference =
+        priority[leftChange ?? 'unknown'] - priority[rightChange ?? 'unknown'];
+
+      if (difference) return difference;
+    }
+
+    return compareRetroPlayerGroups(left, right);
+  });
 }
 
 function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
   return groups
-    .map((seasons) => {
+    .map((seasons, index) => {
+      const rosterChange = getRosterChange(seasons);
+      const previousRosterChange = index
+        ? getRosterChange(groups[index - 1])
+        : undefined;
+      const sectionHeader =
+        rosterChange && rosterChange !== previousRosterChange
+          ? formatRosterSectionHeader(rosterChange)
+          : '';
       const sortedSeasons = [...seasons].sort(
         (left, right) =>
           getLatestSeasonYear(right.seasonName) -
@@ -392,6 +429,7 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           ({ seasonName }) =>
             getLatestSeasonYear(seasonName) === latestSeasonYear,
         );
+      const rosterIndicator = getRosterIndicator(getRosterChange(seasons));
       const rows = sortedSeasons.map(
         (season) =>
           '<tr>' +
@@ -405,8 +443,9 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
       );
 
       return [
+        sectionHeader,
         `<p>👤 №${latestSeason?.shirtNumber ?? '—'} `,
-        `<b>${escapeHtml(seasons[0].fullName)}</b> · `,
+        `${rosterIndicator}<b>${escapeHtml(seasons[0].fullName)}</b> · `,
         `${seasons[0].birthYear ?? '—'} г.р.</p>`,
         '<table bordered striped>',
         '<tr>' +
@@ -422,6 +461,39 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
       ].join('');
     })
     .join('');
+}
+
+function getRosterChange(
+  players: ITeamStatistics['players'],
+): ITeamStatistics['players'][number]['rosterChange'] {
+  return players.find(({ rosterChange }) => rosterChange)?.rosterChange;
+}
+
+function formatRosterSectionHeader(
+  change: NonNullable<ITeamStatistics['players'][number]['rosterChange']>,
+): string {
+  const labels: Record<typeof change, string> = {
+    new: '🟢 Новые игроки',
+    stayed: '🔵 Актуальный состав',
+    left: '🔴 Покинули команду',
+    unknown: '⚪ Нет данных для сравнения',
+  };
+
+  return `<p><b>${labels[change]}</b></p>`;
+}
+
+function getRosterIndicator(
+  change: ITeamStatistics['players'][number]['rosterChange'],
+): string {
+  return change === 'new'
+    ? '🟢 '
+    : change === 'left'
+      ? '🔴 '
+      : change === 'stayed'
+        ? '🔵 '
+        : change === 'unknown'
+          ? '⚪ '
+          : '';
 }
 
 function compareRetroPlayerGroups(

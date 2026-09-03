@@ -3,16 +3,23 @@ import { In } from 'typeorm';
 import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { PlayersRepository } from '../../databases/repositories/players.repository';
 import { TeamsRepository } from '../../databases/repositories/teams.repository';
-import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { PlayersEntity } from '../../databases/entities/players.entity';
-import { TeamEntity } from '../../databases/entities/team.entity';
+import type { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositories/match-player-attack-statistics.repository';
-import { IFetchedPlayers } from '../../interfaces/requests/players.interface';
+import {
+  IFetchedPlayers,
+  IFindEquivalentTeamDataParams,
+  IFindTeamStatisticsParams,
+  IUpsertCatalogPlayersParams,
+} from '../../interfaces/requests/players.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
 import { ILegaPlayer } from '../../interfaces/requests/lega-volley.interface';
 import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
-import { createTeamStatistics } from '../../shared/player-statistics.utils';
+import {
+  createTeamStatistics,
+  normalizeTeamName,
+} from '../../shared/player-statistics.utils';
 import {
   calculatePlayerChanges,
   calculatePlayerRelationChanges,
@@ -22,6 +29,10 @@ import { applyEntityChanges } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 import { splitIntoBatches, uniqueBy } from '../../shared/array.utils';
 import { normalizePlayerName } from '../../shared/player-name.utils';
+import {
+  applyHistoricalRosterChanges,
+  getRosterStatisticsInput,
+} from '../../shared/team-roster-retro.utils';
 
 @Injectable()
 export class PlayersService {
@@ -52,14 +63,18 @@ export class PlayersService {
   }
 
   async upsertCatalogPlayers(
-    incomingPlayers: ILegaPlayer[],
-    teamsByExternalId: Map<string, TeamEntity>,
-    leaguesByExternalId: Map<number, LeaguesEntity>,
-    sourceCode: ESourceCode,
-    preserveStoredNames = false,
-    removeObsoleteRelations = false,
-    relationScopes?: Array<{ team: TeamEntity; league: LeaguesEntity }>,
+    data: IUpsertCatalogPlayersParams,
   ): Promise<number> {
+    const {
+      incomingPlayers,
+      teamsByExternalId,
+      leaguesByExternalId,
+      sourceCode,
+      preserveStoredNames = false,
+      removeObsoleteRelations = false,
+      relationScopes,
+    } = data;
+
     const players = uniqueBy(incomingPlayers, (player) => player.externalId);
     const storedPlayersByExternalId = preserveStoredNames
       ? new Map(
@@ -192,10 +207,15 @@ export class PlayersService {
   }
 
   async findTeamStatistics(
-    teamId: number,
-    leagueId: number,
-    aggregateSeasons?: Array<{ id: number; name: string }>,
+    data: IFindTeamStatisticsParams,
   ): Promise<ITeamStatistics | null> {
+    const {
+      teamId,
+      leagueId,
+      aggregateSeasons,
+      includeHistoricalRoster = false,
+    } = data;
+
     const relations = await this.relationsRepository.getWhere({
       team: { id: teamId },
       league: { id: leagueId },
@@ -218,67 +238,69 @@ export class PlayersService {
       sourceCode === ESourceCode.LegaVolley ||
       sourceCode === ESourceCode.LegaVolleyFemminile;
 
-    if (
+    const seasons =
       aggregateSeasons?.length &&
       !aggregateSeasons.some(({ id }) => id === season.id)
-    ) {
-      aggregateSeasons = [season, ...aggregateSeasons].slice(
-        0,
-        PREVIOUS_YEARS_COUNT,
-      );
-    }
+        ? [season, ...aggregateSeasons].slice(0, PREVIOUS_YEARS_COUNT)
+        : aggregateSeasons;
 
-    const isAggregate = Boolean(aggregateSeasons?.length);
+    const isAggregate = Boolean(seasons?.length);
     const selectedSeasonIds = isAggregate
-      ? aggregateSeasons!.map(({ id }) => id)
+      ? seasons!.map(({ id }) => id)
       : [season.id];
+    const commonLeagueFilter = {
+      stage: {
+        season: { id: In(selectedSeasonIds) },
+        championship: {
+          competitionType: championship.competitionType,
+          source: { code: sourceCode },
+        },
+      },
+    };
+
     let displayedRelations = relations;
+    let rosterRelations = relations;
 
     if (isLegaVolley && !isAggregate) {
       displayedRelations = await this.relationsRepository.getWhere({
         team: { id: team.id },
-        league: {
-          stage: {
-            season: { id: In(selectedSeasonIds) },
-            championship: {
-              competitionType: championship.competitionType,
-              source: { code: sourceCode },
-            },
-          },
-        },
+        league: commonLeagueFilter,
       });
     } else if (isAggregate) {
-      displayedRelations = await this.relationsRepository.getWhere({
-        player: {
-          id: In(relations.map(({ player }) => player.id)),
-        },
-        league: {
-          stage: {
-            season: { id: In(selectedSeasonIds) },
-            championship: {
-              competitionType: championship.competitionType,
-              source: { code: sourceCode },
-            },
-          },
-        },
-      });
+      if (includeHistoricalRoster) {
+        const { teamIds } = await this.findEquivalentTeamData({
+          team,
+          sourceCode,
+          competitionType: championship.competitionType,
+          championshipName: championship.name,
+        });
+
+        rosterRelations = await this.relationsRepository.getWhere({
+          team: { id: In(teamIds) },
+          league: commonLeagueFilter,
+        });
+      }
+
+      const sourceRelations = includeHistoricalRoster
+        ? rosterRelations
+        : relations;
+      const playerIds = [
+        ...new Set(sourceRelations.map(({ player }) => player.id)),
+      ];
+
+      displayedRelations = playerIds.length
+        ? await this.relationsRepository.getWhere({
+            player: { id: In(playerIds) },
+            league: commonLeagueFilter,
+          })
+        : [];
     }
 
-    const playerIds = [
-      ...new Set(displayedRelations.map(({ player }) => player.id)),
-    ];
-    const championshipIds = [
-      ...new Set(
-        displayedRelations.map(({ league }) => league.stage.championship.id),
-      ),
-    ];
-    const relationSeasonIds = [
-      ...new Set(
-        displayedRelations.flatMap(({ league }) =>
-          league.stage.season ? [league.stage.season.id] : [],
-        ),
-      ),
-    ];
+    const {
+      playerIds,
+      championshipIds,
+      seasonIds: relationSeasonIds,
+    } = getRosterStatisticsInput(displayedRelations);
     const attacks =
       championshipIds.length && playerIds.length
         ? await this.matchAttacksRepository.aggregateByChampionshipIds(
@@ -306,8 +328,12 @@ export class PlayersService {
       result.championshipName = 'Все чемпионаты';
     }
 
+    if (includeHistoricalRoster) {
+      applyHistoricalRosterChanges(result, rosterRelations, season);
+    }
+
     if (isAggregate) {
-      result.seasonName = aggregateSeasons!
+      result.seasonName = seasons!
         .map(({ name }) => name)
         .sort((left, right) => right.localeCompare(left))
         .join('–');
@@ -315,6 +341,58 @@ export class PlayersService {
     }
 
     return result;
+  }
+
+  private async findEquivalentTeamData(
+    params: IFindEquivalentTeamDataParams,
+  ): Promise<{
+    teamIds: number[];
+    relations: PlayerTeamLeagueEntity[];
+  }> {
+    const { team, sourceCode, competitionType, championshipName } = params;
+    const normalizedName = normalizeTeamName(team.name);
+    const teams = await this.teamsRepository.getWhere({
+      source: { code: sourceCode },
+    });
+    const candidateIds = teams
+      .filter(
+        (candidate) => normalizeTeamName(candidate.name) === normalizedName,
+      )
+      .map(({ id }) => id);
+
+    const gender = championshipName.match(/\b(Men|Women)\b/i)?.[1];
+    const relations = await this.relationsRepository.getWhere({
+      team: { id: In(candidateIds) },
+      league: {
+        stage: {
+          championship: {
+            competitionType,
+            source: { code: sourceCode },
+          },
+        },
+      },
+    });
+    const matchingRelations = relations.filter(({ league }) => {
+      if (!gender) return true;
+
+      return new RegExp(`\\b${gender}\\b`, 'i').test(
+        league.stage.championship.name,
+      );
+    });
+    const teamIds = [
+      ...new Set(
+        matchingRelations.map(({ team: relatedTeam }) => relatedTeam.id),
+      ),
+    ];
+
+    return teamIds.length
+      ? { teamIds, relations: matchingRelations }
+      : {
+          teamIds: [team.id],
+          relations: relations.filter(
+            ({ team: relatedTeam }) => relatedTeam.id === team.id,
+          ),
+        };
   }
 
   async synchronize(

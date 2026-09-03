@@ -203,15 +203,17 @@ export class LegaVolleyFemminileCatalogService {
       ESourceCode.LegaVolleyFemminile,
     );
 
-    await this.playersService.upsertCatalogPlayers(
-      players,
-      rosterTeamsByExternalId,
-      rosterLeaguesByExternalId,
-      ESourceCode.LegaVolleyFemminile,
-      false,
-      true,
-      rosterScopes.map(({ team, league }) => ({ team, league })),
-    );
+    await this.playersService.upsertCatalogPlayers({
+      incomingPlayers: players,
+      teamsByExternalId: rosterTeamsByExternalId,
+      leaguesByExternalId: rosterLeaguesByExternalId,
+      sourceCode: ESourceCode.LegaVolleyFemminile,
+      removeObsoleteRelations: true,
+      relationScopes: rosterScopes.map(({ team, league }) => ({
+        team,
+        league,
+      })),
+    });
 
     return new Set(
       fetched.rosters.flatMap((roster) =>
@@ -271,13 +273,13 @@ export class LegaVolleyFemminileCatalogService {
     const leaguesByExternalId = new Map(
       pendingMatches.map(({ league }) => [league.externalId, league]),
     );
-    const synchronizedPlayers = await this.playersService.upsertCatalogPlayers(
-      players,
+    const synchronizedPlayers = await this.playersService.upsertCatalogPlayers({
+      incomingPlayers: players,
       teamsByExternalId,
       leaguesByExternalId,
-      ESourceCode.LegaVolleyFemminile,
-      true,
-    );
+      sourceCode: ESourceCode.LegaVolleyFemminile,
+      preserveStoredNames: true,
+    });
     const rows =
       await this.playerStatisticsService.upsertLegaVolleyFemminileMatchStatistics(
         statistics,
