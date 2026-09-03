@@ -29,7 +29,10 @@ import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
 } from '../../shared/telegram-callbacks';
-import { SOURCE_MENU } from '../../shared/telegram-menu.utils';
+import {
+  createSourceButton,
+  SOURCE_MENU,
+} from '../../shared/telegram-menu.utils';
 import { isTelegramMenuCommand } from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
@@ -218,7 +221,10 @@ export class TelegramService
           TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(sourceCode),
         ),
       ],
-      [Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back)],
+      [
+        Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
+        createSourceButton(),
+      ],
     ]);
     const editRichMessage = context.telegram.callApi.bind(
       context.telegram,

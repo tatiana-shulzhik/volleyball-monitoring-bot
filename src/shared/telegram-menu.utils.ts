@@ -18,6 +18,13 @@ function createSourceButtons() {
 
 export const SOURCE_MENU = Markup.inlineKeyboard(createSourceButtons());
 
+export function createSourceButton() {
+  return Markup.button.callback(
+    '⬅️ Сменить источник',
+    TELEGRAM_CALLBACKS.menu.source,
+  );
+}
+
 export function getAvailableCompetitionTypes(
   source: ESourceCode,
 ): ECompetitionType[] {
@@ -96,7 +103,10 @@ export async function showList(
     menu.items.length ? menu.message : menu.emptyMessage,
     Markup.inlineKeyboard([
       ...buttons,
-      [Markup.button.callback(menu.backText, menu.backCallbackData)],
+      [
+        Markup.button.callback(menu.backText, menu.backCallbackData),
+        createSourceButton(),
+      ],
     ]),
   );
 }
