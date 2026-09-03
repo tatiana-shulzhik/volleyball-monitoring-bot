@@ -14,6 +14,7 @@ import {
   ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
 import { ECompetitionType, EMatchStatus } from './enums';
+import { parseCevLocalDate } from './cev-timezone.utils';
 
 export function parseLegaSeason(
   year: number,
@@ -452,14 +453,12 @@ function parseLegaMatchDate(value: string): Date | null {
   const month = months[match[2].toLocaleLowerCase('it-IT')];
   return month === undefined
     ? null
-    : new Date(
-        Date.UTC(
-          Number(match[3]),
-          month,
-          Number(match[1]),
-          Number(match[4] ?? 0),
-          Number(match[5] ?? 0),
-        ),
+    : parseLegaLocalDate(
+        Number(match[1]),
+        month + 1,
+        Number(match[3]),
+        Number(match[4] ?? 0),
+        Number(match[5] ?? 0),
       );
 }
 
@@ -471,14 +470,26 @@ function parseLegaScheduleDate(
   if (!date) return null;
 
   const time = timeValue?.match(/^(\d{1,2}):(\d{2})$/);
-  return new Date(
-    Date.UTC(
-      Number(date[3]),
-      Number(date[2]) - 1,
-      Number(date[1]),
-      Number(time?.[1] ?? 0),
-      Number(time?.[2] ?? 0),
-    ),
+  return parseLegaLocalDate(
+    Number(date[1]),
+    Number(date[2]),
+    Number(date[3]),
+    Number(time?.[1] ?? 0),
+    Number(time?.[2] ?? 0),
+  );
+}
+
+function parseLegaLocalDate(
+  day: number,
+  month: number,
+  year: number,
+  hours: number,
+  minutes: number,
+): Date | null {
+  return parseCevLocalDate(
+    `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/` +
+      `${year} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+    'Europe/Rome',
   );
 }
 

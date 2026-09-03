@@ -65,17 +65,28 @@ export class MatchesService {
         match,
       ]),
     );
+    const existingByExternalIdAndLeague = new Map(
+      existing.flatMap((match) =>
+        match.externalId
+          ? [[`${match.externalId}:${match.league.id}`, match] as const]
+          : [],
+      ),
+    );
 
     await this.matchesRepository.saveMany(
       resolved.map(({ match, league, homeTeam, awayTeam }) => {
-        const stored = existingByKey.get(
-          createLegaMatchLookupKey(
-            league.externalId,
-            homeTeam.name,
-            awayTeam.name,
-            match.scheduledAt,
-          ),
-        );
+        const stored =
+          existingByExternalIdAndLeague.get(
+            `${match.externalId}:${league.id}`,
+          ) ??
+          existingByKey.get(
+            createLegaMatchLookupKey(
+              league.externalId,
+              homeTeam.name,
+              awayTeam.name,
+              match.scheduledAt,
+            ),
+          );
 
         return {
           id: stored?.id,
