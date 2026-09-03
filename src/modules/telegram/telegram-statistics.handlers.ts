@@ -14,6 +14,7 @@ import {
 } from '../../shared/telegram-callbacks';
 import {
   createMainMenu,
+  createSourceButton,
   formatChampionshipButton,
   formatMainMenuMessage,
   getAvailableCompetitionTypes,
@@ -460,6 +461,7 @@ export class TelegramStatisticsHandlers {
                     competitionType,
                   ),
             ),
+            createSourceButton(),
           ],
         ]);
 
