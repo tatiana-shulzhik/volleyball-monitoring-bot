@@ -20,11 +20,13 @@ import { SourcesRepository } from '../../databases/repositories/sources.reposito
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
 import {
+  AGGREGATED_SEASONS_COUNT,
   MOSCOW_TIME_ZONE,
   PREVIOUS_YEARS_COUNT,
 } from '../../shared/consts/constants';
 import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import { getErrorMessage } from '../../shared/error.utils';
+import { parseSeasonEndYear } from '../../shared/season.utils';
 import {
   TELEGRAM_CALLBACK_PATTERNS,
   TELEGRAM_CALLBACKS,
@@ -304,10 +306,29 @@ export class TelegramService
 
     if (!selectedSeason) return [];
 
-    return seasons
-      .filter(({ name }) => name.localeCompare(selectedSeason.name) <= 0)
-      .sort((left, right) => right.name.localeCompare(left.name))
-      .slice(0, PREVIOUS_YEARS_COUNT);
+    const selectedYear = parseSeasonEndYear(selectedSeason.name);
+
+    if (selectedYear === undefined) return [selectedSeason];
+
+    const nearbySeasons = seasons
+      .filter(
+        ({ id, name }) =>
+          id !== selectedSeason.id && parseSeasonEndYear(name) !== undefined,
+      )
+      .sort((left, right) => {
+        const leftYear = parseSeasonEndYear(left.name)!;
+        const rightYear = parseSeasonEndYear(right.name)!;
+
+        return (
+          Math.abs(leftYear - selectedYear) -
+            Math.abs(rightYear - selectedYear) || rightYear - leftYear
+        );
+      });
+
+    return [selectedSeason, ...nearbySeasons].slice(
+      0,
+      AGGREGATED_SEASONS_COUNT,
+    );
   }
 
   async findChampionships(

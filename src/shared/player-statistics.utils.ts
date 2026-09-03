@@ -279,12 +279,15 @@ export function createTeamStatistics(
   };
 }
 
-export function formatTeamStatistics(data: ITeamStatistics): string {
+export function formatTeamStatistics(
+  data: ITeamStatistics,
+  expanded = false,
+): string {
   const seasons = [
     ...new Set(data.players.map(({ seasonName }) => seasonName)),
   ];
   const statistics =
-    data.teamSeasonName !== data.seasonName || seasons.length > 1
+    expanded || data.teamSeasonName !== data.seasonName || seasons.length > 1
       ? formatRetroPlayers(data.players)
       : formatPlayersTable(
           data.players,
@@ -297,13 +300,14 @@ export function formatTeamStatistics(data: ITeamStatistics): string {
 export function formatTeamStatisticsPages(
   data: ITeamStatistics,
   maxLength = 12000,
+  expanded = false,
 ): string[] {
-  const formatted = formatTeamStatistics(data);
+  const formatted = formatTeamStatistics(data, expanded);
   const seasons = new Set(data.players.map(({ seasonName }) => seasonName));
 
   if (
     formatted.length <= maxLength ||
-    (data.teamSeasonName === data.seasonName && seasons.size < 2)
+    (!expanded && data.teamSeasonName === data.seasonName && seasons.size < 2)
   ) {
     return [formatted];
   }
@@ -516,27 +520,37 @@ function getLatestPlayerSeason(players: ITeamStatistics['players']): {
   rating: number | null;
   points: number | null;
 } {
-  const latestYear = Math.max(
-    ...players.map(({ seasonName }) => getLatestSeasonYear(seasonName)),
-  );
-  const ratings = players
-    .filter(({ seasonName }) => getLatestSeasonYear(seasonName) === latestYear)
-    .flatMap((player) => {
+  const years = [
+    ...new Set(
+      players.map(({ seasonName }) => getLatestSeasonYear(seasonName)),
+    ),
+  ].sort((left, right) => right - left);
+
+  for (const year of years) {
+    const seasonPlayers = players.filter(
+      ({ seasonName }) => getLatestSeasonYear(seasonName) === year,
+    );
+    const ratings = seasonPlayers.flatMap((player) => {
       const rating = calculatePlayerRating(player.points, player.setsPlayed);
 
       return rating === null ? [] : [rating];
     });
-  const points = players
-    .filter(({ seasonName }) => getLatestSeasonYear(seasonName) === latestYear)
-    .flatMap((player) => (player.points === null ? [] : [player.points]));
+    const points = seasonPlayers.flatMap((player) =>
+      player.points === null ? [] : [player.points],
+    );
 
-  return {
-    year: latestYear,
-    rating: ratings.length ? Math.max(...ratings) : null,
-    points: points.length
-      ? points.reduce((total, points) => total + points, 0)
-      : null,
-  };
+    if (ratings.length || points.length) {
+      return {
+        year,
+        rating: ratings.length ? Math.max(...ratings) : null,
+        points: points.length
+          ? points.reduce((total, value) => total + value, 0)
+          : null,
+      };
+    }
+  }
+
+  return { year: years[0] ?? 0, rating: null, points: null };
 }
 
 function formatPlayersTable(
