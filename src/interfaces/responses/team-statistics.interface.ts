@@ -12,6 +12,7 @@ export interface ITeamPlayerStatistics {
   setsPlayed: number | null;
   attackAttempts: number | null;
   successfulAttacks: number | null;
+  rosterChange?: TeamRosterChange;
 }
 
 export interface ITeamStatistics {
@@ -24,3 +25,5 @@ export interface ITeamStatistics {
   sourceCode: ESourceCode;
   players: ITeamPlayerStatistics[];
 }
+
+export type TeamRosterChange = 'left' | 'new' | 'stayed' | 'unknown';

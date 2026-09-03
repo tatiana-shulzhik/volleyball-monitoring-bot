@@ -36,6 +36,7 @@ import {
 import { isTelegramMenuCommand } from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
+import { IFindRecentSeasonsFromParams } from '../../interfaces/requests/seasons.interface';
 import {
   formatTodayMatches,
   getMoscowDayBounds,
@@ -285,6 +286,26 @@ export class TelegramService
     });
 
     return seasons
+      .sort((left, right) => right.name.localeCompare(left.name))
+      .slice(0, PREVIOUS_YEARS_COUNT);
+  }
+
+  async findRecentSeasonsFrom(
+    data: IFindRecentSeasonsFromParams,
+  ): Promise<SeasonsEntity[]> {
+    const { seasonId, competitionType, sourceCode } = data;
+
+    const seasons = await this.seasonsRepository.getWhere({
+      stages: {
+        championship: { competitionType, source: { code: sourceCode } },
+      },
+    });
+    const selectedSeason = seasons.find(({ id }) => id === seasonId);
+
+    if (!selectedSeason) return [];
+
+    return seasons
+      .filter(({ name }) => name.localeCompare(selectedSeason.name) <= 0)
       .sort((left, right) => right.name.localeCompare(left.name))
       .slice(0, PREVIOUS_YEARS_COUNT);
   }

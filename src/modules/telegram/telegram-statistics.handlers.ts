@@ -331,12 +331,15 @@ export class TelegramStatisticsHandlers {
       [
         TELEGRAM_CALLBACK_PATTERNS.statistics.team,
         TELEGRAM_CALLBACK_PATTERNS.statistics.teamSummary,
+        TELEGRAM_CALLBACK_PATTERNS.statistics.teamExpanded,
         TELEGRAM_CALLBACK_PATTERNS.retroStatistics.team,
         TELEGRAM_CALLBACK_PATTERNS.retroStatistics.teamSummary,
+        TELEGRAM_CALLBACK_PATTERNS.retroStatistics.teamExpanded,
       ],
       async (context) => {
         const isRetro = context.match[0].startsWith('retro-statistics:');
         const isSummary = context.match[0].includes(':team-summary:');
+        const isExpanded = context.match[0].includes(':team-expanded:');
         const teamId = Number(context.match[1]);
         const leagueId = Number(context.match[2]);
         const stageId = Number(context.match[3]);
@@ -347,25 +350,35 @@ export class TelegramStatisticsHandlers {
         );
         const requestedPage = isSummary
           ? Number(context.match[isRetro ? 7 : 6] ?? 0)
-          : 0;
+          : isExpanded
+            ? Number(context.match[isRetro ? 7 : 6] ?? 0)
+            : 0;
         const source = this.getSource(context.chat?.id);
-        const cacheKey = `team-statistics:${source}:${isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}`;
+        const cacheKey = `team-statistics:${source}:${isExpanded ? 'summary-full-roster' : isSummary ? 'summary-current-roster' : 'season'}:${competitionType}:${teamId}:${leagueId}:${seasonId ?? 'current'}`;
         let pages = (await this.cache.get<string[]>(cacheKey)) ?? undefined;
 
         if (pages === undefined) {
-          const statistics = await this.playersService.findTeamStatistics(
+          const statistics = await this.playersService.findTeamStatistics({
             teamId,
             leagueId,
-            isSummary
-              ? await this.telegramService.findRecentSeasons(
-                  competitionType,
-                  source,
-                )
-              : undefined,
-          );
+            aggregateSeasons:
+              isSummary || isExpanded
+                ? isRetro && isExpanded
+                  ? await this.telegramService.findRecentSeasonsFrom({
+                      seasonId: seasonId!,
+                      competitionType,
+                      sourceCode: source,
+                    })
+                  : await this.telegramService.findRecentSeasons(
+                      competitionType,
+                      source,
+                    )
+                : undefined,
+            includeHistoricalRoster: isExpanded,
+          });
 
           pages = statistics
-            ? isSummary
+            ? isSummary || isExpanded
               ? formatTeamStatisticsPages(statistics)
               : [formatTeamStatistics(statistics)]
             : [];
@@ -392,14 +405,35 @@ export class TelegramStatisticsHandlers {
               championshipId,
               competitionType,
             );
-        const createSummaryCallbackData = (page = 0) =>
-          isRetro
-            ? TELEGRAM_CALLBACKS.retroStatistics.teamSummary(
+        const createSummaryCallbackData = (page = 0) => {
+          if (isRetro) {
+            return isExpanded
+              ? TELEGRAM_CALLBACKS.retroStatistics.teamExpanded(
+                  teamId,
+                  leagueId,
+                  stageId,
+                  championshipId,
+                  seasonId!,
+                  competitionType,
+                  page,
+                )
+              : TELEGRAM_CALLBACKS.retroStatistics.teamSummary(
+                  teamId,
+                  leagueId,
+                  stageId,
+                  championshipId,
+                  seasonId!,
+                  competitionType,
+                  page,
+                );
+          }
+
+          return isExpanded
+            ? TELEGRAM_CALLBACKS.statistics.teamExpanded(
                 teamId,
                 leagueId,
                 stageId,
                 championshipId,
-                seasonId!,
                 competitionType,
                 page,
               )
@@ -411,6 +445,7 @@ export class TelegramStatisticsHandlers {
                 competitionType,
                 page,
               );
+        };
         const page = pages.length
           ? Math.min(Math.max(requestedPage, 0), pages.length - 1)
           : 0;
@@ -440,8 +475,52 @@ export class TelegramStatisticsHandlers {
         const keyboard = Markup.inlineKeyboard([
           [
             Markup.button.callback(
-              isSummary ? '📅 Только выбранный сезон' : '📊 За 4 сезона',
-              isSummary ? teamCallbackData : createSummaryCallbackData(),
+              isSummary || isExpanded
+                ? '📅 Только выбранный сезон'
+                : '📊 За 4 сезона',
+              isSummary || isExpanded
+                ? teamCallbackData
+                : createSummaryCallbackData(),
+            ),
+          ],
+          [
+            Markup.button.callback(
+              isExpanded
+                ? '📊 Обычная статистика за 4 сезона'
+                : '📋 Расширенная за 4 сезона',
+              isExpanded
+                ? isRetro
+                  ? TELEGRAM_CALLBACKS.retroStatistics.teamSummary(
+                      teamId,
+                      leagueId,
+                      stageId,
+                      championshipId,
+                      seasonId!,
+                      competitionType,
+                    )
+                  : TELEGRAM_CALLBACKS.statistics.teamSummary(
+                      teamId,
+                      leagueId,
+                      stageId,
+                      championshipId,
+                      competitionType,
+                    )
+                : isRetro
+                  ? TELEGRAM_CALLBACKS.retroStatistics.teamExpanded(
+                      teamId,
+                      leagueId,
+                      stageId,
+                      championshipId,
+                      seasonId!,
+                      competitionType,
+                    )
+                  : TELEGRAM_CALLBACKS.statistics.teamExpanded(
+                      teamId,
+                      leagueId,
+                      stageId,
+                      championshipId,
+                      competitionType,
+                    ),
             ),
           ],
           ...paginationButtons,

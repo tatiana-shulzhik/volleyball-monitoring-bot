@@ -113,12 +113,12 @@ export class LegaVolleyCatalogService {
       ESourceCode.LegaVolley,
       'ITA',
     );
-    const players = await this.playersService.upsertCatalogPlayers(
-      leagueCatalog.players ?? [],
+    const players = await this.playersService.upsertCatalogPlayers({
+      incomingPlayers: leagueCatalog.players ?? [],
       teamsByExternalId,
       leaguesByExternalId,
-      ESourceCode.LegaVolley,
-    );
+      sourceCode: ESourceCode.LegaVolley,
+    });
     const matches = await this.matchesService.upsertCatalogMatches(
       leagueCatalog.matches ?? [],
       leaguesByExternalId,
