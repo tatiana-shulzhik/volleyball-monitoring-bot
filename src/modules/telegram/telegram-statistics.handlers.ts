@@ -356,7 +356,10 @@ export class TelegramStatisticsHandlers {
             teamId,
             leagueId,
             isSummary
-              ? await this.telegramService.findRecentSeasons(competitionType, source)
+              ? await this.telegramService.findRecentSeasons(
+                  competitionType,
+                  source,
+                )
               : undefined,
           );
 

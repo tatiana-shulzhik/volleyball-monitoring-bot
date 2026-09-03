@@ -19,7 +19,10 @@ import { SeasonsRepository } from '../../databases/repositories/seasons.reposito
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
-import { MOSCOW_TIME_ZONE, PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import {
+  MOSCOW_TIME_ZONE,
+  PREVIOUS_YEARS_COUNT,
+} from '../../shared/consts/constants';
 import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import { getErrorMessage } from '../../shared/error.utils';
 import {

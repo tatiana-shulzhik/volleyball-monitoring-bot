@@ -15,10 +15,7 @@ import {
   calculateStageChanges,
   createCompetitionStageKey,
 } from '../../shared/competition-stages.utils';
-import {
-  applyEntityChanges,
-  logEntityChanges,
-} from '../../shared/synchronization.utils';
+import { applyEntityChanges } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
@@ -118,14 +115,6 @@ export class ChampionshipsService {
       changes,
       allowDeletion: fetched.isComplete,
     });
-    logEntityChanges({
-      logger: this.logger,
-      entityName: 'Competition stages',
-      changes,
-      isComplete: fetched.isComplete,
-      allowDeletion: true,
-    });
-
     return this.repository.getWhere({
       championship: { id: In(championships.map(({ id }) => id)) },
     });

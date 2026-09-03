@@ -18,10 +18,7 @@ import {
   calculatePlayerRelationChanges,
 } from '../../shared/players.utils';
 import { applyRelationChanges } from '../../shared/relation-changes.utils';
-import {
-  applyEntityChanges,
-  logEntityChanges,
-} from '../../shared/synchronization.utils';
+import { applyEntityChanges } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 import { splitIntoBatches, uniqueBy } from '../../shared/array.utils';
 import { normalizePlayerName } from '../../shared/player-name.utils';
@@ -323,15 +320,11 @@ export class PlayersService {
   async synchronize(
     sources: IPlayerRosterSource[],
     fetched: IFetchedPlayers,
-  ): Promise<void> {
+  ): Promise<number> {
     if (!sources.length) {
       this.logger.warn('No roster sources found; players sync skipped');
-      return;
+      return 0;
     }
-
-    this.logger.log(
-      `Starting players synchronization for ${sources.length} rosters`,
-    );
 
     await this.teamsRepository.updateCountries(
       fetched.teamCountries.map(({ teamExternalId, country }) => ({
@@ -402,17 +395,6 @@ export class PlayersService {
       allowDeletion: fetched.isComplete,
     });
 
-    logEntityChanges({
-      logger: this.logger,
-      entityName: 'Players',
-      changes: playerChanges,
-      isComplete: fetched.isComplete,
-      allowDeletion: false,
-    });
-    this.logger.log(
-      `Player team leagues synchronized: ${relationChanges.missing.length} inserted, ` +
-        `${relationChanges.changed.length} updated, ` +
-        `${fetched.isComplete ? relationChanges.obsoleteIds.length : 0} deleted`,
-    );
+    return players.length;
   }
 }

@@ -11,10 +11,7 @@ import {
   ISynchronizedTeams,
 } from '../../interfaces/responses/synchronized-teams.interface';
 import { applyRelationChanges } from '../../shared/relation-changes.utils';
-import {
-  applyEntityChanges,
-  logEntityChanges,
-} from '../../shared/synchronization.utils';
+import { applyEntityChanges } from '../../shared/synchronization.utils';
 import {
   calculateTeamChanges,
   calculateTeamLeagueChanges,
@@ -116,10 +113,6 @@ export class TeamsService {
       return { teams: [], rosterSources: [] };
     }
 
-    this.logger.log(
-      `Starting teams synchronization for ${leagues.length} leagues`,
-    );
-
     const externalIds = [
       ...new Set(incomingTeams.map(({ externalId }) => externalId)),
     ];
@@ -165,18 +158,6 @@ export class TeamsService {
       changes: relationChanges,
       allowDeletion: isComplete,
     });
-
-    logEntityChanges({
-      logger: this.logger,
-      entityName: 'Teams',
-      changes: teamChanges,
-      isComplete,
-      allowDeletion: false,
-    });
-    this.logger.log(
-      `Team leagues synchronized: ${relationChanges.missing.length} inserted, ` +
-        `${isComplete ? relationChanges.obsoleteIds.length : 0} deleted`,
-    );
 
     return {
       teams,

@@ -134,9 +134,15 @@ export class CevCatalogService {
     );
     const teams = await this.teamsService.synchronize(leagueCatalog);
 
-    await this.playersService.synchronize(
+    const players = await this.playersService.synchronize(
       teams.rosterSources,
       await this.gateway.fetchPlayers(teams.rosterSources),
+    );
+
+    this.logger.log(
+      `CEV catalog synchronized: ${seasonCatalog.championships.length} championships, ` +
+        `${stages.length} stages, ${teams.teams.length} teams, ` +
+        `${players} players`,
     );
   }
 
