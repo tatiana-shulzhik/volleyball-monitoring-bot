@@ -4,12 +4,15 @@ import { ChampionshipsModule } from '../championships/championships.module';
 import { SeasonsModule } from '../seasons/seasons.module';
 import { TeamsModule } from '../teams/teams.module';
 import { PlayersModule } from '../players/players.module';
-import { TelegramStatisticsQueryService } from './telegram-statistics-query.service';
 import { TelegramService } from './telegram.service';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
+import { ChampionshipsRepository } from '../../databases/repositories/championships.repository';
+import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
+import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
+import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 @Module({
   imports: [
     RedisCacheModule,
@@ -21,8 +24,11 @@ import { SourcesRepository } from '../../databases/repositories/sources.reposito
   providers: [
     TelegramService,
     TelegramStatisticsHandlers,
-    TelegramStatisticsQueryService,
     TelegramAccessRepository,
+    ChampionshipsRepository,
+    CompetitionStagesRepository,
+    SeasonsRepository,
+    TeamLeaguesRepository,
     MatchesRepository,
     SourcesRepository,
   ],

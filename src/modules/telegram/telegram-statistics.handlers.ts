@@ -21,7 +21,7 @@ import {
   SOURCE_MENU,
 } from '../../shared/telegram-menu.utils';
 import { PlayersService } from '../players/players.service';
-import { TelegramStatisticsQueryService } from './telegram-statistics-query.service';
+import type { TelegramService } from './telegram.service';
 import {
   COMPETITION_TYPE_BUTTONS,
   TELEGRAM_MESSAGES,
@@ -30,14 +30,15 @@ import {
 @Injectable()
 export class TelegramStatisticsHandlers {
   private readonly selectedSources = new Map<number, ESourceCode>();
+  private telegramService!: TelegramService;
 
   constructor(
-    private readonly queries: TelegramStatisticsQueryService,
     private readonly playersService: PlayersService,
     private readonly cache: RedisCacheService,
   ) {}
 
-  register(bot: Telegraf): void {
+  register(bot: Telegraf, telegramService: TelegramService): void {
+    this.telegramService = telegramService;
     this.registerSourceSelection(bot);
     this.registerCurrentStatistics(bot);
     this.registerRetroStatistics(bot);
@@ -105,7 +106,7 @@ export class TelegramStatisticsHandlers {
       TELEGRAM_CALLBACK_PATTERNS.statistics.competitionType,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
-        const seasons = await this.queries.findCurrentSeasons(
+        const seasons = await this.telegramService.findCurrentSeasons(
           competitionType,
           this.getSource(context.chat?.id),
         );
@@ -127,7 +128,7 @@ export class TelegramStatisticsHandlers {
       TELEGRAM_CALLBACK_PATTERNS.statistics.season,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
-        const championships = await this.queries.findChampionships(
+        const championships = await this.telegramService.findChampionships(
           competitionType,
           this.getSource(context.chat?.id),
         );
@@ -171,7 +172,7 @@ export class TelegramStatisticsHandlers {
       TELEGRAM_CALLBACK_PATTERNS.retroStatistics.competitionType,
       async (context) => {
         const competitionType = parseCompetitionType(context.match[1]);
-        const seasons = await this.queries.findFinishedSeasons(
+        const seasons = await this.telegramService.findFinishedSeasons(
           competitionType,
           this.getSource(context.chat?.id),
         );
@@ -197,7 +198,7 @@ export class TelegramStatisticsHandlers {
       async (context) => {
         const seasonId = Number(context.match[1]);
         const competitionType = parseCompetitionType(context.match[2]);
-        const championships = await this.queries.findChampionships(
+        const championships = await this.telegramService.findChampionships(
           competitionType,
           this.getSource(context.chat?.id),
           seasonId,
@@ -235,7 +236,7 @@ export class TelegramStatisticsHandlers {
         const competitionType = parseCompetitionType(
           context.match[isRetro ? 3 : 2],
         );
-        const stages = await this.queries.findStages(
+        const stages = await this.telegramService.findStages(
           championshipId,
           competitionType,
           this.getSource(context.chat?.id),
@@ -355,7 +356,7 @@ export class TelegramStatisticsHandlers {
             teamId,
             leagueId,
             isSummary
-              ? await this.queries.findRecentSeasons(competitionType, source)
+              ? await this.telegramService.findRecentSeasons(competitionType, source)
               : undefined,
           );
 
@@ -509,7 +510,7 @@ export class TelegramStatisticsHandlers {
       backCallbackData: string;
     },
   ): Promise<void> {
-    const teams = await this.queries.findTeamsForStage(options.stageId);
+    const teams = await this.telegramService.findTeamsForStage(options.stageId);
 
     await showList(context, {
       items: teams.map(({ team, leagueId }) => ({
