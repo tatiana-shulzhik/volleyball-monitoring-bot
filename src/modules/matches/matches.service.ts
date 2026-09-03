@@ -226,6 +226,12 @@ export class MatchesService {
           teamsByExternalId.get(match.homeTeamExternalId)?.country,
         );
 
+      if (
+        !/^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/.test(match.scheduledText ?? '')
+      ) {
+        return { ...match, scheduledAt: null };
+      }
+
       try {
         return {
           ...match,

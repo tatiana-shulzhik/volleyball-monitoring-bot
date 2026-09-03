@@ -124,11 +124,11 @@ export class SynchronizationService implements OnApplicationBootstrap {
         );
         return;
       }
-      this.logger.log('Full catalog synchronization completed');
 
       await this.runExclusive(() =>
         this.cevCatalogService.synchronizeIncompletePlayerStatistics(),
       );
+      this.logger.log('Full CEV catalog synchronization completed');
       await this.synchronizationStateRepository.markCompleted(
         ESynchronizationKey.CevInitialCatalog,
       );

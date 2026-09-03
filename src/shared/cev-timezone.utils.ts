@@ -1,10 +1,21 @@
 const CEV_CITY_TIME_ZONE_OVERRIDES: Readonly<Record<string, string>> = {
+  ALBA: 'Europe/Bucharest',
+  DEBICA: 'Europe/Warsaw',
+  HELSINKI: 'Europe/Helsinki',
   'LAS PALMAS': 'Atlantic/Canary',
+  MARIBOR: 'Europe/Ljubljana',
+  NOKIA: 'Europe/Helsinki',
+  ODENSE: 'Europe/Copenhagen',
+  POPRAD: 'Europe/Bratislava',
+  STEINBRUNN: 'Europe/Vienna',
+  STRUMICA: 'Europe/Skopje',
   TENERIFE: 'Atlantic/Canary',
+  TIRANA: 'Europe/Tirane',
 };
 
 export const CEV_COUNTRY_TIME_ZONES: Readonly<Record<string, string>> = {
   AND: 'Europe/Andorra',
+  ALB: 'Europe/Tirane',
   ARM: 'Asia/Yerevan',
   AUT: 'Europe/Vienna',
   AZE: 'Asia/Baku',
