@@ -2,11 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
-import { PlayersRepository } from '../../databases/repositories/players.repository';
-import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
-import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import { CleanupResult } from '../../interfaces/responses/cleanup.interface';
 import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import { ESourceCode } from '../../shared/enums';
 import {
@@ -34,16 +30,13 @@ export class CevCatalogService {
     private readonly playersService: PlayersService,
     private readonly playerStatisticsService: PlayerStatisticsService,
     private readonly matchesService: MatchesService,
-    private readonly seasonsRepository: SeasonsRepository,
     private readonly stagesRepository: CompetitionStagesRepository,
-    private readonly playersRepository: PlayersRepository,
-    private readonly teamsRepository: TeamsRepository,
   ) {}
 
-  async synchronizeStoredRange(): Promise<void> {
+  async synchronizeStoredRange(): Promise<boolean> {
     const earliestYear = getEarliestCatalogYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(earliestYear));
-    await this.synchronizeMatches(false);
+    return this.synchronizeMatches(false);
   }
 
   async synchronizeCurrentAndFuture(): Promise<void> {
@@ -53,10 +46,6 @@ export class CevCatalogService {
 
   async synchronizeCurrentAndFutureMatches(): Promise<void> {
     await this.synchronizeMatches(true);
-  }
-
-  startMonitoring(): Promise<number> {
-    return this.matchesService.startMonitoring();
   }
 
   async synchronizeCurrentPlayerStatistics(): Promise<void> {
@@ -100,27 +89,6 @@ export class CevCatalogService {
     );
   }
 
-  async removeOutdatedCatalog(): Promise<CleanupResult> {
-    const beforeYear = getEarliestCatalogYear();
-
-    return this.seasonsRepository.useTransaction(undefined, async (manager) => {
-      const seasons = await this.seasonsRepository.deleteOutdated(
-        beforeYear,
-        manager,
-      );
-      const players = await this.playersRepository.deleteOrphans(manager);
-      const teams = await this.teamsRepository.deleteOrphans(manager);
-      const result = { seasons, players, teams };
-
-      this.logger.log(
-        `Outdated catalog deleted: ${seasons} seasons, ` +
-          `${players} orphan players, ${teams} orphan teams`,
-      );
-
-      return result;
-    });
-  }
-
   private async synchronizeCatalog(
     seasonCatalog: SynchronizedSeasonCatalog,
   ): Promise<void> {
@@ -134,9 +102,15 @@ export class CevCatalogService {
     );
     const teams = await this.teamsService.synchronize(leagueCatalog);
 
-    await this.playersService.synchronize(
+    const players = await this.playersService.synchronize(
       teams.rosterSources,
       await this.gateway.fetchPlayers(teams.rosterSources),
+    );
+
+    this.logger.log(
+      `CEV catalog synchronized: ${seasonCatalog.championships.length} championships, ` +
+        `${stages.length} stages, ${teams.teams.length} teams, ` +
+        `${players} players`,
     );
   }
 
@@ -175,17 +149,16 @@ export class CevCatalogService {
     };
   }
 
-  private async synchronizeMatches(frequentOnly: boolean): Promise<void> {
+  private async synchronizeMatches(frequentOnly: boolean): Promise<boolean> {
     let stages = this.filterCevStages(await this.stagesRepository.getWhere({}));
 
     if (frequentOnly) {
       stages = await this.matchesService.getFrequentlyRelevantStages(stages);
     }
 
-    await this.matchesService.synchronize(
-      stages,
-      await this.gateway.fetchMatches(stages),
-    );
+    const fetched = await this.gateway.fetchMatches(stages);
+    await this.matchesService.synchronize(stages, fetched);
+    return fetched.isComplete;
   }
 
   private async loadPlayerStatistics(

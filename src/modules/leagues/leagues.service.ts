@@ -10,10 +10,7 @@ import {
 import { SynchronizedLeagues } from '../../interfaces/responses/synchronized-leagues.interface';
 import { createCompetitionStageKey } from '../../shared/competition-stages.utils';
 import { calculateLeagueChanges } from '../../shared/leagues.utils';
-import {
-  applyEntityChanges,
-  logEntityChanges,
-} from '../../shared/synchronization.utils';
+import { applyEntityChanges } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 import { uniqueBy } from '../../shared/array.utils';
 
@@ -66,10 +63,6 @@ export class LeaguesService {
       return { leagues: [], teams: [], isComplete: true };
     }
 
-    this.logger.log(
-      `Starting leagues synchronization for ${stages.length} stages`,
-    );
-
     const stageIds = stages.map(({ id }) => id);
     const existing = await this.repository.getWhere({
       stage: { id: In(stageIds) },
@@ -93,14 +86,6 @@ export class LeaguesService {
       changes,
       allowDeletion: fetched.isComplete,
     });
-    logEntityChanges({
-      logger: this.logger,
-      entityName: 'Leagues',
-      changes,
-      isComplete: fetched.isComplete,
-      allowDeletion: true,
-    });
-
     return {
       leagues: await this.repository.getWhere({
         stage: { id: In(stageIds) },

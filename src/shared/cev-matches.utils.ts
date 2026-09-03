@@ -1,15 +1,23 @@
 import { ICevMatch } from '../interfaces/requests/matches.interface';
 import { EMatchStatus } from './enums';
+import {
+  parseCevLocalDate,
+  resolveCevVenueTimeZone,
+} from './cev-timezone.utils';
 
 const MATCH_START = /<tr\b[^>]*class=['"]rlv[IA]['"][^>]*>/gi;
 const MATCH_LINK =
   /MatchPage\.aspx\?mID=(\d+)(?:&amp;|&)ID=\d+(?:&amp;|&)CID=(\d+)/i;
 const TEAM_ID = /TeamLogos\/Teams_WebLogo_32_32\.aspx\?ID=(\d+)/gi;
 const SCHEDULED_AT = /LB_DataOra[^>]*>([\s\S]*?)<\/span>/i;
+const VENUE = /LB_Palasport[^>]*>([\s\S]*?)<\/span>/i;
 const HOME_SETS = /LB_SetCasa[^>]*>([\s\S]*?)<\/span>/i;
 const AWAY_SETS = /LB_SetOspiti[^>]*>([\s\S]*?)<\/span>/i;
 
-export function extractMatches(html: string): ICevMatch[] {
+export function extractMatches(
+  html: string,
+  countryCodesByLeague = new Map<number, string>(),
+): ICevMatch[] {
   const matches = new Map<string, ICevMatch>();
 
   for (const block of extractMatchBlocks(html)) {
@@ -21,17 +29,21 @@ export function extractMatches(html: string): ICevMatch[] {
     }
 
     const externalId = link[1];
+    const leagueExternalId = Number(link[2]);
     const scheduledText = cleanText(block.match(SCHEDULED_AT)?.[1] ?? '');
-    const scheduledAt = parseCevDate(scheduledText);
+    const venue = cleanText(block.match(VENUE)?.[1] ?? '');
     const homeSets = Number(cleanText(block.match(HOME_SETS)?.[1] ?? '0'));
     const awaySets = Number(cleanText(block.match(AWAY_SETS)?.[1] ?? '0'));
 
     matches.set(externalId, {
       externalId,
-      leagueExternalId: Number(link[2]),
+      leagueExternalId,
       homeTeamExternalId: teamIds[0],
       awayTeamExternalId: teamIds[1],
-      scheduledAt,
+      scheduledAt: null,
+      scheduledText,
+      venue,
+      venueCountryCode: countryCodesByLeague.get(leagueExternalId),
       status: resolveStatus(scheduledText, homeSets, awaySets),
     });
   }
@@ -63,15 +75,16 @@ function resolveStatus(
     : EMatchStatus.Scheduled;
 }
 
-function parseCevDate(value: string): Date | null {
-  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
-
-  if (!match) {
+export function parseCevDate(
+  value: string,
+  venue: string,
+  countryCode?: string,
+): Date | null {
+  if (!/^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/.test(value)) {
     return null;
   }
 
-  const [, day, month, year, hours, minutes] = match;
-  return new Date(`${year}-${month}-${day}T${hours}:${minutes}:00+02:00`);
+  return parseCevLocalDate(value, resolveCevVenueTimeZone(venue, countryCode));
 }
 
 function cleanText(value: string): string {

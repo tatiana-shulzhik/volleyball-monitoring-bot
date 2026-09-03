@@ -118,6 +118,33 @@ export class MatchesRepository {
     return result.affected ?? 0;
   }
 
+  findScheduledBetween(
+    start: Date,
+    end: Date,
+    sourceCode?: ESourceCode,
+  ): Promise<MatchEntity[]> {
+    const query = this.repository
+      .createQueryBuilder('match')
+      .innerJoinAndSelect('match.league', 'league')
+      .innerJoinAndSelect('league.stage', 'stage')
+      .innerJoinAndSelect('stage.championship', 'championship')
+      .leftJoinAndSelect('championship.source', 'source')
+      .innerJoinAndSelect('match.homeTeam', 'homeTeam')
+      .innerJoinAndSelect('match.awayTeam', 'awayTeam')
+      .where('match.status = :status', { status: EMatchStatus.Scheduled })
+      .andWhere('match.scheduled_at >= :start', { start })
+      .andWhere('match.scheduled_at < :end', { end })
+      .orderBy('source.name', 'ASC')
+      .addOrderBy('championship.name', 'ASC')
+      .addOrderBy('match.scheduled_at', 'ASC');
+
+    if (sourceCode) {
+      query.andWhere('source.code = :sourceCode', { sourceCode });
+    }
+
+    return query.getMany();
+  }
+
   async findCompletedStageIds(stageIds: number[]): Promise<number[]> {
     const rows: Array<{ championship_id: number }> = await this.repository
       .createQueryBuilder('match')

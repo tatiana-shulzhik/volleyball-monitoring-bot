@@ -12,6 +12,7 @@ import {
   ILegaVolleyFemminileSummerTourRoster,
 } from '../interfaces/requests/lega-volley-femminile.interface';
 import { ECompetitionType, EMatchStatus } from './enums';
+import { parseCevLocalDate } from './cev-timezone.utils';
 import { parseSeasonEndYear } from './season.utils';
 
 export function readLegaVolleyFemminileSeasons(
@@ -579,14 +580,10 @@ function readMatchDate(html: string): Date | null {
   if (!date) return null;
   const time = html.match(/\b(\d{1,2}):(\d{2})\b/);
 
-  return new Date(
-    Date.UTC(
-      Number(date[3]),
-      Number(date[2]) - 1,
-      Number(date[1]),
-      Number(time?.[1] ?? 0),
-      Number(time?.[2] ?? 0),
-    ),
+  return parseCevLocalDate(
+    `${date[1]}/${date[2]}/${date[3]} ` +
+      `${String(time?.[1] ?? 0).padStart(2, '0')}:${time?.[2] ?? '00'}`,
+    'Europe/Rome',
   );
 }
 

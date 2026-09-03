@@ -10,6 +10,9 @@ export interface ICevMatch {
   homeTeamExternalId: string;
   awayTeamExternalId: string;
   scheduledAt: Date | null;
+  scheduledText?: string;
+  venue?: string;
+  venueCountryCode?: string;
   status: EMatchStatus;
 }
 

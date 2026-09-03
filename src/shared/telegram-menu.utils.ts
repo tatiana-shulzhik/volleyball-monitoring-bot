@@ -1,8 +1,11 @@
 import { Context, Markup } from 'telegraf';
-import { ListMenu } from '../../interfaces/telegram/menu.models';
-import { ECompetitionType, ESourceCode } from '../../shared/enums';
+import { ListMenu } from '../interfaces/telegram/menu.models';
+import {
+  MENU_BUTTONS,
+  SOURCE_BUTTONS,
+} from '../modules/telegram/telegram.constants';
+import { ECompetitionType, ESourceCode } from './enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
-import { MENU_BUTTONS, SOURCE_BUTTONS } from './telegram.constants';
 
 function createSourceButtons() {
   return Object.values(ESourceCode).map((source) => [

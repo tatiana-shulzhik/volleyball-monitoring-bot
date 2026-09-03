@@ -6,11 +6,16 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SynchronizationStateRepository } from '../../databases/repositories/synchronization-state.repository';
+import { PlayersRepository } from '../../databases/repositories/players.repository';
+import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
+import { TeamsRepository } from '../../databases/repositories/teams.repository';
 import { MOSCOW_TIME_ZONE } from '../../shared/consts/constants';
 import { ECronExpression } from '../../shared/enums';
+import { getEarliestCatalogYear } from '../../shared/season.utils';
 import { CevCatalogService } from '../cev/cev-catalog.service';
 import { LegaVolleyCatalogService } from '../lega-volley/lega-volley-catalog.service';
 import { LegaVolleyFemminileCatalogService } from '../lega-volley-femminile/lega-volley-femminile-catalog.service';
+import { MatchesService } from '../matches/matches.service';
 import { ESourceCode, ESynchronizationKey } from '../../shared/enums';
 
 @Injectable()
@@ -23,6 +28,10 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly cevCatalogService: CevCatalogService,
     private readonly legaVolleyCatalogService: LegaVolleyCatalogService,
     private readonly legaVolleyFemminileCatalogService: LegaVolleyFemminileCatalogService,
+    private readonly matchesService: MatchesService,
+    private readonly seasonsRepository: SeasonsRepository,
+    private readonly playersRepository: PlayersRepository,
+    private readonly teamsRepository: TeamsRepository,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -56,10 +65,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async deleteOutdatedCatalogByCron(): Promise<void> {
-    await this.runExclusive(
-      () => this.cevCatalogService.removeOutdatedCatalog(),
-      false,
-    );
+    await this.runExclusive(() => this.deleteOutdatedCatalog(), false);
   }
 
   @Cron(ECronExpression.Every3HoursAtMinute30, {
@@ -72,7 +78,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.cevCatalogService.synchronizeCurrentAndFutureMatches();
       await this.legaVolleyCatalogService.synchronizeCurrentAndFutureMatches();
       await this.legaVolleyFemminileCatalogService.synchronizeCurrentAndFutureMatches();
-      await this.cevCatalogService.startMonitoring();
+      await this.matchesService.startMonitoring();
     }, false);
   }
 
@@ -115,14 +121,20 @@ export class SynchronizationService implements OnApplicationBootstrap {
       }
 
       this.logger.log('Starting full catalog synchronization');
-      await this.runExclusive(async () => {
-        await this.cevCatalogService.synchronizeStoredRange();
+      const matchesComplete = await this.runExclusive(async () => {
+        return this.cevCatalogService.synchronizeStoredRange();
       });
-      this.logger.log('Full catalog synchronization completed');
+      if (!matchesComplete) {
+        this.logger.warn(
+          'Full catalog synchronization is incomplete; it will be retried after restart',
+        );
+        return;
+      }
 
       await this.runExclusive(() =>
         this.cevCatalogService.synchronizeIncompletePlayerStatistics(),
       );
+      this.logger.log('Full CEV catalog synchronization completed');
       await this.synchronizationStateRepository.markCompleted(
         ESynchronizationKey.CevInitialCatalog,
       );
@@ -132,6 +144,24 @@ export class SynchronizationService implements OnApplicationBootstrap {
         error instanceof Error ? error.stack : String(error),
       );
     }
+  }
+
+  private async deleteOutdatedCatalog(): Promise<void> {
+    const beforeYear = getEarliestCatalogYear();
+
+    await this.seasonsRepository.useTransaction(undefined, async (manager) => {
+      const seasons = await this.seasonsRepository.deleteOutdated(
+        beforeYear,
+        manager,
+      );
+      const players = await this.playersRepository.deleteOrphans(manager);
+      const teams = await this.teamsRepository.deleteOrphans(manager);
+
+      this.logger.log(
+        `Outdated catalog deleted: ${seasons} seasons, ` +
+          `${players} orphan players, ${teams} orphan teams`,
+      );
+    });
   }
 
   private async initializeLegaVolleyCatalog(): Promise<void> {

@@ -339,6 +339,7 @@ export class PlayerStatisticsService {
     const attackRows: Partial<MatchPlayerAttackStatisticsEntity>[] = [];
     const replacedMatchIds: number[] = [];
     const completedMatchIds: number[] = [];
+    const emptyAttackMatchIds: string[] = [];
 
     for (const [index, result] of fetchedAttacks.entries()) {
       if (result.status === 'rejected') {
@@ -356,9 +357,7 @@ export class PlayerStatisticsService {
       }
 
       if (!result.value.home.length && !result.value.away.length) {
-        this.logger.warn(
-          `Match attack statistics are empty: ${match.externalId}`,
-        );
+        emptyAttackMatchIds.push(match.externalId ?? 'unknown');
         continue;
       }
 
@@ -415,6 +414,12 @@ export class PlayerStatisticsService {
       if (!unresolvedPlayerNames.length) {
         completedMatchIds.push(match.id);
       }
+    }
+
+    if (emptyAttackMatchIds.length) {
+      this.logger.warn(
+        `Match attack statistics are empty: [${emptyAttackMatchIds.join(', ')}]`,
+      );
     }
 
     if (replacedMatchIds.length) {

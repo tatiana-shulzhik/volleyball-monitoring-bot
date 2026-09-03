@@ -14,4 +14,20 @@ export class SourcesRepository {
   findByCodeOrFail(code: ESourceCode): Promise<SourcesEntity> {
     return this.repository.findOneByOrFail({ code });
   }
+
+  findWithLiveMatchesNotifications(): Promise<SourcesEntity[]> {
+    return this.repository.find({
+      where: { liveMatchesNotificationEnabled: true },
+      order: { name: 'ASC' },
+    });
+  }
+
+  async toggleLiveMatchesNotification(
+    code: ESourceCode,
+  ): Promise<SourcesEntity> {
+    const source = await this.findByCodeOrFail(code);
+    source.liveMatchesNotificationEnabled =
+      !source.liveMatchesNotificationEnabled;
+    return this.repository.save(source);
+  }
 }

@@ -17,7 +17,10 @@ import { ICevChampionship } from '../interfaces/requests/championships.interface
 import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface';
 import { IPlayerRosterSource } from '../interfaces/responses/synchronized-teams.interface';
 import { extractChampionships } from '../shared/cev-championships.utils';
-import { extractLeagues } from '../shared/cev-leagues.utils';
+import {
+  extractLeagueCountryCodes,
+  extractLeagues,
+} from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
 import {
   extractPlayers,
@@ -274,13 +277,26 @@ export class CevGateway {
   ): Promise<IFetchedMatches> {
     const results = await this.mapSettled({
       items: stages,
-      mapper: async (stage) =>
-        extractMatches(
-          await this.http.get(
-            createMatchesUrl(stage.championship.externalId, stage.externalId),
-          ),
-        ),
+      mapper: async (stage) => {
+        const html = await this.http.get(
+          createMatchesUrl(stage.championship.externalId, stage.externalId),
+        );
+        return extractMatches(html, extractLeagueCountryCodes(html));
+      },
       concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') return;
+
+      const stage = stages[index];
+      this.logger.warn(
+        `Matches request failed for "${stage.championship.name}" ` +
+          `(${createMatchesUrl(
+            stage.championship.externalId,
+            stage.externalId,
+          )}): ${getErrorMessage(result.reason)}`,
+      );
     });
 
     return {
