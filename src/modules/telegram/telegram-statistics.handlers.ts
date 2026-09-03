@@ -379,7 +379,7 @@ export class TelegramStatisticsHandlers {
 
           pages = statistics
             ? isSummary || isExpanded
-              ? formatTeamStatisticsPages(statistics)
+              ? formatTeamStatisticsPages(statistics, 12000, isExpanded)
               : [formatTeamStatistics(statistics)]
             : [];
 
@@ -486,8 +486,8 @@ export class TelegramStatisticsHandlers {
           [
             Markup.button.callback(
               isExpanded
-                ? '📊 Обычная статистика за 4 сезона'
-                : '📋 Расширенная за 4 сезона',
+                ? '📊 Обычная статистика'
+                : '📋 Расширенная статистика',
               isExpanded
                 ? isRetro
                   ? TELEGRAM_CALLBACKS.retroStatistics.teamSummary(

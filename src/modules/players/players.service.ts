@@ -15,7 +15,7 @@ import {
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
 import { ILegaPlayer } from '../../interfaces/requests/lega-volley.interface';
-import { PREVIOUS_YEARS_COUNT } from '../../shared/consts/constants';
+import { AGGREGATED_SEASONS_COUNT } from '../../shared/consts/constants';
 import {
   createTeamStatistics,
   normalizeTeamName,
@@ -241,7 +241,7 @@ export class PlayersService {
     const seasons =
       aggregateSeasons?.length &&
       !aggregateSeasons.some(({ id }) => id === season.id)
-        ? [season, ...aggregateSeasons].slice(0, PREVIOUS_YEARS_COUNT)
+        ? [season, ...aggregateSeasons].slice(0, AGGREGATED_SEASONS_COUNT)
         : aggregateSeasons;
 
     const isAggregate = Boolean(seasons?.length);
