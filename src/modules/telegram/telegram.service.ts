@@ -4,11 +4,13 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
+import { MOSCOW_TIME_ZONE } from '../../shared/consts/constants';
 import { ESourceCode } from '../../shared/enums';
 import { getErrorMessage } from '../../shared/error.utils';
 import {
@@ -33,7 +35,7 @@ export class TelegramService
   private isRunning = false;
 
   constructor(
-    config: TelegramConfig,
+    private readonly config: TelegramConfig,
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
     private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
@@ -63,20 +65,38 @@ export class TelegramService
     this.logger.log('Telegram bot stopped');
   }
 
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+    name: 'daily-today-matches-notification',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async sendTodayMatchesByCron(): Promise<void> {
+    const sources =
+      await this.sourcesRepository.findWithLiveMatchesNotifications();
+
+    for (const source of sources) {
+      await this.sendTodayMatches(this.config.groupId, source.code);
+    }
+  }
+
   async sendTodayMatches(
     chatId: number,
     sourceCode: ESourceCode,
   ): Promise<void> {
     try {
+      const html = await this.getTodayMatchesMessage(sourceCode);
+      if (!html.trim()) return;
+
       const sendRichMessage = this.bot.telegram.callApi.bind(
         this.bot.telegram,
       ) as unknown as (
         method: string,
         payload: Record<string, unknown>,
       ) => Promise<unknown>;
-      await sendRichMessage('sendMessage', {
+
+      await sendRichMessage('sendRichMessage', {
         chat_id: chatId,
-        rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
+        rich_message: { html },
       });
     } catch (error) {
       this.logger.error(
@@ -178,7 +198,7 @@ export class TelegramService
         Markup.button.callback(
           source.liveMatchesNotificationEnabled
             ? '🔕 Выключить автоотправку'
-            : '🔔 Включить автоотправку в 00:05',
+            : '🔔 Включить автоотправку в 00:00',
           TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(sourceCode),
         ),
       ],

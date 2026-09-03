@@ -10,8 +10,6 @@ import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
 import { MatchesRepository } from '../../databases/repositories/matches.repository';
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
-import { TelegramLiveMatchesNotificationService } from './telegram-live-matches-notification.service';
-
 @Module({
   imports: [
     RedisCacheModule,
@@ -25,7 +23,6 @@ import { TelegramLiveMatchesNotificationService } from './telegram-live-matches-
     TelegramStatisticsHandlers,
     TelegramStatisticsQueryService,
     TelegramAccessRepository,
-    TelegramLiveMatchesNotificationService,
     MatchesRepository,
     SourcesRepository,
   ],

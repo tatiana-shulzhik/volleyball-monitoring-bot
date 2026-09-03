@@ -25,9 +25,16 @@ export function getMoscowDayBounds(date = new Date()): {
   };
 }
 
-export function formatTodayMatches(matches: MatchEntity[]): string {
+export function formatTodayMatches(
+  matches: MatchEntity[],
+  sourceCode?: ESourceCode,
+): string {
   if (!matches.length) {
-    return '<p><b>🔴 На сегодня запланированных матчей нет.</b></p>';
+    const source = sourceCode
+      ? `<p>📡 ${escapeHtml(SOURCE_BUTTONS[sourceCode])}</p>`
+      : '';
+
+    return `${source}<p><b>🔴 На сегодня запланированных матчей нет.</b></p>`;
   }
 
   const bySource = new Map<string, MatchEntity[]>();
