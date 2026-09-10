@@ -539,7 +539,9 @@ function getLatestPlayerSeason(players: ITeamStatistics['players']): {
       player.points === null ? [] : [player.points],
     );
 
-    if (ratings.length || points.length) {
+    // A season with points but without played sets has no displayed rating
+    // and must not affect the retro players sorting.
+    if (ratings.length) {
       return {
         year,
         rating: ratings.length ? Math.max(...ratings) : null,

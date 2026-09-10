@@ -17,6 +17,7 @@ import {
 } from '../../shared/competition-stages.utils';
 import { applyEntityChanges } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
+import { inferSeasonName } from '../../shared/season.utils';
 
 @Injectable()
 export class ChampionshipsService {
@@ -94,6 +95,12 @@ export class ChampionshipsService {
       calendarStages,
       fetched.stages,
       fetched.isComplete,
+      new Map(
+        championships.map((championship) => [
+          championship.externalId,
+          championship,
+        ]),
+      ),
     );
     const existing = await this.repository.getWhere({
       championship: { id: In(championships.map(({ id }) => id)) },
@@ -124,6 +131,7 @@ export class ChampionshipsService {
     calendarStages: ICevCompetitionStage[],
     detailedStages: ICevCompetitionStage[],
     isComplete: boolean,
+    championshipsByExternalId: Map<number, ChampionshipsEntity>,
   ): ICevCompetitionStage[] {
     const calendarByKey = new Map(
       calendarStages.map((stage) => [
@@ -141,12 +149,21 @@ export class ChampionshipsService {
           stage.externalId,
         ),
       );
+      const championship = championshipsByExternalId.get(
+        stage.championshipExternalId,
+      );
 
       return {
         ...stage,
         startsAt: stage.startsAt ?? calendarStage?.startsAt,
         endsAt: stage.endsAt ?? calendarStage?.endsAt,
-        seasonName: stage.seasonName ?? calendarStage?.seasonName,
+        seasonName:
+          stage.seasonName ??
+          calendarStage?.seasonName ??
+          inferSeasonName(
+            championship?.name,
+            championship?.competitionType,
+          ),
       };
     });
 

@@ -16,6 +16,22 @@ export function getCompetitionSeasonName(
   return `${year - 1}/${String(year).slice(-2)}`;
 }
 
+export function inferSeasonName(
+  championshipName?: string,
+  competitionType?: ECompetitionType,
+): string | undefined {
+  if (!championshipName || !competitionType) {
+    return undefined;
+  }
+
+  const year = championshipName.match(/\b(20\d{2})\b/)?.[1];
+  if (!year) {
+    return undefined;
+  }
+
+  return getCompetitionSeasonName(competitionType, Number(year));
+}
+
 export function parseSeasonStartYear(name?: string): number | undefined {
   if (!name) {
     return undefined;
