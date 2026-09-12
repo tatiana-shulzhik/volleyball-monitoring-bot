@@ -160,10 +160,7 @@ export class ChampionshipsService {
         seasonName:
           stage.seasonName ??
           calendarStage?.seasonName ??
-          inferSeasonName(
-            championship?.name,
-            championship?.competitionType,
-          ),
+          inferSeasonName(championship?.name, championship?.competitionType),
       };
     });
 

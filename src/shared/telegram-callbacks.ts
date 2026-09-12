@@ -64,6 +64,39 @@ export const TELEGRAM_CALLBACKS = {
     ) =>
       `statistics:team-expanded:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}:${page}`,
   },
+  monitoring: {
+    removePlayer: (playerId: number, championshipId: number) =>
+      `monitoring:remove-player:${playerId}:${championshipId}`,
+    competitionType: (competitionType: ECompetitionType) =>
+      `monitoring:type:${COMPETITION_TYPE_CODES[competitionType]}`,
+    season: (competitionType: ECompetitionType) =>
+      `monitoring:season:${COMPETITION_TYPE_CODES[competitionType]}`,
+    championship: (championshipId: number, competitionType: ECompetitionType) =>
+      `monitoring:championship:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+    stage: (
+      stageId: number,
+      championshipId: number,
+      competitionType: ECompetitionType,
+    ) =>
+      `monitoring:stage:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+    team: (
+      teamId: number,
+      leagueId: number,
+      stageId: number,
+      championshipId: number,
+      competitionType: ECompetitionType,
+    ) =>
+      `monitoring:team:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+    player: (
+      playerId: number,
+      teamId: number,
+      leagueId: number,
+      stageId: number,
+      championshipId: number,
+      competitionType: ECompetitionType,
+    ) =>
+      `monitoring:player:${playerId}:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+  },
   retroStatistics: {
     competitionType: (competitionType: ECompetitionType) =>
       `retro-statistics:type:${COMPETITION_TYPE_CODES[competitionType]}`,
@@ -136,6 +169,25 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
     ),
     teamExpanded: new RegExp(
       `^statistics:team-expanded:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}(?::(\\d+))?$`,
+    ),
+  },
+  monitoring: {
+    removePlayer: new RegExp('^monitoring:remove-player:(\\d+):(\\d+)$'),
+    competitionType: new RegExp(
+      `^monitoring:type:${COMPETITION_TYPE_PATTERN}$`,
+    ),
+    season: new RegExp(`^monitoring:season:${COMPETITION_TYPE_PATTERN}$`),
+    championship: new RegExp(
+      `^monitoring:championship:(\\d+):${COMPETITION_TYPE_PATTERN}$`,
+    ),
+    stage: new RegExp(
+      `^monitoring:stage:(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
+    ),
+    team: new RegExp(
+      `^monitoring:team:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
+    ),
+    player: new RegExp(
+      `^monitoring:player:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
   },
   retroStatistics: {
