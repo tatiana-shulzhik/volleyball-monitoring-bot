@@ -25,3 +25,18 @@ export enum ESynchronizationKey {
   LegaVolleyInitialCatalog = 'initial-catalog-legavolley',
   LegaVolleyFemminileInitialCatalog = 'initial-catalog-legavolley-femminile',
 }
+
+export enum ERosterMonitoringStatus {
+  Present = 'present',
+  Absent = 'absent',
+}
+
+export enum EStartingLineupMonitoringStatus {
+  Starter = 'starter',
+  Bench = 'bench',
+}
+
+export enum ELivePlayerMonitoringStatus {
+  Active = 'active',
+  Inactive = 'inactive',
+}

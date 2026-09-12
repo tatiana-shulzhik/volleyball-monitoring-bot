@@ -22,7 +22,7 @@ import {
   SOURCE_MENU,
 } from '../../shared/telegram-menu.utils';
 import { PlayersService } from '../players/players.service';
-import { MonitoringSubscriptionsService } from './monitoring-subscriptions.service';
+import { MonitoringSubscriptionsService } from '../monitoring-subscriptions/monitoring-subscriptions.service';
 import type { TelegramService } from './telegram.service';
 import {
   COMPETITION_TYPE_BUTTONS,

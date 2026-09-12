@@ -1,4 +1,5 @@
 import {
+  ICevMatchLineupPlayer,
   ICevMatchRosterPlayer,
   ICevPlayerAttackStatistics,
 } from '../interfaces/requests/player-statistics.interface';
@@ -156,6 +157,39 @@ export function extractMatchRoster(
   }
 
   return [...players.values()];
+}
+
+export function extractMatchLineup(
+  html: string,
+  side: 'casa' | 'ospiti',
+): ICevMatchLineupPlayer[] {
+  const sourceSide = side === 'ospiti' ? '(?:ospiti|fuori)' : 'casa';
+  const rows = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  const nameField = new RegExp(
+    `id=["']GV_elenco_${sourceSide}_L_Nome_(\\d+)["'][^>]*>` +
+      `([\\s\\S]*?)<\\/`,
+    'i',
+  );
+  const players: ICevMatchLineupPlayer[] = [];
+
+  for (const row of html.matchAll(rows)) {
+    const name = row[1].match(nameField);
+    if (!name) continue;
+
+    const cells = [...row[1].matchAll(TABLE_CELL)].map((cell) =>
+      cleanText(cell[1]),
+    );
+    const playerName = cleanText(name[2]);
+    if (!playerName) continue;
+
+    players.push({
+      playerName,
+      shirtNumber: parseInteger(cells[0]),
+      setMarks: cells.slice(3, 8),
+    });
+  }
+
+  return players;
 }
 
 function parseInteger(value: string | undefined): number | null {

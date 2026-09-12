@@ -11,8 +11,6 @@ const MATCH_LINK =
 const TEAM_ID = /TeamLogos\/Teams_WebLogo_32_32\.aspx\?ID=(\d+)/gi;
 const SCHEDULED_AT = /LB_DataOra[^>]*>([\s\S]*?)<\/span>/i;
 const VENUE = /LB_Palasport[^>]*>([\s\S]*?)<\/span>/i;
-const HOME_SETS = /LB_SetCasa[^>]*>([\s\S]*?)<\/span>/i;
-const AWAY_SETS = /LB_SetOspiti[^>]*>([\s\S]*?)<\/span>/i;
 
 export function extractMatches(
   html: string,
@@ -32,8 +30,6 @@ export function extractMatches(
     const leagueExternalId = Number(link[2]);
     const scheduledText = cleanText(block.match(SCHEDULED_AT)?.[1] ?? '');
     const venue = cleanText(block.match(VENUE)?.[1] ?? '');
-    const homeSets = Number(cleanText(block.match(HOME_SETS)?.[1] ?? '0'));
-    const awaySets = Number(cleanText(block.match(AWAY_SETS)?.[1] ?? '0'));
 
     matches.set(externalId, {
       externalId,
@@ -44,7 +40,7 @@ export function extractMatches(
       scheduledText,
       venue,
       venueCountryCode: countryCodesByLeague.get(leagueExternalId),
-      status: resolveStatus(scheduledText, homeSets, awaySets),
+      status: resolveStatus(scheduledText),
     });
   }
 
@@ -61,18 +57,13 @@ function extractMatchBlocks(html: string): string[] {
   );
 }
 
-function resolveStatus(
-  scheduledText: string,
-  homeSets: number,
-  awaySets: number,
-): EMatchStatus {
+function resolveStatus(scheduledText: string): EMatchStatus {
   if (/cancel/i.test(scheduledText)) {
     return EMatchStatus.Cancelled;
   }
 
-  return homeSets > 0 || awaySets > 0
-    ? EMatchStatus.Finished
-    : EMatchStatus.Scheduled;
+  // Счёт по сетам появляется уже во время матча и не означает его завершение.
+  return EMatchStatus.Scheduled;
 }
 
 export function parseCevDate(

@@ -20,6 +20,18 @@ export interface IFetchedMatchRoster {
   away: ICevMatchRosterPlayer[];
 }
 
+export interface ICevMatchLineupPlayer {
+  playerName: string;
+  shirtNumber: number | null;
+  setMarks: string[];
+}
+
+export interface IFetchedMatchLineup {
+  matchExternalId: string;
+  home: ICevMatchLineupPlayer[];
+  away: ICevMatchLineupPlayer[];
+}
+
 export interface IFetchedMatchAttackStatistics {
   matchExternalId: string;
   home: ICevPlayerAttackStatistics[];

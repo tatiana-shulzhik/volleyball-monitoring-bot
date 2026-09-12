@@ -35,7 +35,17 @@ export const TEAM_STATISTICS_CACHE_TTL_SECONDS = 10 * 60;
 
 export const WRITE_BATCH_SIZE = 5000;
 
+/** Матч попадает в мониторинг за 36 часов до планового начала. */
 export const MATCH_MONITORING_WINDOW_HOURS = 36;
+
+/** Заявка команды проверяется за 30 минут до матча. */
+export const MATCH_ROSTER_CHECK_WINDOW_MINUTES = 30;
+
+/** Стартовый состав проверяется за 10 минут до начала матча. */
+export const MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES = 10;
+
+/** Максимальное время live-проверок матча после его планового начала. */
+export const LIVE_MONITORING_MAX_MATCH_AGE_HOURS = 5;
 
 export const MOSCOW_TIME_ZONE = 'Europe/Moscow';
 

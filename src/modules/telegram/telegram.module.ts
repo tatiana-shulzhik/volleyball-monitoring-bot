@@ -13,8 +13,7 @@ import { MatchesRepository } from '../../databases/repositories/matches.reposito
 import { SeasonsRepository } from '../../databases/repositories/seasons.repository';
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
-import { MonitoringSubscriptionsRepository } from '../../databases/repositories/monitoring-subscriptions.repository';
-import { MonitoringSubscriptionsService } from './monitoring-subscriptions.service';
+import { MonitoringSubscriptionsModule } from '../monitoring-subscriptions/monitoring-subscriptions.module';
 @Module({
   imports: [
     RedisCacheModule,
@@ -22,6 +21,7 @@ import { MonitoringSubscriptionsService } from './monitoring-subscriptions.servi
     ChampionshipsModule,
     TeamsModule,
     PlayersModule,
+    MonitoringSubscriptionsModule,
   ],
   providers: [
     TelegramService,
@@ -33,8 +33,7 @@ import { MonitoringSubscriptionsService } from './monitoring-subscriptions.servi
     TeamLeaguesRepository,
     MatchesRepository,
     SourcesRepository,
-    MonitoringSubscriptionsRepository,
-    MonitoringSubscriptionsService,
   ],
+  exports: [TelegramService],
 })
 export class TelegramModule {}

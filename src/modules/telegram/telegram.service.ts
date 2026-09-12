@@ -128,6 +128,19 @@ export class TelegramService
     }
   }
 
+  async sendRosterMonitoringNotification(message: string): Promise<boolean> {
+    try {
+      await this.bot.telegram.sendMessage(this.config.groupId, message);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        'Unable to send roster monitoring notification',
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
+    }
+  }
+
   private registerHandlers(): void {
     this.bot.use(async (context, next) => {
       if (context.chat?.type !== 'private') return;

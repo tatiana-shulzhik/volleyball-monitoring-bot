@@ -13,6 +13,6 @@ import { MatchesService } from './matches.service';
     TeamsRepository,
     TeamLeaguesRepository,
   ],
-  exports: [MatchesService],
+  exports: [MatchesService, MatchesRepository],
 })
 export class MatchesModule {}

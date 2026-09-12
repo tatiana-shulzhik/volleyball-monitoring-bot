@@ -11,6 +11,7 @@ import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { IFetchedPlayers } from '../interfaces/requests/players.interface';
 import {
   IFetchedMatchAttackStatistics,
+  IFetchedMatchLineup,
   IFetchedMatchRoster,
 } from '../interfaces/requests/player-statistics.interface';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
@@ -28,6 +29,7 @@ import {
 } from '../shared/cev-players.utils';
 import {
   extractMatchRoster,
+  extractMatchLineup,
   extractPlayerAttackStatistics,
 } from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
@@ -360,6 +362,40 @@ export class CevGateway {
       if (result.status === 'rejected') {
         this.logger.warn(
           `Match roster request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
+  }
+
+  async fetchMatchLineups(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchLineup>[]> {
+    const results = await this.mapSettled({
+      items: matches,
+      mapper: async (match) => {
+        if (!match.externalId) {
+          throw new Error(`CEV match ${match.id} has no external ID`);
+        }
+        const html = await this.http.get(
+          createMatchStatisticsUrl(match.externalId),
+        );
+
+        return {
+          matchExternalId: match.externalId,
+          home: extractMatchLineup(html, 'casa'),
+          away: extractMatchLineup(html, 'ospiti'),
+        };
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match lineup request failed for ${matches[index].externalId}: ` +
             getErrorMessage(result.reason),
         );
       }
