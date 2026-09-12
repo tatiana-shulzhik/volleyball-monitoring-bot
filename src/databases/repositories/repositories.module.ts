@@ -15,6 +15,7 @@ import { SynchronizationStateEntity } from '../entities/synchronization-state.en
 import { MatchPlayerAttackStatisticsEntity } from '../entities/match-player-attack-statistics.entity';
 import { SourcesEntity } from '../entities/sources.entity';
 import { TelegramAccessEntity } from '../entities/telegram-access.entity';
+import { MonitoringSubscriptionEntity } from '../entities/monitoring-subscription.entity';
 
 @Global()
 @Module({
@@ -38,6 +39,7 @@ import { TelegramAccessEntity } from '../entities/telegram-access.entity';
       SynchronizationStateEntity,
       SourcesEntity,
       TelegramAccessEntity,
+      MonitoringSubscriptionEntity,
     ]),
   ],
   exports: [TypeOrmModule],

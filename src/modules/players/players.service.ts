@@ -62,6 +62,20 @@ export class PlayersService {
     );
   }
 
+  async findTeamPlayers(
+    teamId: number,
+    leagueId: number,
+  ): Promise<PlayersEntity[]> {
+    const relations = await this.relationsRepository.getWhere({
+      team: { id: teamId },
+      league: { id: leagueId },
+    });
+
+    return relations
+      .map(({ player }) => player)
+      .sort((left, right) => left.fullName.localeCompare(right.fullName));
+  }
+
   async upsertCatalogPlayers(
     data: IUpsertCatalogPlayersParams,
   ): Promise<number> {

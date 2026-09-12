@@ -13,6 +13,7 @@ import { SynchronizationStateEntity } from '../databases/entities/synchronizatio
 import { MatchPlayerAttackStatisticsEntity } from '../databases/entities/match-player-attack-statistics.entity';
 import { SourcesEntity } from '../databases/entities/sources.entity';
 import { TelegramAccessEntity } from '../databases/entities/telegram-access.entity';
+import { MonitoringSubscriptionEntity } from '../databases/entities/monitoring-subscription.entity';
 import { CreateSources1760000000000 } from '../databases/migrations/1760000000000-CreateSources';
 import { CreateSeasons1760000001000 } from '../databases/migrations/1760000001000-CreateSeasons';
 import { CreateChampionships1760000002000 } from '../databases/migrations/1760000002000-CreateChampionships';
@@ -37,6 +38,7 @@ import { ScopeExternalIdsBySource1760000020000 } from '../databases/migrations/1
 import { AddLiveMatchesNotificationToSources1760000021000 } from '../databases/migrations/1760000021000-AddLiveMatchesNotificationToSources';
 import { ResetCevInitialCatalogSync1760000022000 } from '../databases/migrations/1760000022000-ResetCevInitialCatalogSync';
 import { ResetLegaVolleyInitialCatalogSync1760000023000 } from '../databases/migrations/1760000023000-ResetLegaVolleyInitialCatalogSync';
+import { CreateMonitoringSubscriptions1760000024000 } from '../databases/migrations/1760000024000-CreateMonitoringSubscriptions';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -80,6 +82,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         SynchronizationStateEntity,
         SourcesEntity,
         TelegramAccessEntity,
+        MonitoringSubscriptionEntity,
       ],
       migrations: [
         CreateSources1760000000000,
@@ -106,6 +109,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         AddLiveMatchesNotificationToSources1760000021000,
         ResetCevInitialCatalogSync1760000022000,
         ResetLegaVolleyInitialCatalogSync1760000023000,
+        CreateMonitoringSubscriptions1760000024000,
       ],
     };
   }
