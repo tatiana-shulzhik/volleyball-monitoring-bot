@@ -244,7 +244,7 @@ export class CevGateway {
             ).map((player) => ({
               externalId: player.externalId,
               fullName: player.playerName,
-              position: '',
+              position: player.position ?? '',
               shirtNumber: player.shirtNumber,
               birthYear: birthYears.get(player.externalId) ?? null,
               teamExternalId: match.homeTeam.externalId,
@@ -261,7 +261,7 @@ export class CevGateway {
             ).map((player) => ({
               externalId: player.externalId,
               fullName: player.playerName,
-              position: '',
+              position: player.position ?? '',
               shirtNumber: player.shirtNumber,
               birthYear: birthYears.get(player.externalId) ?? null,
               teamExternalId: match.awayTeam.externalId,

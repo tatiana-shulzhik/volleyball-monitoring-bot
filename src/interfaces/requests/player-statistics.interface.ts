@@ -13,6 +13,7 @@ export interface ICevMatchRosterPlayer {
   externalId: string;
   playerName: string;
   shirtNumber: number | null;
+  position?: string;
 }
 
 export interface IFetchedMatchRoster {

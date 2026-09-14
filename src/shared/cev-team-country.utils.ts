@@ -50,6 +50,7 @@ export function extractCevTeamPlayers(html: string): ICevMatchRosterPlayer[] {
       externalId: player[1],
       playerName,
       shirtNumber: parseInteger(cells[playerCellIndex - 1]),
+      position: cleanText(cells[playerCellIndex + 1] ?? ''),
     });
   }
 
