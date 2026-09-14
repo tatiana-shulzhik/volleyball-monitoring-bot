@@ -33,7 +33,7 @@ export class CevCatalogService {
   async synchronizeStoredRange(): Promise<boolean> {
     const earliestYear = getEarliestCatalogYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(earliestYear));
-    const isComplete = await this.synchronizeMatches(false);
+    const { isComplete } = await this.synchronizeMatches(false);
     await this.synchronizeCevPlayersFromMatchStatistics();
     return isComplete;
   }
@@ -41,12 +41,13 @@ export class CevCatalogService {
   async synchronizeCurrentAndFuture(): Promise<void> {
     const currentYear = new Date().getFullYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(currentYear));
-    await this.synchronizeMatches(true);
-    await this.synchronizeCevPlayersFromMatchStatistics();
+    const { stages } = await this.synchronizeMatches(true);
+    await this.synchronizeCevPlayersFromMatchStatistics(stages);
   }
 
   async synchronizeCurrentAndFutureMatches(): Promise<void> {
-    await this.synchronizeMatches(true);
+    const { stages } = await this.synchronizeMatches(true);
+    await this.synchronizeCevPlayersFromMatchStatistics(stages);
   }
 
   async synchronizeCurrentPlayerStatistics(): Promise<void> {
@@ -137,7 +138,10 @@ export class CevCatalogService {
     };
   }
 
-  private async synchronizeMatches(frequentOnly: boolean): Promise<boolean> {
+  private async synchronizeMatches(frequentOnly: boolean): Promise<{
+    isComplete: boolean;
+    stages: CompetitionStagesEntity[];
+  }> {
     let stages = await this.championshipsService.getCevStages();
 
     if (frequentOnly) {
@@ -146,12 +150,16 @@ export class CevCatalogService {
 
     const fetched = await this.gateway.fetchMatches(stages);
     await this.matchesService.synchronize(stages, fetched);
-    return fetched.isComplete;
+    return { isComplete: fetched.isComplete, stages };
   }
 
-  private async synchronizeCevPlayersFromMatchStatistics(): Promise<void> {
+  private async synchronizeCevPlayersFromMatchStatistics(
+    stages?: CompetitionStagesEntity[],
+  ): Promise<void> {
     const { matches, sources } =
-      await this.matchesService.getCevMatchesWithRosterSources();
+      await this.matchesService.getCevMatchesWithRosterSources(
+        stages?.map(({ id }) => id),
+      );
     const [teamPlayers, birthYears] = await Promise.all([
       this.gateway.fetchTeamPlayers(sources),
       this.gateway.fetchTeamPlayerBirthYears(sources),

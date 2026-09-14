@@ -58,14 +58,21 @@ export class MatchesService {
     };
   }
 
-  async getCevMatchesWithRosterSources(): Promise<{
+  async getCevMatchesWithRosterSources(stageIds?: number[]): Promise<{
     matches: MatchEntity[];
     sources: IPlayerRosterSource[];
   }> {
+    if (stageIds?.length === 0) {
+      return { matches: [], sources: [] };
+    }
+
     const matches = (
       await this.matchesRepository.getWhere({
         league: {
-          stage: { championship: { source: { code: ESourceCode.Cev } } },
+          stage: {
+            ...(stageIds ? { id: In(stageIds) } : {}),
+            championship: { source: { code: ESourceCode.Cev } },
+          },
         },
       })
     ).filter((match) => match.externalId);
