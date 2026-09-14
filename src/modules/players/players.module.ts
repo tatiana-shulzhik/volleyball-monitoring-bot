@@ -7,6 +7,7 @@ import { MatchPlayerAttackStatisticsRepository } from '../../databases/repositor
 import { RedisCacheModule } from '../../cache/redis-cache.module';
 import { PlayersService } from './players.service';
 import { PlayerStatisticsService } from './player-statistics.service';
+import { PlayerTeamLeaguesService } from './player-team-leagues.service';
 
 @Module({
   imports: [RedisCacheModule],
@@ -18,12 +19,14 @@ import { PlayerStatisticsService } from './player-statistics.service';
     MatchesRepository,
     MatchPlayerAttackStatisticsRepository,
     TeamsRepository,
+    PlayerTeamLeaguesService,
   ],
   exports: [
     PlayersService,
     PlayerStatisticsService,
     PlayersRepository,
     PlayerTeamLeaguesRepository,
+    PlayerTeamLeaguesService,
   ],
 })
 export class PlayersModule {}

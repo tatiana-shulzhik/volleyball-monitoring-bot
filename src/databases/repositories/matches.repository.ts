@@ -38,7 +38,7 @@ export class MatchesRepository {
     return repository.find({
       where,
       relations: {
-        league: true,
+        league: { stage: { championship: { source: true } } },
         homeTeam: true,
         awayTeam: true,
       },

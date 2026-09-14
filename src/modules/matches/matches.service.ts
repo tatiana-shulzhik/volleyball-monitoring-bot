@@ -24,6 +24,9 @@ import { ESourceCode } from '../../shared/enums';
 import { parseCevDate } from '../../shared/cev-matches.utils';
 import { CEV_COUNTRIES } from '../../shared/consts/constants';
 import { getErrorMessage } from '../../shared/error.utils';
+import { MatchEntity } from '../../databases/entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
+import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 
 @Injectable()
 export class MatchesService {
@@ -34,7 +37,25 @@ export class MatchesService {
     private readonly leaguesRepository: LeaguesRepository,
     private readonly teamsRepository: TeamsRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
+    private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
   ) {}
+
+  async getMatchRoster(matchId: number): Promise<{
+    match: MatchEntity;
+    homeRoster: PlayerTeamLeagueEntity[];
+    awayRoster: PlayerTeamLeagueEntity[];
+  } | null> {
+    const [match] = await this.matchesRepository.getWhere({ id: matchId });
+    if (!match) return null;
+
+    const roster = await this.playerTeamLeaguesService.getMatchRosters(match);
+
+    return {
+      match,
+      homeRoster: roster.home,
+      awayRoster: roster.away,
+    };
+  }
 
   async upsertCatalogMatches(
     incoming: ICevMatch[],

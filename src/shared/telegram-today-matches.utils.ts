@@ -1,6 +1,13 @@
 import { MatchEntity } from '../databases/entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
-import { CEV_COUNTRIES, MOSCOW_TIME_ZONE } from './consts/constants';
+import {
+  CEV_COUNTRIES,
+  createMatchPageUrl,
+  LEGA_VOLLEY_BASE_URL,
+  LEGA_VOLLEY_FEMMINILE_STATISTICS_URL,
+  MOSCOW_TIME_ZONE,
+} from './consts/constants';
 import { ESourceCode } from './enums';
 
 export function getMoscowDayBounds(date = new Date()): {
@@ -57,6 +64,76 @@ export function formatTodayMatchButton(match: MatchEntity): string {
       : `${home} — ${away}`;
 
   return truncateButtonText(`${formatTime(match.scheduledAt)} · ${teams}`);
+}
+
+export function formatTodayMatchRoster(
+  match: MatchEntity,
+  homeRoster: PlayerTeamLeagueEntity[],
+  awayRoster: PlayerTeamLeagueEntity[],
+): string {
+  const matchUrl = getMatchUrl(match);
+
+  return [
+    `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
+    formatRosterTable(match.homeTeam.name, homeRoster),
+    formatRosterTable(match.awayTeam.name, awayRoster),
+    matchUrl
+      ? `<p><a href="${escapeHtml(matchUrl)}">🔗 Открыть матч на сайте</a></p>`
+      : '',
+  ].join('\n\n');
+}
+
+function getMatchUrl(match: MatchEntity): string | null {
+  const externalId = match.externalId;
+  const sourceCode = match.league.stage.championship.source?.code;
+  if (!externalId || !sourceCode) return null;
+
+  if (sourceCode === ESourceCode.Cev) {
+    return createMatchPageUrl(
+      match.league.stage.championship.externalId,
+      match.league.externalId,
+      externalId,
+    );
+  }
+
+  if (sourceCode === ESourceCode.LegaVolleyFemminile) {
+    return `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${encodeURIComponent(externalId)}`;
+  }
+
+  return /^\d+$/.test(externalId)
+    ? `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`
+    : null;
+}
+
+function formatRosterTable(
+  teamName: string,
+  roster: PlayerTeamLeagueEntity[],
+): string {
+  const rows = [...roster]
+    .sort((left, right) =>
+      left.player.fullName.localeCompare(right.player.fullName),
+    )
+    .map(({ player, shirtNumber, position }) => {
+      return [
+        '<tr>',
+        `<td align="center">${shirtNumber ?? '—'}</td>`,
+        `<td>${escapeHtml(player.fullName)}</td>`,
+        `<td>${escapeHtml(position ?? '—')}</td>`,
+        '</tr>',
+      ].join('');
+    });
+
+  return [
+    `<p><b>${escapeHtml(teamName)}</b></p>`,
+    rows.length
+      ? [
+          '<table bordered striped>',
+          '<tr><th>№</th><th>Игрок</th><th>Позиция</th></tr>',
+          ...rows,
+          '</table>',
+        ].join('')
+      : '<p><i>Состав в базе не найден.</i></p>',
+  ].join('\n');
 }
 
 function formatTime(value: Date | null): string {

@@ -31,3 +31,23 @@ export async function editTelegramRichMessage(
     reply_markup: keyboard.reply_markup,
   });
 }
+
+export async function sendTelegramRichMessage(
+  context: Context,
+  html: string,
+): Promise<void> {
+  const chatId = context.chat?.id;
+  if (chatId === undefined) return;
+
+  const sendRichMessage = context.telegram.callApi.bind(
+    context.telegram,
+  ) as unknown as (
+    method: string,
+    payload: Record<string, unknown>,
+  ) => Promise<unknown>;
+
+  await sendRichMessage('sendRichMessage', {
+    chat_id: chatId,
+    rich_message: { html },
+  });
+}

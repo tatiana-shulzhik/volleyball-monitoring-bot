@@ -39,11 +39,14 @@ import {
 import {
   editTelegramRichMessage,
   isTelegramMenuCommand,
+  sendTelegramRichMessage,
 } from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { IFindRecentSeasonsFromParams } from '../../interfaces/requests/seasons.interface';
+import { MatchesService } from '../matches/matches.service';
 import {
+  formatTodayMatchRoster,
   formatTodayMatches,
   getMoscowDayBounds,
 } from '../../shared/telegram-today-matches.utils';
@@ -61,6 +64,7 @@ export class TelegramService
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
     private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
+    private readonly matchesService: MatchesService,
     private readonly sourcesRepository: SourcesRepository,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
@@ -186,7 +190,25 @@ export class TelegramService
     });
 
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveMatch, async (context) => {
+      const matchRoster = await this.matchesService.getMatchRoster(
+        Number(context.match[1]),
+      );
+
+      if (!matchRoster) {
+        await context.answerCbQuery('Матч не найден.', { show_alert: true });
+        return;
+      }
+
       await context.answerCbQuery();
+
+      await sendTelegramRichMessage(
+        context,
+        formatTodayMatchRoster(
+          matchRoster.match,
+          matchRoster.homeRoster,
+          matchRoster.awayRoster,
+        ),
+      );
     });
 
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveGroup, async (context) => {
