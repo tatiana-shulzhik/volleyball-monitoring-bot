@@ -45,6 +45,7 @@ import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { IFindRecentSeasonsFromParams } from '../../interfaces/requests/seasons.interface';
 import { MatchesService } from '../matches/matches.service';
+import { PlayersService } from '../players/players.service';
 import {
   formatTodayMatchRoster,
   formatTodayMatches,
@@ -65,6 +66,7 @@ export class TelegramService
     private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
     private readonly matchesService: MatchesService,
+    private readonly playersService: PlayersService,
     private readonly sourcesRepository: SourcesRepository,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
@@ -201,12 +203,25 @@ export class TelegramService
 
       await context.answerCbQuery();
 
+      const [homeStatistics, awayStatistics] = await Promise.all([
+        this.playersService.findTeamStatistics({
+          teamId: matchRoster.match.homeTeam.id,
+          leagueId: matchRoster.match.league.id,
+        }),
+        this.playersService.findTeamStatistics({
+          teamId: matchRoster.match.awayTeam.id,
+          leagueId: matchRoster.match.league.id,
+        }),
+      ]);
+
       await editTelegramRichMessage(
         context,
         formatTodayMatchRoster(
           matchRoster.match,
           matchRoster.homeRoster,
           matchRoster.awayRoster,
+          homeStatistics,
+          awayStatistics,
         ),
         createLiveMatchRosterKeyboard(),
       );
