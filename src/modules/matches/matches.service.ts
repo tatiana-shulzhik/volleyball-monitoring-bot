@@ -9,6 +9,7 @@ import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { ICevMatch } from '../../interfaces/requests/matches.interface';
 import { IFetchedMatches } from '../../interfaces/requests/matches.interface';
+import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import {
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
@@ -20,7 +21,7 @@ import {
 } from '../../shared/synchronization.utils';
 import { uniqueBy } from '../../shared/array.utils';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
-import { ESourceCode } from '../../shared/enums';
+import { EMatchStatus, ESourceCode } from '../../shared/enums';
 import { parseCevDate } from '../../shared/cev-matches.utils';
 import { CEV_COUNTRIES } from '../../shared/consts/constants';
 import { getErrorMessage } from '../../shared/error.utils';
@@ -55,6 +56,35 @@ export class MatchesService {
       homeRoster: roster.home,
       awayRoster: roster.away,
     };
+  }
+
+  async getCevMatchesWithRosterSources(): Promise<{
+    matches: MatchEntity[];
+    sources: IPlayerRosterSource[];
+  }> {
+    const matches = (
+      await this.matchesRepository.getWhere({
+        league: {
+          stage: { championship: { source: { code: ESourceCode.Cev } } },
+        },
+      })
+    ).filter((match) => match.externalId);
+    const sources = [
+      ...new Map(
+        matches.flatMap((match) =>
+          [match.homeTeam, match.awayTeam].map((team) => [
+            `${team.id}:${match.league.id}`,
+            {
+              team,
+              league: match.league,
+              championship: match.league.stage.championship,
+            } satisfies IPlayerRosterSource,
+          ]),
+        ),
+      ).values(),
+    ];
+
+    return { matches, sources };
   }
 
   async upsertCatalogMatches(
@@ -268,13 +298,16 @@ export class MatchesService {
       }
 
       try {
+        const scheduledAt = parseCevDate(
+          match.scheduledText ?? '',
+          match.venue ?? '',
+          countryCode,
+        );
+
         return {
           ...match,
-          scheduledAt: parseCevDate(
-            match.scheduledText ?? '',
-            match.venue ?? '',
-            countryCode,
-          ),
+          scheduledAt,
+          status: resolveCevMatchStatus(match.status, scheduledAt),
         };
       } catch (error) {
         this.logger.warn(
@@ -317,4 +350,20 @@ function getCevCountryCode(
   return Object.entries(CEV_COUNTRIES).find(
     ([, name]) => name === country,
   )?.[0];
+}
+
+function resolveCevMatchStatus(
+  status: EMatchStatus,
+  scheduledAt: Date | null,
+): EMatchStatus {
+  if (
+    status !== EMatchStatus.Scheduled ||
+    !scheduledAt ||
+    scheduledAt.getTime() >
+      Date.now() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 60 * 60 * 1_000
+  ) {
+    return status;
+  }
+
+  return EMatchStatus.Finished;
 }

@@ -130,6 +130,7 @@ export function buildRelationMaps(
   items: PlayerRelation[],
 ): IPlayerRelationMaps {
   const byExactPlayer = new Map<string, PlayerRelation>();
+  const byTeamAndShirtNumber = new Map<string, PlayerRelation>();
 
   for (const relation of items) {
     const sourceKey = createCompetitionStageKey(
@@ -144,9 +145,19 @@ export function buildRelationMaps(
       ),
       relation,
     );
+    if (relation.shirtNumber !== null) {
+      byTeamAndShirtNumber.set(
+        createTeamShirtNumberKey(
+          sourceKey,
+          relation.team.name,
+          relation.shirtNumber,
+        ),
+        relation,
+      );
+    }
   }
 
-  return { byExactPlayer };
+  return { byExactPlayer, byTeamAndShirtNumber };
 }
 
 export function findPlayerRelation(
@@ -154,10 +165,28 @@ export function findPlayerRelation(
   sourceKey: string,
   teamName: string,
   playerName: string,
+  shirtNumber?: number | null,
 ): PlayerRelation | undefined {
-  return maps.byExactPlayer.get(
+  const byName = maps.byExactPlayer.get(
     createPlayerRelationKey(sourceKey, teamName, playerName),
   );
+
+  return (
+    byName ??
+    (shirtNumber === null || shirtNumber === undefined
+      ? undefined
+      : maps.byTeamAndShirtNumber.get(
+          createTeamShirtNumberKey(sourceKey, teamName, shirtNumber),
+        ))
+  );
+}
+
+function createTeamShirtNumberKey(
+  sourceKey: string,
+  teamName: string,
+  shirtNumber: number,
+): string {
+  return `${sourceKey}:${normalizeTeamName(teamName)}:${shirtNumber}`;
 }
 
 export function getMatchTeams(

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
 import { SeasonsEntity } from '../../databases/entities/seasons.entity';
@@ -124,6 +124,34 @@ export class ChampionshipsService {
     });
     return this.repository.getWhere({
       championship: { id: In(championships.map(({ id }) => id)) },
+    });
+  }
+
+  getCevStages(): Promise<CompetitionStagesEntity[]> {
+    return this.repository.getWhere({
+      championship: { source: { code: ESourceCode.Cev } },
+    });
+  }
+
+  getCurrentCevStages(now: Date): Promise<CompetitionStagesEntity[]> {
+    return this.repository.getWhere({
+      startsAt: LessThanOrEqual(now),
+      endsAt: MoreThanOrEqual(now),
+      championship: { source: { code: ESourceCode.Cev } },
+    });
+  }
+
+  getStartedCevStages(now: Date): Promise<CompetitionStagesEntity[]> {
+    return this.repository.getWhere({
+      startsAt: LessThanOrEqual(now),
+      championship: { source: { code: ESourceCode.Cev } },
+    });
+  }
+
+  getCevStagesByIds(ids: number[]): Promise<CompetitionStagesEntity[]> {
+    return this.repository.getWhere({
+      id: In(ids),
+      championship: { source: { code: ESourceCode.Cev } },
     });
   }
 

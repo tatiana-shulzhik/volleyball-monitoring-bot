@@ -24,15 +24,17 @@ import {
 } from '../shared/cev-leagues.utils';
 import { extractMatches } from '../shared/cev-matches.utils';
 import {
-  extractPlayers,
-  extractTeamCountry,
-} from '../shared/cev-players.utils';
-import {
   extractMatchRoster,
   extractMatchLineup,
   extractPlayerAttackStatistics,
 } from '../shared/cev-player-statistics.utils';
 import { extractTeams } from '../shared/cev-teams.utils';
+import {
+  extractCevPlayerBirthYears,
+  extractCevTeamCountry,
+  extractCevTeamPlayers,
+} from '../shared/cev-team-country.utils';
+import { normalizePlayerName } from '../shared/player-name.utils';
 import { getErrorMessage } from '../shared/error.utils';
 import {
   createCalendarForm,
@@ -47,10 +49,10 @@ import {
   CEV_HTTP_CONCURRENCY,
   CEV_CALENDAR_URL,
   createCompetitionUrl,
+  createTeamDetailsUrl,
   createMatchPageUrl,
   createMatchesUrl,
   createMatchStatisticsUrl,
-  createTeamUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
 
@@ -63,6 +65,15 @@ interface IMapSettledParams<TInput, TOutput> {
 @Injectable()
 export class CevGateway {
   private readonly logger = new Logger(CevGateway.name);
+  private readonly matchStatisticsCache = new Map<
+    string,
+    { html: string; expiresAt: number }
+  >();
+  private readonly teamDetailsCache = new Map<
+    string,
+    { html: string; expiresAt: number }
+  >();
+  private readonly teamDetailsRequests = new Map<string, Promise<string>>();
 
   constructor(private readonly http: HttpService) {}
 
@@ -203,40 +214,60 @@ export class CevGateway {
     };
   }
 
-  async fetchPlayers(sources: IPlayerRosterSource[]): Promise<IFetchedPlayers> {
-    const sourceGroups = [
-      ...sources
-        .reduce((groups, source) => {
-          const key = `${source.team.externalId}:${source.championship.externalId}`;
-          const group = groups.get(key) ?? [];
-
-          group.push(source);
-          groups.set(key, group);
-          return groups;
-        }, new Map<string, IPlayerRosterSource[]>())
-        .values(),
-    ];
+  async fetchPlayers(
+    matches: MatchEntity[],
+    teamPlayersBySource: Map<string, IFetchedMatchRoster['home']>,
+    birthYears = new Map<string, number>(),
+  ): Promise<IFetchedPlayers> {
     const results = await this.mapSettled({
-      items: sourceGroups,
-      mapper: async (group) => {
-        const { team, league, championship } = group[0];
-        const html = await this.http.get(
-          createTeamUrl(team.externalId, championship.externalId),
+      items: matches,
+      mapper: async (match) => {
+        if (!match.externalId) {
+          throw new Error(`CEV match ${match.id} has no external ID`);
+        }
+        const statisticsHtml = await this.getMatchStatisticsHtml(
+          match.externalId,
         );
-        const roster = extractPlayers({
-          html,
-          teamExternalId: team.externalId,
-          leagueExternalId: league.externalId,
-        });
+        const championshipExternalId =
+          match.league.stage.championship.externalId;
 
         return {
-          players: group.flatMap((source) =>
-            roster.map((player) => ({
-              ...player,
-              leagueExternalId: source.league.externalId,
+          players: [
+            ...getMatchStatisticsPlayers(
+              extractMatchLineup(statisticsHtml, 'casa'),
+              teamPlayersBySource.get(
+                createTeamDetailsKey(
+                  match.homeTeam.externalId,
+                  championshipExternalId,
+                ),
+              ) ?? [],
+            ).map((player) => ({
+              externalId: player.externalId,
+              fullName: player.playerName,
+              position: '',
+              shirtNumber: player.shirtNumber,
+              birthYear: birthYears.get(player.externalId) ?? null,
+              teamExternalId: match.homeTeam.externalId,
+              leagueExternalId: match.league.externalId,
             })),
-          ),
-          country: extractTeamCountry(html),
+            ...getMatchStatisticsPlayers(
+              extractMatchLineup(statisticsHtml, 'ospiti'),
+              teamPlayersBySource.get(
+                createTeamDetailsKey(
+                  match.awayTeam.externalId,
+                  championshipExternalId,
+                ),
+              ) ?? [],
+            ).map((player) => ({
+              externalId: player.externalId,
+              fullName: player.playerName,
+              position: '',
+              shirtNumber: player.shirtNumber,
+              birthYear: birthYears.get(player.externalId) ?? null,
+              teamExternalId: match.awayTeam.externalId,
+              leagueExternalId: match.league.externalId,
+            })),
+          ],
         };
       },
       concurrency: CEV_HTTP_CONCURRENCY,
@@ -247,12 +278,18 @@ export class CevGateway {
         return;
       }
 
-      const { team, championship } = sourceGroups[index][0];
-      const url = createTeamUrl(team.externalId, championship.externalId);
+      const match = matches[index];
+      const url = match.externalId
+        ? createMatchPageUrl(
+            match.league.stage.championship.externalId,
+            match.league.externalId,
+            match.externalId,
+          )
+        : '(missing match ID)';
 
       this.logger.warn(
-        `Player roster request failed for "${team.name}" ` +
-          `in "${championship.name}" (${url}): ${getErrorMessage(result.reason)}`,
+        `Player roster request failed for "${match.homeTeam.name}" — ` +
+          `"${match.awayTeam.name}" (${url}): ${getErrorMessage(result.reason)}`,
       );
     });
 
@@ -260,18 +297,105 @@ export class CevGateway {
       players: results.flatMap((result) =>
         result.status === 'fulfilled' ? result.value.players : [],
       ),
-      teamCountries: results.flatMap((result, index) =>
-        result.status === 'fulfilled' && result.value.country
-          ? [
-              {
-                teamExternalId: sourceGroups[index][0].team.externalId,
-                country: result.value.country,
-              },
-            ]
-          : [],
-      ),
+      teamCountries: [],
       isComplete: results.every((result) => result.status === 'fulfilled'),
     };
+  }
+
+  async fetchTeamCountries(
+    sources: IPlayerRosterSource[],
+  ): Promise<Array<{ teamExternalId: string; country: string }>> {
+    const uniqueSources = [
+      ...new Map(
+        sources.map((source) => [
+          `${source.team.externalId}:${source.championship.externalId}`,
+          source,
+        ]),
+      ).values(),
+    ];
+    const results = await this.mapSettled({
+      items: uniqueSources,
+      mapper: async ({ team, championship }) => {
+        const html = await this.getTeamDetailsHtml(
+          team.externalId,
+          championship.externalId,
+        );
+        const country = extractCevTeamCountry(html);
+
+        return country ? { teamExternalId: team.externalId, country } : null;
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    return results.flatMap((result) =>
+      result.status === 'fulfilled' && result.value ? [result.value] : [],
+    );
+  }
+
+  async fetchTeamPlayerBirthYears(
+    sources: IPlayerRosterSource[],
+  ): Promise<Map<string, number>> {
+    const uniqueSources = [
+      ...new Map(
+        sources.map((source) => [
+          `${source.team.externalId}:${source.championship.externalId}`,
+          source,
+        ]),
+      ).values(),
+    ];
+    const results = await this.mapSettled({
+      items: uniqueSources,
+      mapper: async ({ team, championship }) =>
+        extractCevPlayerBirthYears(
+          await this.getTeamDetailsHtml(
+            team.externalId,
+            championship.externalId,
+          ),
+        ),
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    return new Map(
+      results.flatMap((result) =>
+        result.status === 'fulfilled' ? [...result.value.entries()] : [],
+      ),
+    );
+  }
+
+  async fetchTeamPlayers(
+    sources: IPlayerRosterSource[],
+  ): Promise<Map<string, IFetchedMatchRoster['home']>> {
+    const uniqueSources = [
+      ...new Map(
+        sources.map((source) => [
+          createTeamDetailsKey(
+            source.team.externalId,
+            source.championship.externalId,
+          ),
+          source,
+        ]),
+      ).values(),
+    ];
+    const results = await this.mapSettled({
+      items: uniqueSources,
+      mapper: async ({ team, championship }) =>
+        [
+          createTeamDetailsKey(team.externalId, championship.externalId),
+          extractCevTeamPlayers(
+            await this.getTeamDetailsHtml(
+              team.externalId,
+              championship.externalId,
+            ),
+          ),
+        ] as const,
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+
+    return new Map(
+      results.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : [],
+      ),
+    );
   }
 
   async fetchMatches(
@@ -318,9 +442,7 @@ export class CevGateway {
         if (!match.externalId) {
           throw new Error(`CEV match ${match.id} has no external ID`);
         }
-        const html = await this.http.get(
-          createMatchStatisticsUrl(match.externalId),
-        );
+        const html = await this.getMatchStatisticsHtml(match.externalId);
 
         return {
           matchExternalId: match.externalId,
@@ -413,6 +535,53 @@ export class CevGateway {
     return this.http.postForm(CEV_CALENDAR_URL, form);
   }
 
+  private async getMatchStatisticsHtml(
+    matchExternalId: string,
+  ): Promise<string> {
+    const cached = this.matchStatisticsCache.get(matchExternalId);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.html;
+    }
+
+    const html = await this.http.get(createMatchStatisticsUrl(matchExternalId));
+    this.matchStatisticsCache.set(matchExternalId, {
+      html,
+      expiresAt: Date.now() + 5 * 60_000,
+    });
+
+    return html;
+  }
+
+  private async getTeamDetailsHtml(
+    teamExternalId: string,
+    championshipExternalId: number,
+  ): Promise<string> {
+    const key = createTeamDetailsKey(teamExternalId, championshipExternalId);
+    const cached = this.teamDetailsCache.get(key);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.html;
+    }
+
+    const pending = this.teamDetailsRequests.get(key);
+    if (pending) return pending;
+
+    const request = this.http
+      .get(createTeamDetailsUrl(teamExternalId, championshipExternalId))
+      .then((html) => {
+        this.teamDetailsCache.set(key, {
+          html,
+          expiresAt: Date.now() + 5 * 60_000,
+        });
+        return html;
+      })
+      .finally(() => this.teamDetailsRequests.delete(key));
+    this.teamDetailsRequests.set(key, request);
+
+    return request;
+  }
+
   private fetchNationalTeamCalendar(initialHtml: string): Promise<string> {
     const form = createNationalTeamCalendarForm(initialHtml);
 
@@ -447,4 +616,31 @@ export class CevGateway {
 
     return results;
   }
+}
+
+function createTeamDetailsKey(
+  teamExternalId: string,
+  championshipExternalId: number,
+): string {
+  return `${teamExternalId}:${championshipExternalId}`;
+}
+
+function getMatchStatisticsPlayers(
+  lineup: IFetchedMatchLineup['home'],
+  roster: IFetchedMatchRoster['home'],
+): IFetchedMatchRoster['home'] {
+  const playerNames = new Set(
+    lineup.map(({ playerName }) => normalizePlayerName(playerName)),
+  );
+  const shirtNumbers = new Set(
+    lineup.flatMap(({ shirtNumber }) =>
+      shirtNumber === null ? [] : [shirtNumber],
+    ),
+  );
+
+  return roster.filter(
+    ({ playerName, shirtNumber }) =>
+      playerNames.has(normalizePlayerName(playerName)) ||
+      (shirtNumber !== null && shirtNumbers.has(shirtNumber)),
+  );
 }

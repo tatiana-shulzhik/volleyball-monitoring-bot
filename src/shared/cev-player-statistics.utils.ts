@@ -82,10 +82,13 @@ export function extractPlayerAttackStatistics(
     const playedSets = cells
       .slice(2, 7)
       .filter((value) => value === '*' || /^\d+$/.test(value)).length;
+    const row = values.get(Number(name[1]));
+
+    if (row) {
+      row.shirtNumber = parseInteger(cells[0]);
+    }
 
     if (playedSets) {
-      const row = values.get(Number(name[1]));
-
       if (row) {
         row.playedSets = new Set(
           Array.from({ length: playedSets }, (_, index) => index + 1),
@@ -105,6 +108,7 @@ export function extractPlayerAttackStatistics(
     return [
       {
         playerName: row.playerName,
+        shirtNumber: row.shirtNumber ?? null,
         attempts: row.attempts,
         successful,
         points: row.points ?? 0,

@@ -114,7 +114,8 @@ export function createCompetitionUrl(
   );
 }
 
-export function createTeamUrl(
+/** Используется только для определения страны команды; составы берутся из MatchPage. */
+export function createTeamDetailsUrl(
   teamExternalId: string,
   seasonExternalId: number,
 ): string {

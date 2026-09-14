@@ -2,6 +2,7 @@ import type { PlayerTeamLeagueEntity } from '../../databases/entities/player-tea
 
 export interface ICevPlayerAttackStatistics {
   playerName: string;
+  shirtNumber: number | null;
   attempts: number;
   successful: number;
   points: number;
@@ -42,4 +43,5 @@ export type PlayerRelation = PlayerTeamLeagueEntity;
 
 export interface IPlayerRelationMaps {
   byExactPlayer: Map<string, PlayerRelation>;
+  byTeamAndShirtNumber: Map<string, PlayerRelation>;
 }
