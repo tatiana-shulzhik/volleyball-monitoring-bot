@@ -81,6 +81,15 @@ export function createLiveMatchesFooter(
   ];
 }
 
+export function createLiveMatchRosterKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.live),
+      createSourceButton(),
+    ],
+  ]);
+}
+
 export function getAvailableCompetitionTypes(
   source: ESourceCode,
 ): ECompetitionType[] {

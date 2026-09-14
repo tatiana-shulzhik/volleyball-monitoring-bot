@@ -32,6 +32,7 @@ import {
   TELEGRAM_CALLBACKS,
 } from '../../shared/telegram-callbacks';
 import {
+  createLiveMatchRosterKeyboard,
   createLiveMatchesFooter,
   createTodayMatchesKeyboard,
   SOURCE_MENU,
@@ -39,7 +40,6 @@ import {
 import {
   editTelegramRichMessage,
   isTelegramMenuCommand,
-  sendTelegramRichMessage,
 } from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
@@ -201,13 +201,14 @@ export class TelegramService
 
       await context.answerCbQuery();
 
-      await sendTelegramRichMessage(
+      await editTelegramRichMessage(
         context,
         formatTodayMatchRoster(
           matchRoster.match,
           matchRoster.homeRoster,
           matchRoster.awayRoster,
         ),
+        createLiveMatchRosterKeyboard(),
       );
     });
 
