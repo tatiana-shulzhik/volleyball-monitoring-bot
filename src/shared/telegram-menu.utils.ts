@@ -1,4 +1,6 @@
 import { Context, Markup } from 'telegraf';
+import { MatchEntity } from '../databases/entities/match.entity';
+import { SourcesEntity } from '../databases/entities/sources.entity';
 import { ListMenu } from '../interfaces/telegram/menu.models';
 import {
   MENU_BUTTONS,
@@ -6,6 +8,7 @@ import {
 } from '../modules/telegram/telegram.constants';
 import { ECompetitionType, ESourceCode } from './enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
+import { formatTodayMatchButton } from './telegram-today-matches.utils';
 
 function createSourceButtons() {
   return Object.values(ESourceCode).map((source) => [
@@ -23,6 +26,43 @@ export function createSourceButton() {
     '⬅️ Сменить источник',
     TELEGRAM_CALLBACKS.menu.source,
   );
+}
+
+export function createTodayMatchesKeyboard(
+  matches: MatchEntity[],
+  footer: ReturnType<typeof Markup.button.callback>[][] = [],
+) {
+  const buttons = matches.map((match) =>
+    Markup.button.callback(
+      formatTodayMatchButton(match),
+      TELEGRAM_CALLBACKS.live.match(match.id),
+    ),
+  );
+  const matchRows: ReturnType<typeof Markup.button.callback>[][] = [];
+  for (let index = 0; index < buttons.length; index += 2) {
+    matchRows.push(buttons.slice(index, index + 2));
+  }
+
+  return Markup.inlineKeyboard([...matchRows, ...footer]);
+}
+
+export function createLiveMatchesFooter(
+  source: SourcesEntity,
+): ReturnType<typeof Markup.button.callback>[][] {
+  return [
+    [
+      Markup.button.callback(
+        source.liveMatchesNotificationEnabled
+          ? '🔕 Выключить автоотправку'
+          : '🔔 Включить автоотправку в 00:00',
+        TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(source.code),
+      ),
+    ],
+    [
+      Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
+      createSourceButton(),
+    ],
+  ];
 }
 
 export function getAvailableCompetitionTypes(

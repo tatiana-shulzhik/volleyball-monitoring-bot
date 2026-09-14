@@ -1,6 +1,6 @@
 import { MatchEntity } from '../databases/entities/match.entity';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
-import { MOSCOW_TIME_ZONE } from './consts/constants';
+import { CEV_COUNTRIES, MOSCOW_TIME_ZONE } from './consts/constants';
 import { ESourceCode } from './enums';
 
 export function getMoscowDayBounds(date = new Date()): {
@@ -52,16 +52,15 @@ export function formatTodayMatches(
     const byChampionship = new Map<string, MatchEntity[]>();
     for (const match of sourceMatches) {
       const championship = match.league.stage.championship;
-      const title = `🏆 ${championship.name} · ${formatGender(match)}`;
-      const group = byChampionship.get(title) ?? [];
+      const group = byChampionship.get(championship.name) ?? [];
       group.push(match);
-      byChampionship.set(title, group);
+      byChampionship.set(championship.name, group);
     }
 
     const tournaments = [...byChampionship.entries()]
       .map(([title, tournamentMatches]) =>
         [
-          `<p><b>${escapeHtml(title)}</b></p>`,
+          `<p><b>🏆 ${escapeHtml(title)}</b></p>`,
           '<table bordered striped>',
           '<tr><th>Время</th><th>Команда 1</th><th>Команда 2</th></tr>',
           ...tournamentMatches.map(
@@ -80,7 +79,18 @@ export function formatTodayMatches(
     return `<p>📡 ${escapeHtml(source)}</p>${tournaments}`;
   });
 
-  return [`<p><b>🔴 Доступные матчи на сегодня:</b></p>`, ...sections].join('');
+  return [`<p><b>🔴 Матчи сегодня:</b></p>`, ...sections].join('');
+}
+
+export function formatTodayMatchButton(match: MatchEntity): string {
+  const home = formatTeamCountry(match.homeTeam.country, match.homeTeam.name);
+  const away = formatTeamCountry(match.awayTeam.country, match.awayTeam.name);
+  const teams =
+    home === away
+      ? `${match.homeTeam.name} — ${match.awayTeam.name}`
+      : `${home} — ${away}`;
+
+  return truncateButtonText(`${formatTime(match.scheduledAt)} · ${teams}`);
 }
 
 function formatTime(value: Date | null): string {
@@ -94,27 +104,6 @@ function formatTime(value: Date | null): string {
   }).format(value);
 }
 
-function formatGender(match: MatchEntity): string {
-  const { name, source } = match.league.stage.championship;
-  const normalized = name.toLocaleLowerCase();
-
-  if (
-    source?.code === ESourceCode.LegaVolleyFemminile ||
-    /\b(women|female|femminile)\b/i.test(normalized)
-  ) {
-    return '♀ Женщины';
-  }
-
-  if (
-    source?.code === ESourceCode.LegaVolley ||
-    /\b(men|male|maschile)\b/i.test(normalized)
-  ) {
-    return '♂ Мужчины';
-  }
-
-  return 'Пол не указан';
-}
-
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -122,4 +111,17 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function truncateButtonText(value: string): string {
+  const maxLength = 64;
+  const characters = [...value];
+
+  return characters.length <= maxLength
+    ? value
+    : `${characters.slice(0, maxLength - 1).join('')}…`;
+}
+
+function formatTeamCountry(country: string | null, fallback: string): string {
+  return country ? (CEV_COUNTRIES[country] ?? country) : fallback;
 }

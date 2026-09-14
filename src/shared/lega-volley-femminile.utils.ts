@@ -320,7 +320,7 @@ export function readLegaVolleyFemminilePlayerBirthYear(
   html: string,
 ): number | null {
   const date = cleanText(html).match(
-    /(?:Data di nascita|Date of birth)\s*:\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-](\d{4})/i,
+    /(?:Data di nascita|Date of birth)\s*:\s*\d{1,2}[/.-]\d{1,2}[/.-](\d{4})/i,
   );
 
   return date ? Number(date[1]) : null;

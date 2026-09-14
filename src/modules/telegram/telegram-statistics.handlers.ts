@@ -21,6 +21,7 @@ import {
   showList,
   SOURCE_MENU,
 } from '../../shared/telegram-menu.utils';
+import { editTelegramRichMessage } from '../../shared/telegram.utils';
 import { PlayersService } from '../players/players.service';
 import { MonitoringSubscriptionsService } from '../monitoring-subscriptions/monitoring-subscriptions.service';
 import type { TelegramService } from './telegram.service';
@@ -723,25 +724,7 @@ export class TelegramStatisticsHandlers {
           return;
         }
 
-        const message = context.callbackQuery.message;
-
-        if (!message) {
-          return;
-        }
-
-        const editRichMessage = context.telegram.callApi.bind(
-          context.telegram,
-        ) as unknown as (
-          method: string,
-          payload: Record<string, unknown>,
-        ) => Promise<unknown>;
-
-        await editRichMessage('editMessageText', {
-          chat_id: message.chat.id,
-          message_id: message.message_id,
-          rich_message: { html: pages[page] },
-          reply_markup: keyboard.reply_markup,
-        });
+        await editTelegramRichMessage(context, pages[page], keyboard);
       },
     );
   }

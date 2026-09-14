@@ -540,9 +540,10 @@ export class LegaVolleyGateway {
           if (isExactMatch) {
             unresolvedExactMatchKeys.delete(matchKey);
           } else if (fallbackExactMatchKeys?.size === 1) {
-            unresolvedExactMatchKeys.delete(
-              fallbackExactMatchKeys.values().next().value,
-            );
+            const [fallbackMatchKey] = fallbackExactMatchKeys;
+            if (fallbackMatchKey !== undefined) {
+              unresolvedExactMatchKeys.delete(fallbackMatchKey);
+            }
           }
           unresolvedDateUnknownTeamKeys.delete(teamsKey);
           matches.push({
@@ -683,9 +684,10 @@ export class LegaVolleyGateway {
           if (isExactMatch) {
             unresolvedExactMatchKeys.delete(matchKey);
           } else if (fallbackExactMatchKeys?.size === 1) {
-            unresolvedExactMatchKeys.delete(
-              fallbackExactMatchKeys.values().next().value,
-            );
+            const [fallbackMatchKey] = fallbackExactMatchKeys;
+            if (fallbackMatchKey !== undefined) {
+              unresolvedExactMatchKeys.delete(fallbackMatchKey);
+            }
           }
           unresolvedDateUnknownTeamKeys.delete(teamsKey);
           matches.push({
