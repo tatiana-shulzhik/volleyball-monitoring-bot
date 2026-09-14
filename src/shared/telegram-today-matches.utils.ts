@@ -1,5 +1,6 @@
 import { MatchEntity } from '../databases/entities/match.entity';
 import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
+import { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
 import {
   CEV_COUNTRIES,
@@ -70,13 +71,15 @@ export function formatTodayMatchRoster(
   match: MatchEntity,
   homeRoster: PlayerTeamLeagueEntity[],
   awayRoster: PlayerTeamLeagueEntity[],
+  homeStatistics: ITeamStatistics | null,
+  awayStatistics: ITeamStatistics | null,
 ): string {
   const matchUrl = getMatchUrl(match);
 
   return [
     `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
-    formatRosterTable(match.homeTeam.name, homeRoster),
-    formatRosterTable(match.awayTeam.name, awayRoster),
+    formatRosterTable(match.homeTeam.name, homeRoster, homeStatistics),
+    formatRosterTable(match.awayTeam.name, awayRoster, awayStatistics),
     matchUrl
       ? `<p><a href="${escapeHtml(matchUrl)}">🔗 Открыть матч на сайте</a></p>`
       : '',
@@ -108,17 +111,36 @@ function getMatchUrl(match: MatchEntity): string | null {
 function formatRosterTable(
   teamName: string,
   roster: PlayerTeamLeagueEntity[],
+  statistics: ITeamStatistics | null,
 ): string {
-  const rows = [...roster]
-    .sort((left, right) =>
-      left.player.fullName.localeCompare(right.player.fullName),
+  const players = roster.map(({ player, shirtNumber, position }) => ({
+    player,
+    shirtNumber,
+    position,
+    statisticsPlayer: statistics?.players.find(
+      (item) =>
+        item.fullName === player.fullName &&
+        (shirtNumber === null || item.shirtNumber === shirtNumber),
+    ),
+  }));
+  const rows = players
+    .sort(
+      (left, right) =>
+        (right.statisticsPlayer?.setsPlayed ?? -1) -
+          (left.statisticsPlayer?.setsPlayed ?? -1) ||
+        (right.statisticsPlayer?.points ?? -1) -
+          (left.statisticsPlayer?.points ?? -1) ||
+        left.player.fullName.localeCompare(right.player.fullName),
     )
-    .map(({ player, shirtNumber, position }) => {
+    .map(({ player, shirtNumber, position, statisticsPlayer }) => {
       return [
         '<tr>',
         `<td align="center">${shirtNumber ?? '—'}</td>`,
         `<td>${escapeHtml(player.fullName)}</td>`,
-        `<td>${escapeHtml(position ?? '—')}</td>`,
+        `<td align="center">${formatRating(statisticsPlayer)}</td>`,
+        `<td align="center">${formatAttacks(statisticsPlayer)}</td>`,
+        `<td align="center">${statisticsPlayer?.birthYear ?? '—'}</td>`,
+        `<td align="center">${escapeHtml(statisticsPlayer?.position ?? position ?? '—')}</td>`,
         '</tr>',
       ].join('');
     });
@@ -128,12 +150,45 @@ function formatRosterTable(
     rows.length
       ? [
           '<table bordered striped>',
-          '<tr><th>№</th><th>Игрок</th><th>Позиция</th></tr>',
+          '<tr><th>№</th><th>Игрок</th><th>Рейтинг (очки/сеты)</th><th>Атака (успешные/попытки)</th><th>Год рождения</th><th>Поз</th></tr>',
           ...rows,
           '</table>',
         ].join('')
       : '<p><i>Состав в базе не найден.</i></p>',
   ].join('\n');
+}
+
+function formatRating(
+  player: ITeamStatistics['players'][number] | undefined,
+): string {
+  if (
+    !player ||
+    player.points === null ||
+    player.setsPlayed === null ||
+    !player.setsPlayed
+  ) {
+    return '—';
+  }
+
+  return `${(player.points / player.setsPlayed).toFixed(2)} (${player.points}/${player.setsPlayed})`;
+}
+
+function formatAttacks(
+  player: ITeamStatistics['players'][number] | undefined,
+): string {
+  if (
+    !player ||
+    player.attackAttempts === null ||
+    player.successfulAttacks === null ||
+    !player.attackAttempts
+  ) {
+    return '—';
+  }
+
+  return `${player.successfulAttacks}/${player.attackAttempts} (${(
+    (player.successfulAttacks / player.attackAttempts) *
+    100
+  ).toFixed(0)}%)`;
 }
 
 function formatTime(value: Date | null): string {
