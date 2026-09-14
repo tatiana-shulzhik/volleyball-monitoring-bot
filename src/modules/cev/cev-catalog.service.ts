@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
-import { CompetitionStagesRepository } from '../../databases/repositories/competition-stages.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { SynchronizedSeasonCatalog } from '../../interfaces/responses/synchronized-season-catalog.interface';
 import { ESourceCode } from '../../shared/enums';
@@ -30,43 +28,38 @@ export class CevCatalogService {
     private readonly playersService: PlayersService,
     private readonly playerStatisticsService: PlayerStatisticsService,
     private readonly matchesService: MatchesService,
-    private readonly stagesRepository: CompetitionStagesRepository,
   ) {}
 
   async synchronizeStoredRange(): Promise<boolean> {
     const earliestYear = getEarliestCatalogYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(earliestYear));
-    return this.synchronizeMatches(false);
+    const { isComplete } = await this.synchronizeMatches(false);
+    await this.synchronizeCevPlayersFromMatchStatistics();
+    return isComplete;
   }
 
   async synchronizeCurrentAndFuture(): Promise<void> {
     const currentYear = new Date().getFullYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(currentYear));
+    const { stages } = await this.synchronizeMatches(true);
+    await this.synchronizeCevPlayersFromMatchStatistics(stages);
   }
 
   async synchronizeCurrentAndFutureMatches(): Promise<void> {
-    await this.synchronizeMatches(true);
+    const { stages } = await this.synchronizeMatches(true);
+    await this.synchronizeCevPlayersFromMatchStatistics(stages);
   }
 
   async synchronizeCurrentPlayerStatistics(): Promise<void> {
     const now = new Date();
     await this.loadPlayerStatistics(
-      this.filterCevStages(
-        await this.stagesRepository.getWhere({
-          startsAt: LessThanOrEqual(now),
-          endsAt: MoreThanOrEqual(now),
-        }),
-      ),
+      await this.championshipsService.getCurrentCevStages(now),
     );
   }
 
   async synchronizeIncompletePlayerStatistics(): Promise<void> {
     await this.loadPlayerStatistics(
-      this.filterCevStages(
-        await this.stagesRepository.getWhere({
-          startsAt: LessThanOrEqual(new Date()),
-        }),
-      ),
+      await this.championshipsService.getStartedCevStages(new Date()),
     );
   }
 
@@ -83,9 +76,7 @@ export class CevCatalogService {
       `Repairing match attack statistics for ${stageIds.length} stages`,
     );
     await this.loadPlayerStatistics(
-      this.filterCevStages(
-        await this.stagesRepository.getWhere({ id: In(stageIds) }),
-      ),
+      await this.championshipsService.getCevStagesByIds(stageIds),
     );
   }
 
@@ -101,16 +92,14 @@ export class CevCatalogService {
       await this.gateway.fetchLeagueCatalog(stages),
     );
     const teams = await this.teamsService.synchronize(leagueCatalog);
-
-    const players = await this.playersService.synchronize(
-      teams.rosterSources,
-      await this.gateway.fetchPlayers(teams.rosterSources),
+    await this.teamsService.updateCountries(
+      await this.gateway.fetchTeamCountries(teams.rosterSources),
     );
 
     this.logger.log(
       `CEV catalog synchronized: ${seasonCatalog.championships.length} championships, ` +
         `${stages.length} stages, ${teams.teams.length} teams, ` +
-        `${players} players`,
+        `player rosters will be loaded from match applications`,
     );
   }
 
@@ -149,8 +138,11 @@ export class CevCatalogService {
     };
   }
 
-  private async synchronizeMatches(frequentOnly: boolean): Promise<boolean> {
-    let stages = this.filterCevStages(await this.stagesRepository.getWhere({}));
+  private async synchronizeMatches(frequentOnly: boolean): Promise<{
+    isComplete: boolean;
+    stages: CompetitionStagesEntity[];
+  }> {
+    let stages = await this.championshipsService.getCevStages();
 
     if (frequentOnly) {
       stages = await this.matchesService.getFrequentlyRelevantStages(stages);
@@ -158,7 +150,28 @@ export class CevCatalogService {
 
     const fetched = await this.gateway.fetchMatches(stages);
     await this.matchesService.synchronize(stages, fetched);
-    return fetched.isComplete;
+    return { isComplete: fetched.isComplete, stages };
+  }
+
+  private async synchronizeCevPlayersFromMatchStatistics(
+    stages?: CompetitionStagesEntity[],
+  ): Promise<void> {
+    const { matches, sources } =
+      await this.matchesService.getCevMatchesWithRosterSources(
+        stages?.map(({ id }) => id),
+      );
+    const [teamPlayers, birthYears] = await Promise.all([
+      this.gateway.fetchTeamPlayers(sources),
+      this.gateway.fetchTeamPlayerBirthYears(sources),
+    ]);
+    const players = await this.playersService.synchronize(
+      sources,
+      await this.gateway.fetchPlayers(matches, teamPlayers, birthYears),
+    );
+
+    this.logger.log(
+      `CEV players synchronized from match statistics: ${players}`,
+    );
   }
 
   private async loadPlayerStatistics(
@@ -184,14 +197,6 @@ export class CevCatalogService {
       matches,
       fetchedAttacks,
       fetchedRosters,
-    );
-  }
-
-  private filterCevStages(
-    stages: CompetitionStagesEntity[],
-  ): CompetitionStagesEntity[] {
-    return stages.filter(
-      ({ championship }) => championship.source?.code === ESourceCode.Cev,
     );
   }
 }

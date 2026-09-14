@@ -16,6 +16,7 @@ import { CevCatalogService } from '../cev/cev-catalog.service';
 import { LegaVolleyCatalogService } from '../lega-volley/lega-volley-catalog.service';
 import { LegaVolleyFemminileCatalogService } from '../lega-volley-femminile/lega-volley-femminile-catalog.service';
 import { MatchesService } from '../matches/matches.service';
+import { MatchRosterMonitoringService } from '../cev/match-roster-monitoring.service';
 import { ESourceCode, ESynchronizationKey } from '../../shared/enums';
 
 @Injectable()
@@ -29,6 +30,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly legaVolleyCatalogService: LegaVolleyCatalogService,
     private readonly legaVolleyFemminileCatalogService: LegaVolleyFemminileCatalogService,
     private readonly matchesService: MatchesService,
+    private readonly matchRosterMonitoringService: MatchRosterMonitoringService,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly playersRepository: PlayersRepository,
     private readonly teamsRepository: TeamsRepository,
@@ -80,6 +82,33 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.legaVolleyFemminileCatalogService.synchronizeCurrentAndFutureMatches();
       await this.matchesService.startMonitoring();
     }, false);
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'match-roster-check-30-minutes-before-start',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async checkUpcomingMatchRostersByCron(): Promise<void> {
+    await this.matchRosterMonitoringService.checkUpcomingMatchRosters();
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'match-starting-lineup-check-10-minutes-before-start',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async checkStartingLineupsByCron(): Promise<void> {
+    await this.matchRosterMonitoringService.checkStartingLineups();
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'match-live-lineup-monitoring',
+    timeZone: MOSCOW_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  async monitorLiveMatchesByCron(): Promise<void> {
+    await this.matchRosterMonitoringService.monitorLiveMatches();
   }
 
   @Cron(ECronExpression.EveryHourAtMinute10, {

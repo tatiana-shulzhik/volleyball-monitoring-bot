@@ -38,7 +38,7 @@ export class MatchesRepository {
     return repository.find({
       where,
       relations: {
-        league: true,
+        league: { stage: { championship: { source: true } } },
         homeTeam: true,
         awayTeam: true,
       },
@@ -105,17 +105,39 @@ export class MatchesRepository {
     return repository.delete(ids);
   }
 
-  async startMonitoring(now: Date, windowEnd: Date): Promise<number> {
+  async startMonitoring(
+    windowStart: Date,
+    windowEnd: Date,
+    startedAt: Date,
+  ): Promise<number> {
     const result = await this.repository.update(
       {
         status: EMatchStatus.Scheduled,
         monitoringStartedAt: IsNull(),
-        scheduledAt: Between(now, windowEnd),
+        scheduledAt: Between(windowStart, windowEnd),
       },
-      { monitoringStartedAt: now },
+      { monitoringStartedAt: startedAt },
     );
 
     return result.affected ?? 0;
+  }
+
+  findCevMonitoredWithin(start: Date, end: Date): Promise<MatchEntity[]> {
+    return this.repository
+      .createQueryBuilder('match')
+      .innerJoinAndSelect('match.league', 'league')
+      .innerJoinAndSelect('league.stage', 'stage')
+      .innerJoinAndSelect('stage.championship', 'championship')
+      .innerJoinAndSelect('championship.source', 'source')
+      .innerJoinAndSelect('match.homeTeam', 'homeTeam')
+      .innerJoinAndSelect('match.awayTeam', 'awayTeam')
+      .where('match.status = :status', { status: EMatchStatus.Scheduled })
+      .andWhere('match.monitoring_started_at IS NOT NULL')
+      .andWhere('match.scheduled_at >= :start', { start })
+      .andWhere('match.scheduled_at < :end', { end })
+      .andWhere('source.code = :sourceCode', { sourceCode: ESourceCode.Cev })
+      .orderBy('match.scheduled_at', 'ASC')
+      .getMany();
   }
 
   findScheduledBetween(

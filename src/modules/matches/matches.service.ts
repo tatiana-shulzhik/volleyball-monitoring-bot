@@ -9,7 +9,11 @@ import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
 import { ICevMatch } from '../../interfaces/requests/matches.interface';
 import { IFetchedMatches } from '../../interfaces/requests/matches.interface';
-import { MATCH_MONITORING_WINDOW_HOURS } from '../../shared/consts/constants';
+import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
+import {
+  LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
+  MATCH_MONITORING_WINDOW_HOURS,
+} from '../../shared/consts/constants';
 import { calculateMatchChanges } from '../../shared/matches.utils';
 import {
   applyEntityChanges,
@@ -17,10 +21,13 @@ import {
 } from '../../shared/synchronization.utils';
 import { uniqueBy } from '../../shared/array.utils';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
-import { ESourceCode } from '../../shared/enums';
+import { EMatchStatus, ESourceCode } from '../../shared/enums';
 import { parseCevDate } from '../../shared/cev-matches.utils';
 import { CEV_COUNTRIES } from '../../shared/consts/constants';
 import { getErrorMessage } from '../../shared/error.utils';
+import { MatchEntity } from '../../databases/entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
+import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 
 @Injectable()
 export class MatchesService {
@@ -31,7 +38,61 @@ export class MatchesService {
     private readonly leaguesRepository: LeaguesRepository,
     private readonly teamsRepository: TeamsRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
+    private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
   ) {}
+
+  async getMatchRoster(matchId: number): Promise<{
+    match: MatchEntity;
+    homeRoster: PlayerTeamLeagueEntity[];
+    awayRoster: PlayerTeamLeagueEntity[];
+  } | null> {
+    const [match] = await this.matchesRepository.getWhere({ id: matchId });
+    if (!match) return null;
+
+    const roster = await this.playerTeamLeaguesService.getMatchRosters(match);
+
+    return {
+      match,
+      homeRoster: roster.home,
+      awayRoster: roster.away,
+    };
+  }
+
+  async getCevMatchesWithRosterSources(stageIds?: number[]): Promise<{
+    matches: MatchEntity[];
+    sources: IPlayerRosterSource[];
+  }> {
+    if (stageIds?.length === 0) {
+      return { matches: [], sources: [] };
+    }
+
+    const matches = (
+      await this.matchesRepository.getWhere({
+        league: {
+          stage: {
+            ...(stageIds ? { id: In(stageIds) } : {}),
+            championship: { source: { code: ESourceCode.Cev } },
+          },
+        },
+      })
+    ).filter((match) => match.externalId);
+    const sources = [
+      ...new Map(
+        matches.flatMap((match) =>
+          [match.homeTeam, match.awayTeam].map((team) => [
+            `${team.id}:${match.league.id}`,
+            {
+              team,
+              league: match.league,
+              championship: match.league.stage.championship,
+            } satisfies IPlayerRosterSource,
+          ]),
+        ),
+      ).values(),
+    ];
+
+    return { matches, sources };
+  }
 
   async upsertCatalogMatches(
     incoming: ICevMatch[],
@@ -244,13 +305,16 @@ export class MatchesService {
       }
 
       try {
+        const scheduledAt = parseCevDate(
+          match.scheduledText ?? '',
+          match.venue ?? '',
+          countryCode,
+        );
+
         return {
           ...match,
-          scheduledAt: parseCevDate(
-            match.scheduledText ?? '',
-            match.venue ?? '',
-            countryCode,
-          ),
+          scheduledAt,
+          status: resolveCevMatchStatus(match.status, scheduledAt),
         };
       } catch (error) {
         this.logger.warn(
@@ -265,12 +329,16 @@ export class MatchesService {
 
   async startMonitoring(): Promise<number> {
     const now = new Date();
+    const windowStart = new Date(
+      now.getTime() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 60 * 60 * 1000,
+    );
     const windowEnd = new Date(
       now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 60 * 60 * 1000,
     );
     const started = await this.matchesRepository.startMonitoring(
-      now,
+      windowStart,
       windowEnd,
+      now,
     );
 
     if (started) {
@@ -289,4 +357,20 @@ function getCevCountryCode(
   return Object.entries(CEV_COUNTRIES).find(
     ([, name]) => name === country,
   )?.[0];
+}
+
+function resolveCevMatchStatus(
+  status: EMatchStatus,
+  scheduledAt: Date | null,
+): EMatchStatus {
+  if (
+    status !== EMatchStatus.Scheduled ||
+    !scheduledAt ||
+    scheduledAt.getTime() >
+      Date.now() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 60 * 60 * 1_000
+  ) {
+    return status;
+  }
+
+  return EMatchStatus.Finished;
 }

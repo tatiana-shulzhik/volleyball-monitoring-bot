@@ -23,12 +23,6 @@ export interface IFetchedPlayers {
   isComplete: boolean;
 }
 
-export interface IExtractPlayersParams {
-  html: string;
-  teamExternalId: string;
-  leagueExternalId: number;
-}
-
 export interface ICalculatePlayerChangesParams {
   incoming: ICevPlayer[];
   existing: PlayersEntity[];

@@ -375,6 +375,7 @@ export class PlayerStatisticsService {
             sourceKey,
             team.name,
             player.playerName,
+            player.shirtNumber,
           );
 
           if (!relation) {
@@ -476,6 +477,7 @@ export class PlayerStatisticsService {
                 sourceKey,
                 team.name,
                 player.playerName,
+                player.shirtNumber,
               ),
           ),
       );

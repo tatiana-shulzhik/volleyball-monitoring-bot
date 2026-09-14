@@ -2,6 +2,7 @@ import type { PlayerTeamLeagueEntity } from '../../databases/entities/player-tea
 
 export interface ICevPlayerAttackStatistics {
   playerName: string;
+  shirtNumber: number | null;
   attempts: number;
   successful: number;
   points: number;
@@ -12,12 +13,25 @@ export interface ICevMatchRosterPlayer {
   externalId: string;
   playerName: string;
   shirtNumber: number | null;
+  position?: string;
 }
 
 export interface IFetchedMatchRoster {
   matchExternalId: string;
   home: ICevMatchRosterPlayer[];
   away: ICevMatchRosterPlayer[];
+}
+
+export interface ICevMatchLineupPlayer {
+  playerName: string;
+  shirtNumber: number | null;
+  setMarks: string[];
+}
+
+export interface IFetchedMatchLineup {
+  matchExternalId: string;
+  home: ICevMatchLineupPlayer[];
+  away: ICevMatchLineupPlayer[];
 }
 
 export interface IFetchedMatchAttackStatistics {
@@ -30,4 +44,5 @@ export type PlayerRelation = PlayerTeamLeagueEntity;
 
 export interface IPlayerRelationMaps {
   byExactPlayer: Map<string, PlayerRelation>;
+  byTeamAndShirtNumber: Map<string, PlayerRelation>;
 }

@@ -1,4 +1,6 @@
 import { Context, Markup } from 'telegraf';
+import { MatchEntity } from '../databases/entities/match.entity';
+import { SourcesEntity } from '../databases/entities/sources.entity';
 import { ListMenu } from '../interfaces/telegram/menu.models';
 import {
   MENU_BUTTONS,
@@ -6,6 +8,7 @@ import {
 } from '../modules/telegram/telegram.constants';
 import { ECompetitionType, ESourceCode } from './enums';
 import { TELEGRAM_CALLBACKS } from './telegram-callbacks';
+import { formatTodayMatchButton } from './telegram-today-matches.utils';
 
 function createSourceButtons() {
   return Object.values(ESourceCode).map((source) => [
@@ -23,6 +26,68 @@ export function createSourceButton() {
     '⬅️ Сменить источник',
     TELEGRAM_CALLBACKS.menu.source,
   );
+}
+
+export function createTodayMatchesKeyboard(
+  matches: MatchEntity[],
+  footer: ReturnType<typeof Markup.button.callback>[][] = [],
+) {
+  const groups = new Map<string, MatchEntity[]>();
+  for (const match of matches) {
+    const championship = match.league.stage.championship.name;
+    const group = groups.get(championship) ?? [];
+    group.push(match);
+    groups.set(championship, group);
+  }
+
+  const rows: ReturnType<typeof Markup.button.callback>[][] = [];
+  for (const [championship, group] of groups) {
+    rows.push([
+      Markup.button.callback(
+        `🏆 ${championship}`,
+        TELEGRAM_CALLBACKS.live.group,
+      ),
+    ]);
+
+    rows.push(
+      ...group.map((match) => [
+        Markup.button.callback(
+          formatTodayMatchButton(match),
+          TELEGRAM_CALLBACKS.live.match(match.id),
+        ),
+      ]),
+    );
+  }
+
+  return Markup.inlineKeyboard([...rows, ...footer]);
+}
+
+export function createLiveMatchesFooter(
+  source: SourcesEntity,
+): ReturnType<typeof Markup.button.callback>[][] {
+  return [
+    [
+      Markup.button.callback(
+        source.liveMatchesNotificationEnabled
+          ? '🔕 Выключить автоотправку'
+          : '🔔 Включить автоотправку в 00:00',
+        TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(source.code),
+      ),
+    ],
+    [
+      Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
+      createSourceButton(),
+    ],
+  ];
+}
+
+export function createLiveMatchRosterKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.live),
+      createSourceButton(),
+    ],
+  ]);
 }
 
 export function getAvailableCompetitionTypes(

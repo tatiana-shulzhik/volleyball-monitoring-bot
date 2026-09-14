@@ -1,6 +1,13 @@
 import { MatchEntity } from '../databases/entities/match.entity';
+import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
-import { MOSCOW_TIME_ZONE } from './consts/constants';
+import {
+  CEV_COUNTRIES,
+  createMatchPageUrl,
+  LEGA_VOLLEY_BASE_URL,
+  LEGA_VOLLEY_FEMMINILE_STATISTICS_URL,
+  MOSCOW_TIME_ZONE,
+} from './consts/constants';
 import { ESourceCode } from './enums';
 
 export function getMoscowDayBounds(date = new Date()): {
@@ -37,50 +44,96 @@ export function formatTodayMatches(
     return `${source}<p><b>🔴 На сегодня запланированных матчей нет.</b></p>`;
   }
 
-  const bySource = new Map<string, MatchEntity[]>();
-  for (const match of matches) {
-    const source = match.league.stage.championship.source;
-    const sourceName = source
-      ? (SOURCE_BUTTONS[source.code] ?? source.name)
-      : 'Неизвестный источник';
-    const group = bySource.get(sourceName) ?? [];
-    group.push(match);
-    bySource.set(sourceName, group);
+  const source = sourceCode
+    ? `<p>📡 ${escapeHtml(SOURCE_BUTTONS[sourceCode])}</p>`
+    : '';
+
+  return [
+    source,
+    '<p><b>🔴 Матчи сегодня:</b></p>',
+    '<p>Выберите матч в нужном чемпионате:</p>',
+  ].join('');
+}
+
+export function formatTodayMatchButton(match: MatchEntity): string {
+  const home = formatTeamCountry(match.homeTeam.country, match.homeTeam.name);
+  const away = formatTeamCountry(match.awayTeam.country, match.awayTeam.name);
+  const teams =
+    home === away
+      ? `${match.homeTeam.name} — ${match.awayTeam.name}`
+      : `${home} — ${away}`;
+
+  return truncateButtonText(`${formatTime(match.scheduledAt)} · ${teams}`);
+}
+
+export function formatTodayMatchRoster(
+  match: MatchEntity,
+  homeRoster: PlayerTeamLeagueEntity[],
+  awayRoster: PlayerTeamLeagueEntity[],
+): string {
+  const matchUrl = getMatchUrl(match);
+
+  return [
+    `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
+    formatRosterTable(match.homeTeam.name, homeRoster),
+    formatRosterTable(match.awayTeam.name, awayRoster),
+    matchUrl
+      ? `<p><a href="${escapeHtml(matchUrl)}">🔗 Открыть матч на сайте</a></p>`
+      : '',
+  ].join('\n\n');
+}
+
+function getMatchUrl(match: MatchEntity): string | null {
+  const externalId = match.externalId;
+  const sourceCode = match.league.stage.championship.source?.code;
+  if (!externalId || !sourceCode) return null;
+
+  if (sourceCode === ESourceCode.Cev) {
+    return createMatchPageUrl(
+      match.league.stage.championship.externalId,
+      match.league.externalId,
+      externalId,
+    );
   }
 
-  const sections = [...bySource.entries()].map(([source, sourceMatches]) => {
-    const byChampionship = new Map<string, MatchEntity[]>();
-    for (const match of sourceMatches) {
-      const championship = match.league.stage.championship;
-      const title = `🏆 ${championship.name} · ${formatGender(match)}`;
-      const group = byChampionship.get(title) ?? [];
-      group.push(match);
-      byChampionship.set(title, group);
-    }
+  if (sourceCode === ESourceCode.LegaVolleyFemminile) {
+    return `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${encodeURIComponent(externalId)}`;
+  }
 
-    const tournaments = [...byChampionship.entries()]
-      .map(([title, tournamentMatches]) =>
-        [
-          `<p><b>${escapeHtml(title)}</b></p>`,
+  return /^\d+$/.test(externalId)
+    ? `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`
+    : null;
+}
+
+function formatRosterTable(
+  teamName: string,
+  roster: PlayerTeamLeagueEntity[],
+): string {
+  const rows = [...roster]
+    .sort((left, right) =>
+      left.player.fullName.localeCompare(right.player.fullName),
+    )
+    .map(({ player, shirtNumber, position }) => {
+      return [
+        '<tr>',
+        `<td align="center">${shirtNumber ?? '—'}</td>`,
+        `<td>${escapeHtml(player.fullName)}</td>`,
+        `<td>${escapeHtml(position ?? '—')}</td>`,
+        '</tr>',
+      ].join('');
+    });
+
+  return [
+    `<p><b>${escapeHtml(teamName)}</b></p>`,
+    rows.length
+      ? [
           '<table bordered striped>',
-          '<tr><th>Время</th><th>Команда 1</th><th>Команда 2</th></tr>',
-          ...tournamentMatches.map(
-            (match) =>
-              '<tr>' +
-              `<td align="center">${formatTime(match.scheduledAt)}</td>` +
-              `<td>${escapeHtml(match.homeTeam.name)}</td>` +
-              `<td>${escapeHtml(match.awayTeam.name)}</td>` +
-              '</tr>',
-          ),
+          '<tr><th>№</th><th>Игрок</th><th>Позиция</th></tr>',
+          ...rows,
           '</table>',
-        ].join(''),
-      )
-      .join('');
-
-    return `<p>📡 ${escapeHtml(source)}</p>${tournaments}`;
-  });
-
-  return [`<p><b>🔴 Доступные матчи на сегодня:</b></p>`, ...sections].join('');
+        ].join('')
+      : '<p><i>Состав в базе не найден.</i></p>',
+  ].join('\n');
 }
 
 function formatTime(value: Date | null): string {
@@ -94,27 +147,6 @@ function formatTime(value: Date | null): string {
   }).format(value);
 }
 
-function formatGender(match: MatchEntity): string {
-  const { name, source } = match.league.stage.championship;
-  const normalized = name.toLocaleLowerCase();
-
-  if (
-    source?.code === ESourceCode.LegaVolleyFemminile ||
-    /\b(women|female|femminile)\b/i.test(normalized)
-  ) {
-    return '♀ Женщины';
-  }
-
-  if (
-    source?.code === ESourceCode.LegaVolley ||
-    /\b(men|male|maschile)\b/i.test(normalized)
-  ) {
-    return '♂ Мужчины';
-  }
-
-  return 'Пол не указан';
-}
-
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -122,4 +154,17 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function truncateButtonText(value: string): string {
+  const maxLength = 64;
+  const characters = [...value];
+
+  return characters.length <= maxLength
+    ? value
+    : `${characters.slice(0, maxLength - 1).join('')}…`;
+}
+
+function formatTeamCountry(country: string | null, fallback: string): string {
+  return country ? (CEV_COUNTRIES[country] ?? country) : fallback;
 }

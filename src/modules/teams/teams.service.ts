@@ -68,6 +68,18 @@ export class TeamsService {
     return this.teamsRepository.getWhere({ source: { code: sourceCode } });
   }
 
+  updateCountries(
+    updates: Array<{ teamExternalId: string; country: string }>,
+  ): Promise<void> {
+    return this.teamsRepository.updateCountries(
+      updates.map(({ teamExternalId, country }) => ({
+        externalId: teamExternalId,
+        country,
+      })),
+      ESourceCode.Cev,
+    );
+  }
+
   private async upsertLegaTeamLeagues(
     incomingTeams: SynchronizeTeamsParams['teams'],
     teamsByExternalId: Map<string, TeamEntity>,

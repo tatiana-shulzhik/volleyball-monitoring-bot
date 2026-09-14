@@ -39,6 +39,7 @@ import { AddLiveMatchesNotificationToSources1760000021000 } from '../databases/m
 import { ResetCevInitialCatalogSync1760000022000 } from '../databases/migrations/1760000022000-ResetCevInitialCatalogSync';
 import { ResetLegaVolleyInitialCatalogSync1760000023000 } from '../databases/migrations/1760000023000-ResetLegaVolleyInitialCatalogSync';
 import { CreateMonitoringSubscriptions1760000024000 } from '../databases/migrations/1760000024000-CreateMonitoringSubscriptions';
+import { ResetCevCatalog1760000025000 } from '../databases/migrations/1760000025000-ResetCevCatalog';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -110,6 +111,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         ResetCevInitialCatalogSync1760000022000,
         ResetLegaVolleyInitialCatalogSync1760000023000,
         CreateMonitoringSubscriptions1760000024000,
+        ResetCevCatalog1760000025000,
       ],
     };
   }

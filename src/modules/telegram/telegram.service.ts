@@ -5,7 +5,7 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Context, Markup, Telegraf } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 import { LessThan } from 'typeorm';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
@@ -32,14 +32,21 @@ import {
   TELEGRAM_CALLBACKS,
 } from '../../shared/telegram-callbacks';
 import {
-  createSourceButton,
+  createLiveMatchRosterKeyboard,
+  createLiveMatchesFooter,
+  createTodayMatchesKeyboard,
   SOURCE_MENU,
 } from '../../shared/telegram-menu.utils';
-import { isTelegramMenuCommand } from '../../shared/telegram.utils';
+import {
+  editTelegramRichMessage,
+  isTelegramMenuCommand,
+} from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { IFindRecentSeasonsFromParams } from '../../interfaces/requests/seasons.interface';
+import { MatchesService } from '../matches/matches.service';
 import {
+  formatTodayMatchRoster,
   formatTodayMatches,
   getMoscowDayBounds,
 } from '../../shared/telegram-today-matches.utils';
@@ -57,6 +64,7 @@ export class TelegramService
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
     private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
+    private readonly matchesService: MatchesService,
     private readonly sourcesRepository: SourcesRepository,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
@@ -106,7 +114,7 @@ export class TelegramService
     sourceCode: ESourceCode,
   ): Promise<void> {
     try {
-      const html = await this.getTodayMatchesMessage(sourceCode);
+      const { html, matches } = await this.getTodayMatches(sourceCode);
       if (!html.trim()) return;
 
       const sendRichMessage = this.bot.telegram.callApi.bind(
@@ -119,12 +127,26 @@ export class TelegramService
       await sendRichMessage('sendRichMessage', {
         chat_id: chatId,
         rich_message: { html },
+        reply_markup: createTodayMatchesKeyboard(matches).reply_markup,
       });
     } catch (error) {
       this.logger.error(
         'Unable to send today matches notification',
         error instanceof Error ? error.stack : String(error),
       );
+    }
+  }
+
+  async sendRosterMonitoringNotification(message: string): Promise<boolean> {
+    try {
+      await this.bot.telegram.sendMessage(this.config.groupId, message);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        'Unable to send roster monitoring notification',
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
     }
   }
 
@@ -165,6 +187,33 @@ export class TelegramService
         context,
         this.statisticsHandlers.getSelectedSource(context.chat?.id),
       );
+    });
+
+    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveMatch, async (context) => {
+      const matchRoster = await this.matchesService.getMatchRoster(
+        Number(context.match[1]),
+      );
+
+      if (!matchRoster) {
+        await context.answerCbQuery('Матч не найден.', { show_alert: true });
+        return;
+      }
+
+      await context.answerCbQuery();
+
+      await editTelegramRichMessage(
+        context,
+        formatTodayMatchRoster(
+          matchRoster.match,
+          matchRoster.homeRoster,
+          matchRoster.awayRoster,
+        ),
+        createLiveMatchRosterKeyboard(),
+      );
+    });
+
+    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveGroup, async (context) => {
+      await context.answerCbQuery();
     });
 
     this.bot.action(
@@ -215,33 +264,12 @@ export class TelegramService
     const message = context.callbackQuery?.message;
     if (!message) return;
 
-    const keyboard = Markup.inlineKeyboard([
-      [
-        Markup.button.callback(
-          source.liveMatchesNotificationEnabled
-            ? '🔕 Выключить автоотправку'
-            : '🔔 Включить автоотправку в 00:00',
-          TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(sourceCode),
-        ),
-      ],
-      [
-        Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
-        createSourceButton(),
-      ],
-    ]);
-    const editRichMessage = context.telegram.callApi.bind(
-      context.telegram,
-    ) as unknown as (
-      method: string,
-      payload: Record<string, unknown>,
-    ) => Promise<unknown>;
-
-    await editRichMessage('editMessageText', {
-      chat_id: message.chat.id,
-      message_id: message.message_id,
-      rich_message: { html: await this.getTodayMatchesMessage(sourceCode) },
-      reply_markup: keyboard.reply_markup,
-    });
+    const { html, matches } = await this.getTodayMatches(sourceCode);
+    const keyboard = createTodayMatchesKeyboard(
+      matches,
+      createLiveMatchesFooter(source),
+    );
+    await editTelegramRichMessage(context, html, keyboard);
   }
 
   private isAllowed(username: string | undefined): Promise<boolean> {
@@ -410,15 +438,16 @@ export class TelegramService
     );
   }
 
-  private async getTodayMatchesMessage(
-    sourceCode: ESourceCode,
-  ): Promise<string> {
+  private async getTodayMatches(sourceCode: ESourceCode): Promise<{
+    html: string;
+    matches: Awaited<ReturnType<MatchesRepository['findScheduledBetween']>>;
+  }> {
     const { start, end } = getMoscowDayBounds();
     const matches = await this.matchesRepository.findScheduledBetween(
       start,
       end,
       sourceCode,
     );
-    return formatTodayMatches(matches, sourceCode);
+    return { html: formatTodayMatches(matches, sourceCode), matches };
   }
 }
