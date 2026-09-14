@@ -47,6 +47,7 @@ import { createCompetitionStageKey } from '../shared/competition-stages.utils';
 import { parseSeasonEndYear } from '../shared/season.utils';
 import {
   CEV_HTTP_CONCURRENCY,
+  CEV_HTML_CACHE_MAX_ENTRIES,
   CEV_CALENDAR_URL,
   createCompetitionUrl,
   createTeamDetailsUrl,
@@ -545,7 +546,7 @@ export class CevGateway {
     }
 
     const html = await this.http.get(createMatchStatisticsUrl(matchExternalId));
-    this.matchStatisticsCache.set(matchExternalId, {
+    this.setCachedHtml(this.matchStatisticsCache, matchExternalId, {
       html,
       expiresAt: Date.now() + 5 * 60_000,
     });
@@ -570,7 +571,7 @@ export class CevGateway {
     const request = this.http
       .get(createTeamDetailsUrl(teamExternalId, championshipExternalId))
       .then((html) => {
-        this.teamDetailsCache.set(key, {
+        this.setCachedHtml(this.teamDetailsCache, key, {
           html,
           expiresAt: Date.now() + 5 * 60_000,
         });
@@ -586,6 +587,28 @@ export class CevGateway {
     const form = createNationalTeamCalendarForm(initialHtml);
 
     return this.http.postForm(CEV_CALENDAR_URL, form);
+  }
+
+  private setCachedHtml(
+    cache: Map<string, { html: string; expiresAt: number }>,
+    key: string,
+    value: { html: string; expiresAt: number },
+  ): void {
+    const now = Date.now();
+
+    for (const [cachedKey, cached] of cache) {
+      if (cached.expiresAt <= now) {
+        cache.delete(cachedKey);
+      }
+    }
+
+    while (cache.size >= CEV_HTML_CACHE_MAX_ENTRIES) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey === undefined) break;
+      cache.delete(oldestKey);
+    }
+
+    cache.set(key, value);
   }
 
   private async mapSettled<TInput, TOutput>(

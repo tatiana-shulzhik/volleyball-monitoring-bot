@@ -22,7 +22,11 @@ export const CEV_CALENDAR_URL = `${CEV_BASE_URL}/calendar.aspx`;
 
 export const MAX_ATTEMPTS = 3;
 
-export const CEV_HTTP_CONCURRENCY = 50;
+// Страницы CEV могут быть объёмными. Ограничиваем потребление памяти
+// во время первичной синхронизации каталога.
+export const CEV_HTTP_CONCURRENCY = 40
+
+export const CEV_HTML_CACHE_MAX_ENTRIES = 100;
 
 export const LEGA_VOLLEY_HTTP_CONCURRENCY = 50;
 
