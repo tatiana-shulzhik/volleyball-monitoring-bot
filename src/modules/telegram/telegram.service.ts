@@ -189,6 +189,10 @@ export class TelegramService
       await context.answerCbQuery();
     });
 
+    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveGroup, async (context) => {
+      await context.answerCbQuery();
+    });
+
     this.bot.action(
       TELEGRAM_CALLBACK_PATTERNS.liveMatchesNotification,
       async (context) => {

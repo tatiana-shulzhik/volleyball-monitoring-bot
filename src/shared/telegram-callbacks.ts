@@ -13,6 +13,7 @@ export function parseCompetitionType(code: string): ECompetitionType {
 
 export const TELEGRAM_CALLBACKS = {
   live: {
+    group: 'live:group',
     match: (matchId: number) => `live:match:${matchId}`,
   },
   menu: {
@@ -153,6 +154,7 @@ export const TELEGRAM_CALLBACKS = {
 const COMPETITION_TYPE_PATTERN = '(c|n)';
 
 export const TELEGRAM_CALLBACK_PATTERNS = {
+  liveGroup: /^live:group$/,
   liveMatch: /^live:match:(\d+)$/,
   statistics: {
     competitionType: new RegExp(

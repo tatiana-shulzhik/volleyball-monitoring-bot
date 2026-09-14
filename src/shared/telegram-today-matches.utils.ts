@@ -37,49 +37,15 @@ export function formatTodayMatches(
     return `${source}<p><b>🔴 На сегодня запланированных матчей нет.</b></p>`;
   }
 
-  const bySource = new Map<string, MatchEntity[]>();
-  for (const match of matches) {
-    const source = match.league.stage.championship.source;
-    const sourceName = source
-      ? (SOURCE_BUTTONS[source.code] ?? source.name)
-      : 'Неизвестный источник';
-    const group = bySource.get(sourceName) ?? [];
-    group.push(match);
-    bySource.set(sourceName, group);
-  }
+  const source = sourceCode
+    ? `<p>📡 ${escapeHtml(SOURCE_BUTTONS[sourceCode])}</p>`
+    : '';
 
-  const sections = [...bySource.entries()].map(([source, sourceMatches]) => {
-    const byChampionship = new Map<string, MatchEntity[]>();
-    for (const match of sourceMatches) {
-      const championship = match.league.stage.championship;
-      const group = byChampionship.get(championship.name) ?? [];
-      group.push(match);
-      byChampionship.set(championship.name, group);
-    }
-
-    const tournaments = [...byChampionship.entries()]
-      .map(([title, tournamentMatches]) =>
-        [
-          `<p><b>🏆 ${escapeHtml(title)}</b></p>`,
-          '<table bordered striped>',
-          '<tr><th>Время</th><th>Команда 1</th><th>Команда 2</th></tr>',
-          ...tournamentMatches.map(
-            (match) =>
-              '<tr>' +
-              `<td align="center">${formatTime(match.scheduledAt)}</td>` +
-              `<td>${escapeHtml(match.homeTeam.name)}</td>` +
-              `<td>${escapeHtml(match.awayTeam.name)}</td>` +
-              '</tr>',
-          ),
-          '</table>',
-        ].join(''),
-      )
-      .join('');
-
-    return `<p>📡 ${escapeHtml(source)}</p>${tournaments}`;
-  });
-
-  return [`<p><b>🔴 Матчи сегодня:</b></p>`, ...sections].join('');
+  return [
+    source,
+    '<p><b>🔴 Матчи сегодня:</b></p>',
+    '<p>Выберите матч в нужном чемпионате:</p>',
+  ].join('');
 }
 
 export function formatTodayMatchButton(match: MatchEntity): string {

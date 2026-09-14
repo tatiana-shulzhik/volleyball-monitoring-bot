@@ -32,18 +32,34 @@ export function createTodayMatchesKeyboard(
   matches: MatchEntity[],
   footer: ReturnType<typeof Markup.button.callback>[][] = [],
 ) {
-  const buttons = matches.map((match) =>
-    Markup.button.callback(
-      formatTodayMatchButton(match),
-      TELEGRAM_CALLBACKS.live.match(match.id),
-    ),
-  );
-  const matchRows: ReturnType<typeof Markup.button.callback>[][] = [];
-  for (let index = 0; index < buttons.length; index += 2) {
-    matchRows.push(buttons.slice(index, index + 2));
+  const groups = new Map<string, MatchEntity[]>();
+  for (const match of matches) {
+    const championship = match.league.stage.championship.name;
+    const group = groups.get(championship) ?? [];
+    group.push(match);
+    groups.set(championship, group);
   }
 
-  return Markup.inlineKeyboard([...matchRows, ...footer]);
+  const rows: ReturnType<typeof Markup.button.callback>[][] = [];
+  for (const [championship, group] of groups) {
+    rows.push([
+      Markup.button.callback(
+        `🏆 ${championship}`,
+        TELEGRAM_CALLBACKS.live.group,
+      ),
+    ]);
+
+    rows.push(
+      ...group.map((match) => [
+        Markup.button.callback(
+          formatTodayMatchButton(match),
+          TELEGRAM_CALLBACKS.live.match(match.id),
+        ),
+      ]),
+    );
+  }
+
+  return Markup.inlineKeyboard([...rows, ...footer]);
 }
 
 export function createLiveMatchesFooter(
