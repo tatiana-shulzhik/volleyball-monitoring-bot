@@ -1,14 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { In } from 'typeorm';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { MatchEntity } from '../../databases/entities/match.entity';
-import { MatchesRepository } from '../../databases/repositories/matches.repository';
-import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player-team-leagues.repository';
 import { CevGateway } from '../../gateway/cev.gateway';
-import {
-  IFetchedMatchLineup,
-  IFetchedMatchRoster,
-} from '../../interfaces/requests/player-statistics.interface';
+import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
+import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
 import {
   IMonitoringContext,
   IPlayerMonitoringState,
@@ -25,9 +20,10 @@ import {
   EStartingLineupMonitoringStatus,
 } from '../../shared/enums';
 import {
+  addRosterPositions,
   findLineupPlayer,
   formatLiveMonitoringMessage,
-  formatRosterMonitoringMessage,
+  formatMatchRosterMonitoringMessage,
   formatStartingLineupMessage,
   getCurrentSet,
   getMonitoredPlayers,
@@ -38,15 +34,17 @@ import {
 } from '../../shared/match-roster-monitoring.utils';
 import { MonitoringSubscriptionsService } from '../monitoring-subscriptions/monitoring-subscriptions.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { MatchesService } from '../matches/matches.service';
+import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 
 /** Проверяет заявку, стартовый состав и live-статус игроков в матчах CEV. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
   constructor(
-    private readonly matchesRepository: MatchesRepository,
+    private readonly matchesService: MatchesService,
     private readonly subscriptionsService: MonitoringSubscriptionsService,
-    private readonly relationsRepository: PlayerTeamLeaguesRepository,
+    private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
     private readonly gateway: CevGateway,
     private readonly telegramService: TelegramService,
     private readonly cache: RedisCacheService,
@@ -55,7 +53,7 @@ export class MatchRosterMonitoringService {
   async checkUpcomingMatchRosters(): Promise<number> {
     const now = new Date();
     // Заявка проверяется каждые 30 минут в течение 36 часов до начала матча.
-    const matches = await this.matchesRepository.findCevMonitoredWithin(
+    const matches = await this.matchesService.findCevMonitoredWithin(
       now,
       new Date(now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 3_600_000),
     );
@@ -64,7 +62,7 @@ export class MatchRosterMonitoringService {
       now,
       (items) => this.gateway.fetchMatchRosters(items),
       (match, roster, context, checkedAt) =>
-        this.processRosterMatch(match, roster, context, checkedAt),
+        this.processRosterMatch({ match, roster, context, now: checkedAt }),
     );
 
     if (notifications) {
@@ -80,7 +78,7 @@ export class MatchRosterMonitoringService {
   async checkStartingLineups(): Promise<number> {
     const now = new Date();
     // Матч выбирается только в минуту проверки за 10 минут до начала.
-    const matches = await this.matchesRepository.findCevMonitoredWithin(
+    const matches = await this.matchesService.findCevMonitoredWithin(
       new Date(
         now.getTime() +
           (MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES - 1) * 60_000,
@@ -93,8 +91,8 @@ export class MatchRosterMonitoringService {
       matches,
       now,
       (items) => this.gateway.fetchMatchLineups(items),
-      (match, lineup, context, checkedAt) =>
-        this.processStartingLineupMatch(match, lineup, context, checkedAt),
+      (match, lineup, context, now) =>
+        this.processStartingLineupMatch({ match, lineup, context, now }),
     );
 
     if (notifications) {
@@ -108,7 +106,7 @@ export class MatchRosterMonitoringService {
   /** Опрашивает старый протокол CEV во время матча. */
   async monitorLiveMatches(): Promise<number> {
     const now = new Date();
-    const matches = await this.matchesRepository.findCevMonitoredWithin(
+    const matches = await this.matchesService.findCevMonitoredWithin(
       new Date(now.getTime() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 3_600_000),
       now,
     );
@@ -116,8 +114,8 @@ export class MatchRosterMonitoringService {
       matches,
       now,
       (items) => this.gateway.fetchMatchLineups(items),
-      (match, lineup, context, checkedAt) =>
-        this.processLiveMatch(match, lineup, context, checkedAt),
+      (match, lineup, context, now) =>
+        this.processLiveMatch({ match, lineup, context, now }),
     );
     if (notifications) {
       this.logger.log(`Sent ${notifications} live monitoring notification(s)`);
@@ -126,19 +124,22 @@ export class MatchRosterMonitoringService {
   }
 
   private async processRosterMatch(
-    match: MatchEntity,
-    roster: IFetchedMatchRoster,
-    context: IMonitoringContext,
-    now: Date,
+    data: IProcessRosterMatchParams,
   ): Promise<number> {
-    let notifications = 0;
-    const notifiedPlayerNames: string[] = [];
+    const { match, roster, context, now } = data;
+    const changedPlayers: Array<{
+      playerId: number;
+      playerName: string;
+      status: ERosterMonitoringStatus;
+      monitoring: IPlayerMonitoringState;
+    }> = [];
 
-    for (const {
-      subscription,
-      relation,
-      teamData: teamRoster,
-    } of getMonitoredPlayers(match, context, roster.home, roster.away)) {
+    for (const { subscription, teamData: teamRoster } of getMonitoredPlayers(
+      match,
+      context,
+      roster.home,
+      roster.away,
+    )) {
       if (!teamRoster.length) continue;
 
       const status = teamRoster.some(
@@ -149,42 +150,40 @@ export class MatchRosterMonitoringService {
       const monitoring = await this.getState(match, subscription.playerId);
       if (monitoring.rosterStatus === status) continue;
 
-      const sent = await this.telegramService.sendRosterMonitoringNotification(
-        formatRosterMonitoringMessage({
-          status,
-          playerName: subscription.player.fullName,
-          shirtNumber: relation.shirtNumber,
-          position: relation.position,
-          teamName: relation.team.name,
-          homeTeamName: match.homeTeam.name,
-          awayTeamName: match.awayTeam.name,
-          scheduledAt: match.scheduledAt,
-          checkedAt: now,
-        }),
-      );
-      if (!sent) continue;
+      changedPlayers.push({
+        playerId: subscription.playerId,
+        playerName: subscription.player.fullName,
+        status,
+        monitoring,
+      });
+    }
 
+    if (!changedPlayers.length) return 0;
+
+    const sent = await this.telegramService.sendRosterMonitoringNotification(
+      formatMatchRosterMonitoringMessage({
+        homeTeamName: match.homeTeam.name,
+        awayTeamName: match.awayTeam.name,
+        home: addRosterPositions(roster.home, match.homeTeam.id, context),
+        away: addRosterPositions(roster.away, match.awayTeam.id, context),
+        scheduledAt: match.scheduledAt,
+        checkedAt: now,
+      }),
+    );
+    if (!sent) return 0;
+
+    for (const { playerId, status, monitoring } of changedPlayers) {
       monitoring.rosterStatus = status;
-      await this.saveState(match, subscription.playerId, monitoring, now);
-      notifications++;
-      notifiedPlayerNames.push(subscription.player.fullName);
+      await this.saveState(match, playerId, monitoring, now);
     }
 
-    if (notifiedPlayerNames.length) {
-      this.logger.debug(
-        `Match roster found for ${match.homeTeam.name} — ${match.awayTeam.name}: ` +
-          `monitored players: ${notifiedPlayerNames.join(', ')}`,
-      );
-    }
-    return notifications;
+    return 1;
   }
 
   private async processStartingLineupMatch(
-    match: MatchEntity,
-    lineup: IFetchedMatchLineup,
-    context: IMonitoringContext,
-    now: Date,
+    data: IProcessLineupMatchParams,
   ): Promise<number> {
+    const { match, lineup, context, now } = data;
     let notifications = 0;
 
     for (const {
@@ -229,11 +228,9 @@ export class MatchRosterMonitoringService {
   }
 
   private async processLiveMatch(
-    match: MatchEntity,
-    lineup: IFetchedMatchLineup,
-    context: IMonitoringContext,
-    now: Date,
+    data: IProcessLineupMatchParams,
   ): Promise<number> {
+    const { match, lineup, context, now } = data;
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (!currentSet) return 0;
 
@@ -334,10 +331,8 @@ export class MatchRosterMonitoringService {
     );
     if (!relevantMatches.length) return null;
 
-    const relations = await this.relationsRepository.getWhere({
-      player: { id: In(subscriptions.map(({ playerId }) => playerId)) },
-      league: { id: In(relevantMatches.map(({ league }) => league.id)) },
-    });
+    const relations =
+      await this.playerTeamLeaguesService.getForMatches(relevantMatches);
     return {
       matches: relevantMatches,
       subscriptionsByChampionship,
@@ -346,6 +341,13 @@ export class MatchRosterMonitoringService {
           `${relation.player.id}:${relation.league.id}`,
           relation,
         ]),
+      ),
+      positionsByTeamAndPlayer: new Map(
+        relations.flatMap(({ team, player, position }) =>
+          position
+            ? [[`${team.id}:${player.externalId}`, position] as const]
+            : [],
+        ),
       ),
     };
   }
