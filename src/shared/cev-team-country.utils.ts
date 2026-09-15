@@ -16,8 +16,15 @@ export function extractCevPlayerBirthYears(html: string): Map<string, number> {
   const years = new Map<string, number>();
 
   for (const row of html.matchAll(rows)) {
-    const playerId = row[1].match(player)?.[1];
-    const birthYear = cleanText(row[1]).match(/\b(?:19|20)\d{2}\b/)?.[0];
+    const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (cell) => cell[1],
+    );
+    const playerCellIndex = cells.findIndex((cell) => player.test(cell));
+    const playerId =
+      playerCellIndex >= 0 ? cells[playerCellIndex].match(player)?.[1] : null;
+    const birthYear = cleanText(cells[playerCellIndex + 4] ?? '').match(
+      /^(?:19|20)\d{2}$/,
+    )?.[0];
 
     if (playerId && birthYear) {
       years.set(playerId, Number(birthYear));
