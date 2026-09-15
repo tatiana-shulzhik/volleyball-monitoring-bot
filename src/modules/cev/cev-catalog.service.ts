@@ -160,13 +160,10 @@ export class CevCatalogService {
       await this.matchesService.getCevMatchesWithRosterSources(
         stages?.map(({ id }) => id),
       );
-    const [teamPlayers, birthYears] = await Promise.all([
-      this.gateway.fetchTeamPlayers(sources),
-      this.gateway.fetchTeamPlayerBirthYears(sources),
-    ]);
+    const birthYears = await this.gateway.fetchTeamPlayerBirthYears(sources);
     const players = await this.playersService.synchronize(
       sources,
-      await this.gateway.fetchPlayers(matches, teamPlayers, birthYears),
+      await this.gateway.fetchPlayers(matches, birthYears),
     );
 
     this.logger.log(
