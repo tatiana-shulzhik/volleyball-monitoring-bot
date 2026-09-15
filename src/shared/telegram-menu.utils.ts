@@ -160,6 +160,19 @@ export function formatChampionshipButton(name: string): string {
     .replace(/\s+/g, ' ');
 }
 
+export function formatCurrentMonitoringButton(
+  playerName: string,
+  teamNames: string | null,
+  championshipName: string,
+): string {
+  const text =
+    `🗑 ${playerName}` +
+    (teamNames ? ` — ${teamNames}` : '') +
+    ` — ${formatChampionshipButton(championshipName)}`;
+
+  return text.length > 64 ? `${text.slice(0, 61)}...` : text;
+}
+
 export async function showList(
   context: Context,
   menu: ListMenu,

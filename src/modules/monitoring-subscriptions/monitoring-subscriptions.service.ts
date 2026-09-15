@@ -44,6 +44,12 @@ export class MonitoringSubscriptionsService {
     return this.monitoringSubscriptionsRepository.findAll(sourceCode);
   }
 
+  findAllForCurrentMonitoring(sourceCode: ESourceCode) {
+    return this.monitoringSubscriptionsRepository.findAllForCurrentMonitoring(
+      sourceCode,
+    );
+  }
+
   findPlayerIds(playerIds: number[], championshipId: number) {
     if (!playerIds.length) return new Set<number>();
 
