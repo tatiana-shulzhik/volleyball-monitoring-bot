@@ -23,6 +23,21 @@ export class MonitoringSubscriptionsRepository {
     return this.repository.delete({ playerId, championshipId });
   }
 
+  async removeAll(sourceCode: ESourceCode): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .delete()
+      .where(
+        '"championship_id" IN (' +
+          'SELECT "id" FROM "championships" WHERE "source_id" = (' +
+          'SELECT "id" FROM "sources" WHERE "code" = :sourceCode))',
+        { sourceCode },
+      )
+      .execute();
+
+    return result.affected ?? 0;
+  }
+
   findAll(sourceCode: ESourceCode) {
     return this.repository.find({
       where: { championship: { source: { code: sourceCode } } },

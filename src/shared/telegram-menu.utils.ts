@@ -64,6 +64,7 @@ export function createTodayMatchesKeyboard(
 
 export function createLiveMatchesFooter(
   source: SourcesEntity,
+  showNavigation = true,
 ): ReturnType<typeof Markup.button.callback>[][] {
   return [
     [
@@ -74,18 +75,22 @@ export function createLiveMatchesFooter(
         TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(source.code),
       ),
     ],
-    [
-      Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
-      createSourceButton(),
-    ],
+    ...(showNavigation
+      ? [
+          [
+            Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
+            createSourceButton(),
+          ],
+        ]
+      : []),
   ];
 }
 
-export function createLiveMatchRosterKeyboard() {
+export function createLiveMatchRosterKeyboard(showSourceButton = true) {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.live),
-      createSourceButton(),
+      ...(showSourceButton ? [createSourceButton()] : []),
     ],
   ]);
 }
