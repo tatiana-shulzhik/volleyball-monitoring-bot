@@ -71,6 +71,8 @@ export const TELEGRAM_CALLBACKS = {
   monitoring: {
     removePlayer: (playerId: number, championshipId: number) =>
       `monitoring:remove-player:${playerId}:${championshipId}`,
+    removeAll: (sourceCode: ESourceCode) =>
+      `monitoring:remove-all:${sourceCode}`,
     competitionType: (competitionType: ECompetitionType) =>
       `monitoring:type:${COMPETITION_TYPE_CODES[competitionType]}`,
     season: (competitionType: ECompetitionType) =>
@@ -179,6 +181,9 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
   },
   monitoring: {
     removePlayer: new RegExp('^monitoring:remove-player:(\\d+):(\\d+)$'),
+    removeAll: new RegExp(
+      `^monitoring:remove-all:(${Object.values(ESourceCode).join('|')})$`,
+    ),
     competitionType: new RegExp(
       `^monitoring:type:${COMPETITION_TYPE_PATTERN}$`,
     ),

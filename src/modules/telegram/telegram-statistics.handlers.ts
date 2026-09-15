@@ -320,6 +320,22 @@ export class TelegramStatisticsHandlers {
         );
       },
     );
+
+    bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.monitoring.removeAll,
+      async (context) => {
+        const removed = await this.monitoringSubscriptionsService.removeAll(
+          context.match[1] as ESourceCode,
+        );
+        await context.answerCbQuery(
+          removed ? `Удалено игроков: ${removed}` : 'В мониторинге нет игроков',
+        );
+        await this.renderCurrentMonitoring(
+          context,
+          context.match[1] as ESourceCode,
+        );
+      },
+    );
   }
 
   private registerRetroStatistics(bot: Telegraf): void {
@@ -790,6 +806,16 @@ export class TelegramStatisticsHandlers {
           ),
         ),
       ]),
+      ...(subscriptions.length
+        ? [
+            [
+              Markup.button.callback(
+                '🟥 🗑 Удалить всё',
+                TELEGRAM_CALLBACKS.monitoring.removeAll(sourceCode),
+              ),
+            ],
+          ]
+        : []),
       [
         Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.back),
         createSourceButton(),

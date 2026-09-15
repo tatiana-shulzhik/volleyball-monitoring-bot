@@ -36,6 +36,10 @@ export class MonitoringSubscriptionsService {
     );
   }
 
+  removeAll(sourceCode: ESourceCode) {
+    return this.monitoringSubscriptionsRepository.removeAll(sourceCode);
+  }
+
   findAll(sourceCode: ESourceCode) {
     return this.monitoringSubscriptionsRepository.findAll(sourceCode);
   }
