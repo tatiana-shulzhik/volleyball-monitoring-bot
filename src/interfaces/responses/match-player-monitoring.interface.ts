@@ -27,6 +27,7 @@ export interface IMonitoringContext {
   matches: MatchEntity[];
   subscriptionsByChampionship: Map<number, MonitoringSubscriptionEntity[]>;
   relationsByPlayerAndLeague: Map<string, PlayerTeamLeagueEntity>;
+  positionsByTeamAndPlayer: Map<string, string>;
 }
 
 export interface IMonitoredPlayer<T> {

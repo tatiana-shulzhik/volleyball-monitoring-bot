@@ -139,9 +139,19 @@ export class TelegramService
     }
   }
 
-  async sendRosterMonitoringNotification(message: string): Promise<boolean> {
+  async sendRosterMonitoringNotification(html: string): Promise<boolean> {
     try {
-      await this.bot.telegram.sendMessage(this.config.groupId, message);
+      const sendRichMessage = this.bot.telegram.callApi.bind(
+        this.bot.telegram,
+      ) as unknown as (
+        method: string,
+        payload: Record<string, unknown>,
+      ) => Promise<unknown>;
+
+      await sendRichMessage('sendRichMessage', {
+        chat_id: this.config.groupId,
+        rich_message: { html },
+      });
       return true;
     } catch (error) {
       this.logger.error(

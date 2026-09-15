@@ -8,14 +8,38 @@ import { PlayerTeamLeaguesRepository } from '../../databases/repositories/player
 export class PlayerTeamLeaguesService {
   constructor(private readonly repository: PlayerTeamLeaguesRepository) {}
 
+  async getForMatches(
+    matches: MatchEntity[],
+  ): Promise<PlayerTeamLeagueEntity[]> {
+    if (!matches.length) return [];
+
+    const leagueIds = [...new Set(matches.map(({ league }) => league.id))];
+    const teamIds = [
+      ...new Set(
+        matches.flatMap(({ homeTeam, awayTeam }) => [homeTeam.id, awayTeam.id]),
+      ),
+    ];
+    const matchTeamPairs = new Set(
+      matches.flatMap(({ league, homeTeam, awayTeam }) => [
+        `${league.id}:${homeTeam.id}`,
+        `${league.id}:${awayTeam.id}`,
+      ]),
+    );
+    const relations = await this.repository.getWhere({
+      league: { id: In(leagueIds) },
+      team: { id: In(teamIds) },
+    });
+
+    return relations.filter(({ league, team }) =>
+      matchTeamPairs.has(`${league.id}:${team.id}`),
+    );
+  }
+
   async getMatchRosters(match: MatchEntity): Promise<{
     home: PlayerTeamLeagueEntity[];
     away: PlayerTeamLeagueEntity[];
   }> {
-    const roster = await this.repository.getWhere({
-      league: { id: match.league.id },
-      team: { id: In([match.homeTeam.id, match.awayTeam.id]) },
-    });
+    const roster = await this.getForMatches([match]);
     const matchTeamIds = new Set([match.homeTeam.id, match.awayTeam.id]);
     const matchRoster = roster.filter(
       ({ league, team }) =>

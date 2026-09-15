@@ -34,7 +34,7 @@ export class CevCatalogService {
     const earliestYear = getEarliestCatalogYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(earliestYear));
     const { isComplete } = await this.synchronizeMatches(false);
-    await this.synchronizeCevPlayersFromMatchStatistics();
+    await this.synchronizeCevPlayersFromMatchRosters();
     return isComplete;
   }
 
@@ -42,12 +42,12 @@ export class CevCatalogService {
     const currentYear = new Date().getFullYear();
     await this.synchronizeCatalog(await this.synchronizeSeasons(currentYear));
     const { stages } = await this.synchronizeMatches(true);
-    await this.synchronizeCevPlayersFromMatchStatistics(stages);
+    await this.synchronizeCevPlayersFromMatchRosters(stages);
   }
 
   async synchronizeCurrentAndFutureMatches(): Promise<void> {
     const { stages } = await this.synchronizeMatches(true);
-    await this.synchronizeCevPlayersFromMatchStatistics(stages);
+    await this.synchronizeCevPlayersFromMatchRosters(stages);
   }
 
   async synchronizeCurrentPlayerStatistics(): Promise<void> {
@@ -153,22 +153,42 @@ export class CevCatalogService {
     return { isComplete: fetched.isComplete, stages };
   }
 
-  private async synchronizeCevPlayersFromMatchStatistics(
+  private async synchronizeCevPlayersFromMatchRosters(
     stages?: CompetitionStagesEntity[],
   ): Promise<void> {
     const { matches, sources } =
       await this.matchesService.getCevMatchesWithRosterSources(
         stages?.map(({ id }) => id),
       );
-    const birthYears = await this.gateway.fetchTeamPlayerBirthYears(sources);
+    const [birthYears, teamRosters] = await Promise.all([
+      this.gateway.fetchTeamPlayerBirthYears(sources),
+      this.gateway.fetchTeamPlayers(sources),
+    ]);
+    const positionsByPlayerExternalId = new Map(
+      [...teamRosters.values()].flatMap((roster) =>
+        roster.flatMap(({ externalId, position }) =>
+          position ? [[externalId, position] as const] : [],
+        ),
+      ),
+    );
+    const fetched = await this.gateway.fetchPlayersFromMatchRosters(
+      matches,
+      birthYears,
+    );
     const players = await this.playersService.synchronize(
       sources,
-      await this.gateway.fetchPlayers(matches, birthYears),
+      {
+        ...fetched,
+        players: fetched.players.map((player) => ({
+          ...player,
+          position:
+            positionsByPlayerExternalId.get(player.externalId) ??
+            player.position,
+        })),
+      },
     );
 
-    this.logger.log(
-      `CEV players synchronized from match statistics: ${players}`,
-    );
+    this.logger.log(`CEV players synchronized from match rosters: ${players}`);
   }
 
   private async loadPlayerStatistics(

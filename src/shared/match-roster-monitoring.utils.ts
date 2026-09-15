@@ -4,10 +4,13 @@ import {
   IMonitoringContext,
   IPlayerMonitoringMessageData,
 } from '../interfaces/responses/match-player-monitoring.interface';
-import { ICevMatchLineupPlayer } from '../interfaces/requests/player-statistics.interface';
+import {
+  ICevMatchLineupPlayer,
+  ICevMatchRosterPlayer,
+} from '../interfaces/requests/player-statistics.interface';
+import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
 import {
   ELivePlayerMonitoringStatus,
-  ERosterMonitoringStatus,
   EStartingLineupMonitoringStatus,
 } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
@@ -44,6 +47,19 @@ export function getMonitoredPlayers<T>(
     const teamData = getTeamData(relation.team.id, match, home, away);
     return teamData ? [{ subscription, relation, teamData }] : [];
   });
+}
+
+export function addRosterPositions(
+  roster: ICevMatchRosterPlayer[],
+  teamId: number,
+  context: IMonitoringContext,
+): ICevMatchRosterPlayer[] {
+  return roster.map((player) => ({
+    ...player,
+    position:
+      context.positionsByTeamAndPlayer.get(`${teamId}:${player.externalId}`) ??
+      player.position,
+  }));
 }
 
 /** Формирует ключ Redis для состояния игрока в матче. */
@@ -105,24 +121,53 @@ export function getCurrentSet(
   return currentSet || null;
 }
 
-export function formatRosterMonitoringMessage(
-  data: IPlayerMonitoringMessageData & {
-    status: ERosterMonitoringStatus;
-    scheduledAt: Date | null;
-    checkedAt: Date;
-  },
+export function formatMatchRosterMonitoringMessage(
+  data: IMatchRosterMonitoringMessageData,
 ): string {
   const timeUntilMatch = data.scheduledAt
     ? formatTimeUntilMatch(data.scheduledAt, data.checkedAt)
     : 'время матча уточняется';
 
-  return formatMonitoringMessage(
-    data.status === ERosterMonitoringStatus.Present
-      ? '🟢 Игрок заявлен в состав'
-      : '❌ Игрок отсутствует в заявке',
-    data,
-    `Заявка (${timeUntilMatch} до начала)`,
-  );
+  return [
+    '<p><b>🏐 Заявка на матч</b></p>',
+    `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
+    `<p>Проверка: за ${escapeHtml(timeUntilMatch)} до начала</p>`,
+    formatMatchRosterTable(data.homeTeamName, data.home),
+    formatMatchRosterTable(data.awayTeamName, data.away),
+  ].join('');
+}
+
+function formatMatchRosterTable(
+  teamName: string,
+  roster: ICevMatchRosterPlayer[],
+): string {
+  const rows = [...roster]
+    .sort(
+      (left, right) =>
+        (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
+        left.playerName.localeCompare(right.playerName),
+    )
+    .map(
+      (player) =>
+        '<tr>' +
+        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td align="center">${escapeHtml(player.position ?? '—')}</td>` +
+        '</tr>',
+    );
+
+  return [
+    `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
+    rows.length
+      ? [
+          '<table bordered striped>',
+          '<tr><th>№</th><th>Игрок</th><th>Поз.</th></tr>',
+          ...rows,
+          '</table>',
+        ].join('')
+      : '<p><i>Заявка пока не опубликована.</i></p>',
+  ].join('');
 }
 
 export function formatStartingLineupMessage(
@@ -204,4 +249,12 @@ function formatTimeUntilMatch(scheduledAt: Date, checkedAt: Date): string {
   return hours
     ? `${hours} ч. ${remainingMinutes} мин.`
     : `${remainingMinutes} мин.`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

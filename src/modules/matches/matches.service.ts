@@ -347,6 +347,10 @@ export class MatchesService {
 
     return started;
   }
+
+  findCevMonitoredWithin(start: Date, end: Date): Promise<MatchEntity[]> {
+    return this.matchesRepository.findCevMonitoredWithin(start, end);
+  }
 }
 
 function getCevCountryCode(
