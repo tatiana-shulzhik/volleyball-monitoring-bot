@@ -20,6 +20,12 @@ export interface ILivePlayerMonitoringChange {
   monitoring: IPlayerMonitoringState;
 }
 
+export interface IStartingLineupMonitoringChange {
+  playerId: number;
+  status: EStartingLineupMonitoringStatus;
+  monitoring: IPlayerMonitoringState;
+}
+
 export interface IPlayerMonitoringMessageData {
   playerName: string;
   shirtNumber: number | null;

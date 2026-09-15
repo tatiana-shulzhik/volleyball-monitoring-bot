@@ -10,6 +10,7 @@ import {
 } from '../interfaces/requests/player-statistics.interface';
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
 import { ILiveLineupMonitoringMessageData } from '../interfaces/requests/live-lineup-monitoring.interface';
+import { IStartingLineupMonitoringMessageData } from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
 
@@ -182,6 +183,68 @@ export function formatStartingLineupMessage(
   );
 }
 
+export function formatStartingLineupMonitoringMessage(
+  data: IStartingLineupMonitoringMessageData,
+): string {
+  return [
+    '<p><b>🏐 Стартовый состав</b></p>',
+    `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
+    formatStartingLineupTable(
+      data.homeTeamName,
+      data.home,
+      data.homePositionsByShirtNumber,
+    ),
+    formatStartingLineupTable(
+      data.awayTeamName,
+      data.away,
+      data.awayPositionsByShirtNumber,
+    ),
+    data.matchProtocolUrl
+      ? `<p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
+      : '',
+  ].join('');
+}
+
+function formatStartingLineupTable(
+  teamName: string,
+  lineup: ICevMatchLineupPlayer[],
+  positionsByShirtNumber: Map<number, string>,
+): string {
+  const rows = [...lineup]
+    .sort(
+      (left, right) =>
+        (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
+        left.playerName.localeCompare(right.playerName),
+    )
+    .map((player) => {
+      const position =
+        player.shirtNumber === null
+          ? '—'
+          : (positionsByShirtNumber.get(player.shirtNumber) ?? '—');
+      const status = isStarter(player.setMarks[0])
+        ? '🟢'
+        : '🪑';
+
+      return (
+        '<tr>' +
+        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td align="center">${escapeHtml(position)}</td>` +
+        `<td align="center">${status}</td>` +
+        '</tr>'
+      );
+    });
+
+  return [
+    `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
+    '<table bordered striped>',
+    '<tr><th>№</th><th>Игрок</th><th>Поз.</th><th>Статус</th></tr>',
+    ...rows,
+    '</table>',
+  ].join('');
+}
+
 export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
@@ -221,9 +284,7 @@ function formatLiveLineupTable(
     )
     .map((player) => {
       const mark = player.setMarks[currentSet - 1] ?? '';
-      const status = isActiveMark(mark)
-        ? '🟢 На площадке'
-        : '🪑 Не на площадке';
+      const status = isActiveMark(mark) ? '🟢' : '🪑';
       const position =
         player.shirtNumber === null
           ? '—'
@@ -234,7 +295,7 @@ function formatLiveLineupTable(
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
         `<td align="center">${escapeHtml(position)}</td>` +
-        `<td>${status}</td>` +
+        `<td align="center">${status}</td>` +
         '</tr>'
       );
     });
