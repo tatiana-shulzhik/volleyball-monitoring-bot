@@ -222,9 +222,7 @@ function formatStartingLineupTable(
         player.shirtNumber === null
           ? '—'
           : (positionsByShirtNumber.get(player.shirtNumber) ?? '—');
-      const status = isStarter(player.setMarks[0])
-        ? '🟢'
-        : '🪑';
+      const status = formatLineupStatus(player.setMarks[0]);
 
       return (
         '<tr>' +
@@ -284,7 +282,7 @@ function formatLiveLineupTable(
     )
     .map((player) => {
       const mark = player.setMarks[currentSet - 1] ?? '';
-      const status = isActiveMark(mark) ? '🟢' : '🪑';
+      const status = formatLineupStatus(mark);
       const position =
         player.shirtNumber === null
           ? '—'
@@ -307,6 +305,12 @@ function formatLiveLineupTable(
     ...rows,
     '</table>',
   ].join('');
+}
+
+function formatLineupStatus(mark: string | undefined): string {
+  if (!isActiveMark(mark ?? '')) return '🪑';
+
+  return mark === '*' ? '🟢 ⭐' : '🟢';
 }
 
 function normalizePlayerName(value: string): string {
