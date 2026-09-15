@@ -10,10 +10,7 @@ import { TeamEntity } from '../../databases/entities/team.entity';
 import { ICevMatch } from '../../interfaces/requests/matches.interface';
 import { IFetchedMatches } from '../../interfaces/requests/matches.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
-import {
-  LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
-  MATCH_MONITORING_WINDOW_HOURS,
-} from '../../shared/consts/constants';
+import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from '../../shared/consts/constants';
 import { calculateMatchChanges } from '../../shared/matches.utils';
 import {
   applyEntityChanges,
@@ -156,7 +153,6 @@ export class MatchesService {
           homeTeam,
           awayTeam,
           scheduledAt: match.scheduledAt,
-          monitoringStartedAt: stored?.monitoringStartedAt ?? null,
           attackStatisticsUpdatedAt: stored?.attackStatisticsUpdatedAt ?? null,
           status: match.status,
         };
@@ -325,27 +321,6 @@ export class MatchesService {
         return match;
       }
     });
-  }
-
-  async startMonitoring(): Promise<number> {
-    const now = new Date();
-    const windowStart = new Date(
-      now.getTime() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 60 * 60 * 1000,
-    );
-    const windowEnd = new Date(
-      now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 60 * 60 * 1000,
-    );
-    const started = await this.matchesRepository.startMonitoring(
-      windowStart,
-      windowEnd,
-      now,
-    );
-
-    if (started) {
-      this.logger.log(`${started} matches entered the monitoring window`);
-    }
-
-    return started;
   }
 
   findCevMonitoredWithin(start: Date, end: Date): Promise<MatchEntity[]> {

@@ -1,12 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
-  Between,
   DataSource,
   EntityManager,
   FindOptionsWhere,
   In,
-  IsNull,
   Repository,
 } from 'typeorm';
 import { EMatchStatus, ESourceCode } from '../../shared/enums';
@@ -105,23 +103,6 @@ export class MatchesRepository {
     return repository.delete(ids);
   }
 
-  async startMonitoring(
-    windowStart: Date,
-    windowEnd: Date,
-    startedAt: Date,
-  ): Promise<number> {
-    const result = await this.repository.update(
-      {
-        status: EMatchStatus.Scheduled,
-        monitoringStartedAt: IsNull(),
-        scheduledAt: Between(windowStart, windowEnd),
-      },
-      { monitoringStartedAt: startedAt },
-    );
-
-    return result.affected ?? 0;
-  }
-
   findCevMonitoredWithin(start: Date, end: Date): Promise<MatchEntity[]> {
     return this.repository
       .createQueryBuilder('match')
@@ -132,7 +113,6 @@ export class MatchesRepository {
       .innerJoinAndSelect('match.homeTeam', 'homeTeam')
       .innerJoinAndSelect('match.awayTeam', 'awayTeam')
       .where('match.status = :status', { status: EMatchStatus.Scheduled })
-      .andWhere('match.monitoring_started_at IS NOT NULL')
       .andWhere('match.scheduled_at >= :start', { start })
       .andWhere('match.scheduled_at < :end', { end })
       .andWhere('source.code = :sourceCode', { sourceCode: ESourceCode.Cev })

@@ -27,7 +27,6 @@ export function calculateMatchChanges(
               match.scheduledAt ??
               existingByExternalId.get(match.externalId)?.scheduledAt ??
               null,
-            monitoringStartedAt: null,
             attackStatisticsUpdatedAt: null,
             status: match.status,
           },
