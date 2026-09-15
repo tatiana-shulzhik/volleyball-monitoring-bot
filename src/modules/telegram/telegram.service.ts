@@ -21,7 +21,6 @@ import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
 import {
   AGGREGATED_SEASONS_COUNT,
-  createMatchStatisticsUrl,
   MOSCOW_TIME_ZONE,
   PREVIOUS_YEARS_COUNT,
 } from '../../shared/consts/constants';
@@ -52,7 +51,6 @@ import {
   formatTodayMatches,
   getMoscowDayBounds,
 } from '../../shared/telegram-today-matches.utils';
-import { formatLiveMonitoringMessage } from '../../shared/match-roster-monitoring.utils';
 
 @Injectable()
 export class TelegramService
@@ -166,7 +164,11 @@ export class TelegramService
 
   private registerHandlers(): void {
     this.bot.use(async (context, next) => {
-      if (context.chat?.type !== 'private') return;
+      const isPrivateChat = context.chat?.type === 'private';
+      const isGroupCallback =
+        context.chat?.id === this.config.groupId &&
+        Boolean(context.callbackQuery);
+      if (!isPrivateChat && !isGroupCallback) return;
 
       if (await this.isAllowed(context.from?.username)) {
         await next();
@@ -235,7 +237,7 @@ export class TelegramService
           homeStatistics,
           awayStatistics,
         ),
-        createLiveMatchRosterKeyboard(),
+        createLiveMatchRosterKeyboard(context.chat?.id !== this.config.groupId),
       );
     });
 
@@ -294,7 +296,7 @@ export class TelegramService
     const { html, matches } = await this.getTodayMatches(sourceCode);
     const keyboard = createTodayMatchesKeyboard(
       matches,
-      createLiveMatchesFooter(source),
+      createLiveMatchesFooter(source, context.chat?.id !== this.config.groupId),
     );
     await editTelegramRichMessage(context, html, keyboard);
   }
