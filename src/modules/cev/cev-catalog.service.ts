@@ -175,18 +175,14 @@ export class CevCatalogService {
       matches,
       birthYears,
     );
-    const players = await this.playersService.synchronize(
-      sources,
-      {
-        ...fetched,
-        players: fetched.players.map((player) => ({
-          ...player,
-          position:
-            positionsByPlayerExternalId.get(player.externalId) ??
-            player.position,
-        })),
-      },
-    );
+    const players = await this.playersService.synchronize(sources, {
+      ...fetched,
+      players: fetched.players.map((player) => ({
+        ...player,
+        position:
+          positionsByPlayerExternalId.get(player.externalId) ?? player.position,
+      })),
+    });
 
     this.logger.log(`CEV players synchronized from match rosters: ${players}`);
   }

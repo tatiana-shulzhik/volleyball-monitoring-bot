@@ -42,13 +42,6 @@ export class MatchEntity {
   scheduledAt: Date | null;
 
   @Column({
-    name: 'monitoring_started_at',
-    type: 'timestamptz',
-    nullable: true,
-  })
-  monitoringStartedAt: Date | null;
-
-  @Column({
     name: 'attack_statistics_updated_at',
     type: 'timestamptz',
     nullable: true,

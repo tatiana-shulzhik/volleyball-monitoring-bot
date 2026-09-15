@@ -15,7 +15,6 @@ import { getEarliestCatalogYear } from '../../shared/season.utils';
 import { CevCatalogService } from '../cev/cev-catalog.service';
 import { LegaVolleyCatalogService } from '../lega-volley/lega-volley-catalog.service';
 import { LegaVolleyFemminileCatalogService } from '../lega-volley-femminile/lega-volley-femminile-catalog.service';
-import { MatchesService } from '../matches/matches.service';
 import { MatchRosterMonitoringService } from '../cev/match-roster-monitoring.service';
 import { ESourceCode, ESynchronizationKey } from '../../shared/enums';
 
@@ -29,7 +28,6 @@ export class SynchronizationService implements OnApplicationBootstrap {
     private readonly cevCatalogService: CevCatalogService,
     private readonly legaVolleyCatalogService: LegaVolleyCatalogService,
     private readonly legaVolleyFemminileCatalogService: LegaVolleyFemminileCatalogService,
-    private readonly matchesService: MatchesService,
     private readonly matchRosterMonitoringService: MatchRosterMonitoringService,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly playersRepository: PlayersRepository,
@@ -80,7 +78,6 @@ export class SynchronizationService implements OnApplicationBootstrap {
       await this.cevCatalogService.synchronizeCurrentAndFutureMatches();
       await this.legaVolleyCatalogService.synchronizeCurrentAndFutureMatches();
       await this.legaVolleyFemminileCatalogService.synchronizeCurrentAndFutureMatches();
-      await this.matchesService.startMonitoring();
     }, false);
   }
 

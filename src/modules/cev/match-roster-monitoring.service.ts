@@ -5,10 +5,12 @@ import { CevGateway } from '../../gateway/cev.gateway';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
 import {
+  ILivePlayerMonitoringChange,
   IMonitoringContext,
   IPlayerMonitoringState,
 } from '../../interfaces/responses/match-player-monitoring.interface';
 import {
+  createMatchStatisticsUrl,
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
@@ -234,7 +236,7 @@ export class MatchRosterMonitoringService {
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (!currentSet) return 0;
 
-    let notifications = 0;
+    const changedPlayers: ILivePlayerMonitoringChange[] = [];
     for (const {
       subscription,
       relation,
@@ -259,25 +261,61 @@ export class MatchRosterMonitoringService {
       }
       if (monitoring.liveStatus === status) continue;
 
-      const sent = await this.telegramService.sendRosterMonitoringNotification(
-        formatLiveMonitoringMessage({
-          status,
-          playerName: subscription.player.fullName,
-          shirtNumber: relation.shirtNumber,
-          position: relation.position,
-          teamName: relation.team.name,
-          homeTeamName: match.homeTeam.name,
-          awayTeamName: match.awayTeam.name,
-          currentSet,
-        }),
-      );
-      if (!sent) continue;
-
-      monitoring.liveStatus = status;
-      await this.saveState(match, subscription.playerId, monitoring, now);
-      notifications++;
+      changedPlayers.push({
+        playerId: subscription.playerId,
+        status,
+        monitoring,
+      });
     }
-    return notifications;
+    if (!changedPlayers.length) return 0;
+
+    const sent = await this.telegramService.sendRosterMonitoringNotification(
+      formatLiveMonitoringMessage({
+        homeTeamName: match.homeTeam.name,
+        awayTeamName: match.awayTeam.name,
+        home: lineup.home,
+        away: lineup.away,
+        homePositionsByShirtNumber: this.getPositionsByShirtNumber(
+          match.homeTeam.id,
+          match.league.id,
+          context,
+        ),
+        awayPositionsByShirtNumber: this.getPositionsByShirtNumber(
+          match.awayTeam.id,
+          match.league.id,
+          context,
+        ),
+        currentSet,
+        matchProtocolUrl: match.externalId
+          ? createMatchStatisticsUrl(match.externalId)
+          : undefined,
+      }),
+    );
+    if (!sent) return 0;
+
+    for (const { playerId, status, monitoring } of changedPlayers) {
+      monitoring.liveStatus = status;
+      await this.saveState(match, playerId, monitoring, now);
+    }
+
+    return 1;
+  }
+
+  private getPositionsByShirtNumber(
+    teamId: number,
+    leagueId: number,
+    context: IMonitoringContext,
+  ): Map<number, string> {
+    return new Map(
+      [...context.relationsByPlayerAndLeague.values()].flatMap((relation) =>
+        relation.team.id === teamId &&
+        relation.league.id === leagueId &&
+        relation.shirtNumber !== null &&
+        relation.position
+          ? [[relation.shirtNumber, relation.position] as const]
+          : [],
+      ),
+    );
   }
 
   private async processMatches<T>(

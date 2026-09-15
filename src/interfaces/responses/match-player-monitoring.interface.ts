@@ -14,6 +14,12 @@ export interface IPlayerMonitoringState {
   liveStatus?: ELivePlayerMonitoringStatus;
 }
 
+export interface ILivePlayerMonitoringChange {
+  playerId: number;
+  status: ELivePlayerMonitoringStatus;
+  monitoring: IPlayerMonitoringState;
+}
+
 export interface IPlayerMonitoringMessageData {
   playerName: string;
   shirtNumber: number | null;
