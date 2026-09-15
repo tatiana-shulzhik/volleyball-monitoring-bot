@@ -16,6 +16,7 @@ import {
   createMainMenu,
   createSourceButton,
   formatChampionshipButton,
+  formatCurrentMonitoringButton,
   formatMainMenuMessage,
   getAvailableCompetitionTypes,
   showList,
@@ -795,17 +796,31 @@ export class TelegramStatisticsHandlers {
     sourceCode: ESourceCode,
   ): Promise<void> {
     const subscriptions =
-      await this.monitoringSubscriptionsService.findAll(sourceCode);
+      await this.monitoringSubscriptionsService.findAllForCurrentMonitoring(
+        sourceCode,
+      );
     const keyboard = Markup.inlineKeyboard([
-      ...subscriptions.map(({ player, championship }) => [
-        Markup.button.callback(
-          `🗑 ${player.fullName} — ${championship.name}`,
-          TELEGRAM_CALLBACKS.monitoring.removePlayer(
-            player.id,
-            championship.id,
+      ...subscriptions.map(
+        ({
+          playerId,
+          playerName,
+          teamNames,
+          championshipId,
+          championshipName,
+        }) => [
+          Markup.button.callback(
+            formatCurrentMonitoringButton(
+              playerName,
+              teamNames,
+              championshipName,
+            ),
+            TELEGRAM_CALLBACKS.monitoring.removePlayer(
+              playerId,
+              championshipId,
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
       ...(subscriptions.length
         ? [
             [
