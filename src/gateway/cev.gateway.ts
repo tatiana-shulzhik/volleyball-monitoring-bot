@@ -34,7 +34,6 @@ import {
   extractCevTeamCountry,
   extractCevTeamPlayers,
 } from '../shared/cev-team-country.utils';
-import { normalizePlayerName } from '../shared/player-name.utils';
 import { getErrorMessage } from '../shared/error.utils';
 import {
   createCalendarForm,
@@ -217,7 +216,6 @@ export class CevGateway {
 
   async fetchPlayers(
     matches: MatchEntity[],
-    teamPlayersBySource: Map<string, IFetchedMatchRoster['home']>,
     birthYears = new Map<string, number>(),
   ): Promise<IFetchedPlayers> {
     const results = await this.mapSettled({
@@ -226,23 +224,17 @@ export class CevGateway {
         if (!match.externalId) {
           throw new Error(`CEV match ${match.id} has no external ID`);
         }
-        const statisticsHtml = await this.getMatchStatisticsHtml(
-          match.externalId,
+        const rosterHtml = await this.http.get(
+          createMatchPageUrl(
+            match.league.stage.championship.externalId,
+            match.league.externalId,
+            match.externalId,
+          ),
         );
-        const championshipExternalId =
-          match.league.stage.championship.externalId;
 
         return {
           players: [
-            ...getMatchStatisticsPlayers(
-              extractMatchLineup(statisticsHtml, 'casa'),
-              teamPlayersBySource.get(
-                createTeamDetailsKey(
-                  match.homeTeam.externalId,
-                  championshipExternalId,
-                ),
-              ) ?? [],
-            ).map((player) => ({
+            ...extractMatchRoster(rosterHtml, 'home').map((player) => ({
               externalId: player.externalId,
               fullName: player.playerName,
               position: player.position ?? '',
@@ -251,15 +243,7 @@ export class CevGateway {
               teamExternalId: match.homeTeam.externalId,
               leagueExternalId: match.league.externalId,
             })),
-            ...getMatchStatisticsPlayers(
-              extractMatchLineup(statisticsHtml, 'ospiti'),
-              teamPlayersBySource.get(
-                createTeamDetailsKey(
-                  match.awayTeam.externalId,
-                  championshipExternalId,
-                ),
-              ) ?? [],
-            ).map((player) => ({
+            ...extractMatchRoster(rosterHtml, 'guest').map((player) => ({
               externalId: player.externalId,
               fullName: player.playerName,
               position: player.position ?? '',
@@ -603,7 +587,7 @@ export class CevGateway {
     }
 
     while (cache.size >= CEV_HTML_CACHE_MAX_ENTRIES) {
-      const oldestKey = cache.keys().next().value;
+      const oldestKey = [...cache.keys()][0];
       if (oldestKey === undefined) break;
       cache.delete(oldestKey);
     }
@@ -646,24 +630,4 @@ function createTeamDetailsKey(
   championshipExternalId: number,
 ): string {
   return `${teamExternalId}:${championshipExternalId}`;
-}
-
-function getMatchStatisticsPlayers(
-  lineup: IFetchedMatchLineup['home'],
-  roster: IFetchedMatchRoster['home'],
-): IFetchedMatchRoster['home'] {
-  const playerNames = new Set(
-    lineup.map(({ playerName }) => normalizePlayerName(playerName)),
-  );
-  const shirtNumbers = new Set(
-    lineup.flatMap(({ shirtNumber }) =>
-      shirtNumber === null ? [] : [shirtNumber],
-    ),
-  );
-
-  return roster.filter(
-    ({ playerName, shirtNumber }) =>
-      playerNames.has(normalizePlayerName(playerName)) ||
-      (shirtNumber !== null && shirtNumbers.has(shirtNumber)),
-  );
 }
