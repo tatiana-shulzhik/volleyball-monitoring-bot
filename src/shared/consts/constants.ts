@@ -24,7 +24,7 @@ export const MAX_ATTEMPTS = 3;
 
 // Страницы CEV могут быть объёмными. Ограничиваем потребление памяти
 // во время первичной синхронизации каталога.
-export const CEV_HTTP_CONCURRENCY = 40
+export const CEV_HTTP_CONCURRENCY = 40;
 
 export const CEV_HTML_CACHE_MAX_ENTRIES = 100;
 

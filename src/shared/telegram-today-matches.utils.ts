@@ -126,10 +126,10 @@ function formatRosterTable(
   const rows = players
     .sort(
       (left, right) =>
-        (right.statisticsPlayer?.setsPlayed ?? -1) -
-          (left.statisticsPlayer?.setsPlayed ?? -1) ||
         (right.statisticsPlayer?.points ?? -1) -
           (left.statisticsPlayer?.points ?? -1) ||
+        getPlayerRating(right.statisticsPlayer) -
+          getPlayerRating(left.statisticsPlayer) ||
         left.player.fullName.localeCompare(right.player.fullName),
     )
     .map(({ player, shirtNumber, position, statisticsPlayer }) => {
@@ -156,6 +156,14 @@ function formatRosterTable(
         ].join('')
       : '<p><i>Состав в базе не найден.</i></p>',
   ].join('\n');
+}
+
+function getPlayerRating(
+  player: ITeamStatistics['players'][number] | undefined,
+): number {
+  return player?.points !== null && player?.setsPlayed
+    ? player.points / player.setsPlayed
+    : -1;
 }
 
 function formatRating(
