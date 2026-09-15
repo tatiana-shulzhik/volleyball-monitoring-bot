@@ -15,7 +15,7 @@ import {
 } from '../../interfaces/responses/match-player-monitoring.interface';
 import {
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
-  MATCH_ROSTER_CHECK_WINDOW_MINUTES,
+  MATCH_MONITORING_WINDOW_HOURS,
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
 } from '../../shared/consts/constants';
 import {
@@ -54,12 +54,10 @@ export class MatchRosterMonitoringService {
 
   async checkUpcomingMatchRosters(): Promise<number> {
     const now = new Date();
-    // Матч выбирается только в минуту проверки за 30 минут до начала.
+    // Заявка проверяется каждые 30 минут в течение 36 часов до начала матча.
     const matches = await this.matchesRepository.findCevMonitoredWithin(
-      new Date(
-        now.getTime() + (MATCH_ROSTER_CHECK_WINDOW_MINUTES - 1) * 60_000,
-      ),
-      new Date(now.getTime() + MATCH_ROSTER_CHECK_WINDOW_MINUTES * 60_000),
+      now,
+      new Date(now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 3_600_000),
     );
     const notifications = await this.processMatches(
       matches,

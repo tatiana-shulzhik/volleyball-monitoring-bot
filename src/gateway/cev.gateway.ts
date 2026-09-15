@@ -214,7 +214,7 @@ export class CevGateway {
     };
   }
 
-  async fetchPlayers(
+  async fetchPlayersFromMatchRosters(
     matches: MatchEntity[],
     birthYears = new Map<string, number>(),
   ): Promise<IFetchedPlayers> {
