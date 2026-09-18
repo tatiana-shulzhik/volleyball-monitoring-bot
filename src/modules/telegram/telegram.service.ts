@@ -116,6 +116,7 @@ export class TelegramService
     sourceCode: ESourceCode,
   ): Promise<void> {
     try {
+      const source = await this.sourcesRepository.findByCodeOrFail(sourceCode);
       const { html, matches } = await this.getTodayMatches(sourceCode);
       if (!html.trim()) return;
 
@@ -129,7 +130,12 @@ export class TelegramService
       await sendRichMessage('sendRichMessage', {
         chat_id: chatId,
         rich_message: { html },
-        reply_markup: createTodayMatchesKeyboard(matches).reply_markup,
+        reply_markup: createTodayMatchesKeyboard(
+          matches,
+          createLiveMatchesFooter(source, false, 0, false),
+          0,
+          sourceCode,
+        ).reply_markup,
       });
     } catch (error) {
       this.logger.error(
@@ -205,6 +211,16 @@ export class TelegramService
       );
     });
 
+    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.livePeriod, async (context) => {
+      await this.showLiveMatches(
+        context,
+        (context.match[2] as ESourceCode | undefined) ??
+          this.statisticsHandlers.getSelectedSource(context.chat?.id),
+        true,
+        Number(context.match[1]) as 0 | 1,
+      );
+    });
+
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveMatch, async (context) => {
       const matchRoster = await this.matchesService.getMatchRoster(
         Number(context.match[1]),
@@ -237,7 +253,11 @@ export class TelegramService
           homeStatistics,
           awayStatistics,
         ),
-        createLiveMatchRosterKeyboard(context.chat?.id !== this.config.groupId),
+        createLiveMatchRosterKeyboard(
+          context.chat?.id !== this.config.groupId,
+          Number(context.match[2] ?? 0) as 0 | 1,
+          context.match[3] as ESourceCode | undefined,
+        ),
       );
     });
 
@@ -286,6 +306,7 @@ export class TelegramService
     context: Context,
     sourceCode: ESourceCode,
     answerCallback = true,
+    dayOffset: 0 | 1 = 0,
   ): Promise<void> {
     const source = await this.sourcesRepository.findByCodeOrFail(sourceCode);
     if (answerCallback) await context.answerCbQuery();
@@ -293,10 +314,17 @@ export class TelegramService
     const message = context.callbackQuery?.message;
     if (!message) return;
 
-    const { html, matches } = await this.getTodayMatches(sourceCode);
+    const { html, matches } = await this.getTodayMatches(sourceCode, dayOffset);
     const keyboard = createTodayMatchesKeyboard(
       matches,
-      createLiveMatchesFooter(source, context.chat?.id !== this.config.groupId),
+      createLiveMatchesFooter(
+        source,
+        context.chat?.id !== this.config.groupId,
+        dayOffset,
+        context.chat?.id !== this.config.groupId,
+      ),
+      dayOffset,
+      sourceCode,
     );
     await editTelegramRichMessage(context, html, keyboard);
   }
@@ -467,16 +495,22 @@ export class TelegramService
     );
   }
 
-  private async getTodayMatches(sourceCode: ESourceCode): Promise<{
+  private async getTodayMatches(
+    sourceCode: ESourceCode,
+    dayOffset = 0,
+  ): Promise<{
     html: string;
     matches: Awaited<ReturnType<MatchesRepository['findScheduledBetween']>>;
   }> {
-    const { start, end } = getMoscowDayBounds();
+    const { start, end } = getMoscowDayBounds(new Date(), dayOffset);
     const matches = await this.matchesRepository.findScheduledBetween(
       start,
       end,
       sourceCode,
     );
-    return { html: formatTodayMatches(matches, sourceCode), matches };
+    return {
+      html: formatTodayMatches(matches, sourceCode, dayOffset),
+      matches,
+    };
   }
 }
