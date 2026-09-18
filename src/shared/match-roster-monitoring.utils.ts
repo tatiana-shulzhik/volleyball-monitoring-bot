@@ -13,6 +13,7 @@ import { ILiveLineupMonitoringMessageData } from '../interfaces/requests/live-li
 import { IStartingLineupMonitoringMessageData } from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
+import { formatPlayerPosition } from './player-statistics.utils';
 
 export function getTeamData<T>(
   teamId: number,
@@ -152,7 +153,7 @@ function formatMatchRosterTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${escapeHtml(player.position ?? '—')}</td>` +
+        `<td align="center">${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
 
@@ -228,7 +229,7 @@ function formatStartingLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${escapeHtml(position)}</td>` +
+        `<td align="center">${formatPlayerPosition(position)}</td>` +
         `<td align="center">${status}</td>` +
         '</tr>'
       );
@@ -292,7 +293,7 @@ function formatLiveLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${escapeHtml(position)}</td>` +
+        `<td align="center">${formatPlayerPosition(position)}</td>` +
         `<td align="center">${status}</td>` +
         '</tr>'
       );
