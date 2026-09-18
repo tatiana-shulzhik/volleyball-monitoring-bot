@@ -11,7 +11,10 @@ import {
 } from './consts/constants';
 import { ESourceCode } from './enums';
 
-export function getMoscowDayBounds(date = new Date()): {
+export function getMoscowDayBounds(
+  date = new Date(),
+  dayOffset = 0,
+): {
   start: Date;
   end: Date;
 } {
@@ -28,21 +31,23 @@ export function getMoscowDayBounds(date = new Date()): {
   const day = value('day');
 
   return {
-    start: new Date(Date.UTC(year, month - 1, day - 1, 21)),
-    end: new Date(Date.UTC(year, month - 1, day, 21)),
+    start: new Date(Date.UTC(year, month - 1, day - 1 + dayOffset, 21)),
+    end: new Date(Date.UTC(year, month - 1, day + dayOffset, 21)),
   };
 }
 
 export function formatTodayMatches(
   matches: MatchEntity[],
   sourceCode?: ESourceCode,
+  dayOffset = 0,
 ): string {
+  const period = dayOffset === 0 ? 'сегодня' : 'завтра';
   if (!matches.length) {
     const source = sourceCode
       ? `<p>📡 ${escapeHtml(SOURCE_BUTTONS[sourceCode])}</p>`
       : '';
 
-    return `${source}<p><b>🔴 На сегодня запланированных матчей нет.</b></p>`;
+    return `${source}<p><b>🔴 На ${period} запланированных матчей нет.</b></p>`;
   }
 
   const source = sourceCode
@@ -51,7 +56,7 @@ export function formatTodayMatches(
 
   return [
     source,
-    '<p><b>🔴 Матчи сегодня:</b></p>',
+    `<p><b>🔴 Матчи ${period}:</b></p>`,
     '<p>Выберите матч в нужном чемпионате:</p>',
   ].join('');
 }

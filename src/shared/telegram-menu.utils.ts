@@ -31,6 +31,8 @@ export function createSourceButton() {
 export function createTodayMatchesKeyboard(
   matches: MatchEntity[],
   footer: ReturnType<typeof Markup.button.callback>[][] = [],
+  dayOffset = 0,
+  sourceCode?: ESourceCode,
 ) {
   const groups = new Map<string, MatchEntity[]>();
   for (const match of matches) {
@@ -53,7 +55,7 @@ export function createTodayMatchesKeyboard(
       ...group.map((match) => [
         Markup.button.callback(
           formatTodayMatchButton(match),
-          TELEGRAM_CALLBACKS.live.match(match.id),
+          TELEGRAM_CALLBACKS.live.match(match.id, dayOffset, sourceCode),
         ),
       ]),
     );
@@ -65,16 +67,34 @@ export function createTodayMatchesKeyboard(
 export function createLiveMatchesFooter(
   source: SourcesEntity,
   showNavigation = true,
+  dayOffset: 0 | 1 = 0,
+  showNotification = true,
 ): ReturnType<typeof Markup.button.callback>[][] {
   return [
     [
       Markup.button.callback(
-        source.liveMatchesNotificationEnabled
-          ? '🔕 Выключить автоотправку'
-          : '🔔 Включить автоотправку в 00:00',
-        TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(source.code),
+        `${dayOffset === 0 ? '• ' : ''}Сегодня`,
+        TELEGRAM_CALLBACKS.live.period(0, source.code),
+      ),
+      Markup.button.callback(
+        `${dayOffset === 1 ? '• ' : ''}Завтра`,
+        TELEGRAM_CALLBACKS.live.period(1, source.code),
       ),
     ],
+    ...(showNotification
+      ? [
+          [
+            Markup.button.callback(
+              source.liveMatchesNotificationEnabled
+                ? '🔕 Выключить автоотправку'
+                : '🔔 Включить автоотправку в 00:00',
+              TELEGRAM_CALLBACKS.menu.toggleLiveMatchesNotification(
+                source.code,
+              ),
+            ),
+          ],
+        ]
+      : []),
     ...(showNavigation
       ? [
           [
@@ -86,10 +106,17 @@ export function createLiveMatchesFooter(
   ];
 }
 
-export function createLiveMatchRosterKeyboard(showSourceButton = true) {
+export function createLiveMatchRosterKeyboard(
+  showSourceButton = true,
+  dayOffset: 0 | 1 = 0,
+  sourceCode?: ESourceCode,
+) {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback('⬅️ Назад', TELEGRAM_CALLBACKS.menu.live),
+      Markup.button.callback(
+        '⬅️ Назад',
+        TELEGRAM_CALLBACKS.live.period(dayOffset, sourceCode),
+      ),
       ...(showSourceButton ? [createSourceButton()] : []),
     ],
   ]);
