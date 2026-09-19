@@ -25,6 +25,28 @@ export class RedisCacheService {
     }
   }
 
+  async getMany<T>(keys: string[]): Promise<Map<string, T>> {
+    if (!keys.length || this.client.status !== 'ready') {
+      return new Map();
+    }
+
+    try {
+      const values = await this.client.mget(...keys);
+      const result = new Map<string, T>();
+
+      values.forEach((value, index) => {
+        if (value !== null) {
+          result.set(keys[index], JSON.parse(value) as T);
+        }
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.warn(`Redis MGET failed: ${this.getErrorMessage(error)}`);
+      return new Map();
+    }
+  }
+
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     if (this.client.status !== 'ready') {
       return;
@@ -34,6 +56,33 @@ export class RedisCacheService {
       await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
     } catch (error) {
       this.logger.warn(`Redis SET failed: ${this.getErrorMessage(error)}`);
+    }
+  }
+
+  async setMany<T>(
+    entries: Array<{ key: string; value: T; ttlSeconds: number }>,
+  ): Promise<void> {
+    if (!entries.length || this.client.status !== 'ready') {
+      return;
+    }
+
+    try {
+      const pipeline = this.client.pipeline();
+      entries.forEach(({ key, value, ttlSeconds }) =>
+        pipeline.set(key, JSON.stringify(value), 'EX', ttlSeconds),
+      );
+      const results = await pipeline.exec();
+      const failed = results?.find(([error]) => error);
+
+      if (failed?.[0]) {
+        this.logger.warn(
+          `Redis pipeline SET failed: ${this.getErrorMessage(failed[0])}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Redis pipeline SET failed: ${this.getErrorMessage(error)}`,
+      );
     }
   }
 

@@ -146,13 +146,18 @@ export class MatchRosterMonitoringService {
       status: ERosterMonitoringStatus;
       monitoring: IPlayerMonitoringState;
     }> = [];
-
-    for (const { subscription, teamData: teamRoster } of getMonitoredPlayers(
+    const monitoredPlayers = getMonitoredPlayers(
       match,
       context,
       roster.home,
       roster.away,
-    )) {
+    );
+    const statesByPlayerId = await this.getStates(
+      match,
+      monitoredPlayers.map(({ subscription }) => subscription.playerId),
+    );
+
+    for (const { subscription, teamData: teamRoster } of monitoredPlayers) {
       if (!teamRoster.length) continue;
 
       const status = teamRoster.some(
@@ -160,7 +165,7 @@ export class MatchRosterMonitoringService {
       )
         ? ERosterMonitoringStatus.Present
         : ERosterMonitoringStatus.Absent;
-      const monitoring = await this.getState(match, subscription.playerId);
+      const monitoring = statesByPlayerId.get(subscription.playerId) ?? {};
       if (monitoring.rosterStatus === status) continue;
 
       changedPlayers.push({
@@ -237,10 +242,10 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    for (const { playerId, status, monitoring } of changedPlayers) {
+    changedPlayers.forEach(({ status, monitoring }) => {
       monitoring.rosterStatus = status;
-      await this.saveState(match, playerId, monitoring, now);
-    }
+    });
+    await this.saveStates(match, changedPlayers, now);
 
     return 1;
   }
@@ -250,12 +255,22 @@ export class MatchRosterMonitoringService {
   ): Promise<number> {
     const { match, lineup, context, now } = data;
     const changedPlayers: IStartingLineupMonitoringChange[] = [];
+    const monitoredPlayers = getMonitoredPlayers(
+      match,
+      context,
+      lineup.home,
+      lineup.away,
+    );
+    const statesByPlayerId = await this.getStates(
+      match,
+      monitoredPlayers.map(({ subscription }) => subscription.playerId),
+    );
 
     for (const {
       subscription,
       relation,
       teamData: teamLineup,
-    } of getMonitoredPlayers(match, context, lineup.home, lineup.away)) {
+    } of monitoredPlayers) {
       if (!teamLineup.some((player) => player.setMarks.some(isActiveMark))) {
         continue;
       }
@@ -269,7 +284,7 @@ export class MatchRosterMonitoringService {
         player && isStarter(player.setMarks[0])
           ? EStartingLineupMonitoringStatus.Starter
           : EStartingLineupMonitoringStatus.Bench;
-      const monitoring = await this.getState(match, subscription.playerId);
+      const monitoring = statesByPlayerId.get(subscription.playerId) ?? {};
       if (monitoring.startingStatus === status) continue;
 
       changedPlayers.push({
@@ -303,10 +318,10 @@ export class MatchRosterMonitoringService {
     );
     if (!sent) return 0;
 
-    for (const { playerId, status, monitoring } of changedPlayers) {
+    changedPlayers.forEach(({ status, monitoring }) => {
       monitoring.startingStatus = status;
-      await this.saveState(match, playerId, monitoring, now);
-    }
+    });
+    await this.saveStates(match, changedPlayers, now);
 
     return 1;
   }
@@ -321,11 +336,22 @@ export class MatchRosterMonitoringService {
     if (!currentSet) return 0;
 
     const changedPlayers: ILivePlayerMonitoringChange[] = [];
+    const initialStates: ILivePlayerMonitoringChange[] = [];
+    const monitoredPlayers = getMonitoredPlayers(
+      match,
+      context,
+      lineup.home,
+      lineup.away,
+    );
+    const statesByPlayerId = await this.getStates(
+      match,
+      monitoredPlayers.map(({ subscription }) => subscription.playerId),
+    );
     for (const {
       subscription,
       relation,
       teamData: teamLineup,
-    } of getMonitoredPlayers(match, context, lineup.home, lineup.away)) {
+    } of monitoredPlayers) {
       const player = findLineupPlayer(
         teamLineup,
         subscription.player.fullName,
@@ -335,7 +361,7 @@ export class MatchRosterMonitoringService {
       const status = isActiveMark(mark)
         ? ELivePlayerMonitoringStatus.Active
         : ELivePlayerMonitoringStatus.Inactive;
-      const monitoring = await this.getState(match, subscription.playerId);
+      const monitoring = statesByPlayerId.get(subscription.playerId) ?? {};
 
       // Первый live-снимок задаёт исходное состояние и не считается заменой.
       if (!monitoring.liveStatus) {
@@ -347,7 +373,11 @@ export class MatchRosterMonitoringService {
           });
         } else {
           monitoring.liveStatus = status;
-          await this.saveState(match, subscription.playerId, monitoring, now);
+          initialStates.push({
+            playerId: subscription.playerId,
+            status,
+            monitoring,
+          });
         }
         continue;
       }
@@ -359,6 +389,7 @@ export class MatchRosterMonitoringService {
         monitoring,
       });
     }
+    await this.saveStates(match, initialStates, now);
     if (!changedPlayers.length) return 0;
 
     const notificationKey = this.getLiveNotificationKey(
@@ -406,10 +437,10 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    for (const { playerId, status, monitoring } of changedPlayers) {
+    changedPlayers.forEach(({ status, monitoring }) => {
       monitoring.liveStatus = status;
-      await this.saveState(match, playerId, monitoring, now);
-    }
+    });
+    await this.saveStates(match, changedPlayers, now);
 
     return 1;
   }
@@ -503,13 +534,22 @@ export class MatchRosterMonitoringService {
     };
   }
 
-  private getState(
+  private async getStates(
     match: MatchEntity,
-    playerId: number,
-  ): Promise<IPlayerMonitoringState> {
-    return this.cache
-      .get<IPlayerMonitoringState>(getPlayerMonitoringStateKey(match, playerId))
-      .then((state) => state ?? {});
+    playerIds: number[],
+  ): Promise<Map<number, IPlayerMonitoringState>> {
+    const uniquePlayerIds = [...new Set(playerIds)];
+    const keys = uniquePlayerIds.map((playerId) =>
+      getPlayerMonitoringStateKey(match, playerId),
+    );
+    const statesByKey = await this.cache.getMany<IPlayerMonitoringState>(keys);
+
+    return new Map(
+      uniquePlayerIds.flatMap((playerId, index) => {
+        const state = statesByKey.get(keys[index]);
+        return state ? [[playerId, state] as const] : [];
+      }),
+    );
   }
 
   private getRosterNotificationKey(
@@ -562,16 +602,21 @@ export class MatchRosterMonitoringService {
     return `match-monitoring:${match.id}:live-notification:${currentSet}:${digest}`;
   }
 
-  private saveState(
+  private saveStates(
     match: MatchEntity,
-    playerId: number,
-    state: IPlayerMonitoringState,
+    states: Array<{
+      playerId: number;
+      monitoring: IPlayerMonitoringState;
+    }>,
     now: Date,
   ): Promise<void> {
-    return this.cache.set(
-      getPlayerMonitoringStateKey(match, playerId),
-      state,
-      getPlayerMonitoringStateTtl(match, now),
+    const ttlSeconds = getPlayerMonitoringStateTtl(match, now);
+    return this.cache.setMany(
+      states.map(({ playerId, monitoring }) => ({
+        key: getPlayerMonitoringStateKey(match, playerId),
+        value: monitoring,
+        ttlSeconds,
+      })),
     );
   }
 }
