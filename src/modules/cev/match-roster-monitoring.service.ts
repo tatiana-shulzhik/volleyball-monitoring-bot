@@ -310,6 +310,22 @@ export class MatchRosterMonitoringService {
     }
     if (!changedPlayers.length) return 0;
 
+    const notificationKey = this.getLiveNotificationKey(
+      match,
+      lineup,
+      currentSet,
+    );
+    const acquired = await this.cache.acquire(
+      notificationKey,
+      getPlayerMonitoringStateTtl(match, now),
+    );
+    if (!acquired) {
+      this.logger.debug(
+        `Duplicate live notification skipped for CEV match ${match.externalId ?? match.id}`,
+      );
+      return 0;
+    }
+
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatLiveMonitoringMessage({
         homeTeamName: match.homeTeam.name,
@@ -332,7 +348,10 @@ export class MatchRosterMonitoringService {
           : undefined,
       }),
     );
-    if (!sent) return 0;
+    if (!sent) {
+      await this.cache.delete(notificationKey);
+      return 0;
+    }
 
     for (const { playerId, status, monitoring } of changedPlayers) {
       monitoring.liveStatus = status;
@@ -463,6 +482,31 @@ export class MatchRosterMonitoringService {
     const digest = createHash('sha256').update(signature).digest('hex');
 
     return `match-monitoring:${match.id}:roster-notification:${digest}`;
+  }
+
+  private getLiveNotificationKey(
+    match: MatchEntity,
+    lineup: IProcessLineupMatchParams['lineup'],
+    currentSet: number,
+  ): string {
+    const signature = [lineup.home, lineup.away]
+      .map((team) =>
+        [...team]
+          .sort(
+            (left, right) =>
+              (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
+              left.playerName.localeCompare(right.playerName),
+          )
+          .map(
+            ({ playerName, shirtNumber, setMarks }) =>
+              `${playerName}:${shirtNumber ?? ''}:${setMarks[currentSet - 1] ?? ''}`,
+          )
+          .join(','),
+      )
+      .join('|');
+    const digest = createHash('sha256').update(signature).digest('hex');
+
+    return `match-monitoring:${match.id}:live-notification:${currentSet}:${digest}`;
   }
 
   private saveState(
