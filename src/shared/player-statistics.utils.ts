@@ -673,7 +673,9 @@ function formatPlayerAttacks(
     : '—';
 }
 
-function formatPlayerPosition(position: string | null): string {
+export function formatPlayerPosition(
+  position: string | null | undefined,
+): string {
   if (!position) {
     return '—';
   }

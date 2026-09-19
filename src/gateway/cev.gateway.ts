@@ -511,6 +511,39 @@ export class CevGateway {
     return results;
   }
 
+  async fetchLiveMatchData(matches: MatchEntity[]): Promise<
+    PromiseSettledResult<{
+      lineup: IFetchedMatchLineup;
+      attackStatistics: IFetchedMatchAttackStatistics;
+    }>[]
+  > {
+    return this.mapSettled({
+      items: matches,
+      mapper: async (match) => {
+        if (!match.externalId) {
+          throw new Error(`CEV match ${match.id} has no external ID`);
+        }
+        const html = await this.http.get(
+          createMatchStatisticsUrl(match.externalId),
+        );
+
+        return {
+          lineup: {
+            matchExternalId: match.externalId,
+            home: extractMatchLineup(html, 'casa'),
+            away: extractMatchLineup(html, 'ospiti'),
+          },
+          attackStatistics: {
+            matchExternalId: match.externalId,
+            home: extractPlayerAttackStatistics(html, 'casa'),
+            away: extractPlayerAttackStatistics(html, 'ospiti'),
+          },
+        };
+      },
+      concurrency: CEV_HTTP_CONCURRENCY,
+    });
+  }
+
   private fetchCalendarYear(
     initialHtml: string,
     year: number,

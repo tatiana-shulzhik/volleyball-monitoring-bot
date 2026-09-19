@@ -81,7 +81,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     }, false);
   }
 
-  @Cron(CronExpression.EVERY_30_MINUTES, {
+  @Cron(CronExpression.EVERY_10_MINUTES, {
     name: 'upcoming-match-roster-monitoring',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -90,11 +90,11 @@ export class SynchronizationService implements OnApplicationBootstrap {
     await this.matchRosterMonitoringService.checkUpcomingMatchRosters();
   }
 
-  @Cron(CronExpression.EVERY_MINUTE, {
-    name: 'match-starting-lineup-check-10-minutes-before-start',
-    timeZone: MOSCOW_TIME_ZONE,
-    waitForCompletion: true,
-  })
+  // @Cron(CronExpression.EVERY_MINUTE, {
+  //   name: 'match-starting-lineup-check-10-minutes-before-start',
+  //   timeZone: MOSCOW_TIME_ZONE,
+  //   waitForCompletion: true,
+  // })
   async checkStartingLineupsByCron(): Promise<void> {
     await this.matchRosterMonitoringService.checkStartingLineups();
   }

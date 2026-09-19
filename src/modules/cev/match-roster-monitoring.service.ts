@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
+import { IFetchedMatchAttackStatistics } from '../../interfaces/requests/player-statistics.interface';
 import {
   ILivePlayerMonitoringChange,
   IMonitoringContext,
@@ -113,9 +115,15 @@ export class MatchRosterMonitoringService {
     const notifications = await this.processMatches(
       matches,
       now,
-      (items) => this.gateway.fetchMatchLineups(items),
-      (match, lineup, context, now) =>
-        this.processLiveMatch({ match, lineup, context, now }),
+      (items) => this.gateway.fetchLiveMatchData(items),
+      (match, data, context, now) =>
+        this.processLiveMatch({
+          match,
+          lineup: data.lineup,
+          attackStatistics: data.attackStatistics,
+          context,
+          now,
+        }),
     );
     if (notifications) {
       this.logger.log(`Sent ${notifications} live monitoring notification(s)`);
@@ -160,6 +168,18 @@ export class MatchRosterMonitoringService {
 
     if (!changedPlayers.length) return 0;
 
+    const notificationKey = this.getRosterNotificationKey(match, roster);
+    const acquired = await this.cache.acquire(
+      notificationKey,
+      getPlayerMonitoringStateTtl(match, now),
+    );
+    if (!acquired) {
+      this.logger.debug(
+        `Duplicate roster notification skipped for CEV match ${match.externalId ?? match.id}`,
+      );
+      return 0;
+    }
+
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatMatchRosterMonitoringMessage({
         homeTeamName: match.homeTeam.name,
@@ -170,7 +190,10 @@ export class MatchRosterMonitoringService {
         checkedAt: now,
       }),
     );
-    if (!sent) return 0;
+    if (!sent) {
+      await this.cache.delete(notificationKey);
+      return 0;
+    }
 
     for (const { playerId, status, monitoring } of changedPlayers) {
       monitoring.rosterStatus = status;
@@ -247,9 +270,11 @@ export class MatchRosterMonitoringService {
   }
 
   private async processLiveMatch(
-    data: IProcessLineupMatchParams,
+    data: IProcessLineupMatchParams & {
+      attackStatistics: IFetchedMatchAttackStatistics;
+    },
   ): Promise<number> {
-    const { match, lineup, context, now } = data;
+    const { match, lineup, attackStatistics, context, now } = data;
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (!currentSet) return 0;
 
@@ -272,8 +297,16 @@ export class MatchRosterMonitoringService {
 
       // Первый live-снимок задаёт исходное состояние и не считается заменой.
       if (!monitoring.liveStatus) {
-        monitoring.liveStatus = status;
-        await this.saveState(match, subscription.playerId, monitoring, now);
+        if (status === ELivePlayerMonitoringStatus.Active) {
+          changedPlayers.push({
+            playerId: subscription.playerId,
+            status,
+            monitoring,
+          });
+        } else {
+          monitoring.liveStatus = status;
+          await this.saveState(match, subscription.playerId, monitoring, now);
+        }
         continue;
       }
       if (monitoring.liveStatus === status) continue;
@@ -286,12 +319,30 @@ export class MatchRosterMonitoringService {
     }
     if (!changedPlayers.length) return 0;
 
+    const notificationKey = this.getLiveNotificationKey(
+      match,
+      lineup,
+      currentSet,
+    );
+    const acquired = await this.cache.acquire(
+      notificationKey,
+      getPlayerMonitoringStateTtl(match, now),
+    );
+    if (!acquired) {
+      this.logger.debug(
+        `Duplicate live notification skipped for CEV match ${match.externalId ?? match.id}`,
+      );
+      return 0;
+    }
+
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatLiveMonitoringMessage({
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
         home: lineup.home,
         away: lineup.away,
+        homeAttackStatistics: attackStatistics.home,
+        awayAttackStatistics: attackStatistics.away,
         homePositionsByShirtNumber: this.getPositionsByShirtNumber(
           match.homeTeam.id,
           match.league.id,
@@ -308,7 +359,10 @@ export class MatchRosterMonitoringService {
           : undefined,
       }),
     );
-    if (!sent) return 0;
+    if (!sent) {
+      await this.cache.delete(notificationKey);
+      return 0;
+    }
 
     for (const { playerId, status, monitoring } of changedPlayers) {
       monitoring.liveStatus = status;
@@ -414,6 +468,56 @@ export class MatchRosterMonitoringService {
     return this.cache
       .get<IPlayerMonitoringState>(getPlayerMonitoringStateKey(match, playerId))
       .then((state) => state ?? {});
+  }
+
+  private getRosterNotificationKey(
+    match: MatchEntity,
+    roster: IProcessRosterMatchParams['roster'],
+  ): string {
+    const signature = [roster.home, roster.away]
+      .map((team) =>
+        [...team]
+          .sort(
+            (left, right) =>
+              left.externalId.localeCompare(right.externalId) ||
+              (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
+              (left.position ?? '').localeCompare(right.position ?? ''),
+          )
+          .map(
+            ({ externalId, shirtNumber, position }) =>
+              `${externalId}:${shirtNumber ?? ''}:${position ?? ''}`,
+          )
+          .join(','),
+      )
+      .join('|');
+    const digest = createHash('sha256').update(signature).digest('hex');
+
+    return `match-monitoring:${match.id}:roster-notification:${digest}`;
+  }
+
+  private getLiveNotificationKey(
+    match: MatchEntity,
+    lineup: IProcessLineupMatchParams['lineup'],
+    currentSet: number,
+  ): string {
+    const signature = [lineup.home, lineup.away]
+      .map((team) =>
+        [...team]
+          .sort(
+            (left, right) =>
+              (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
+              left.playerName.localeCompare(right.playerName),
+          )
+          .map(
+            ({ playerName, shirtNumber, setMarks }) =>
+              `${playerName}:${shirtNumber ?? ''}:${setMarks[currentSet - 1] ?? ''}`,
+          )
+          .join(','),
+      )
+      .join('|');
+    const digest = createHash('sha256').update(signature).digest('hex');
+
+    return `match-monitoring:${match.id}:live-notification:${currentSet}:${digest}`;
   }
 
   private saveState(
