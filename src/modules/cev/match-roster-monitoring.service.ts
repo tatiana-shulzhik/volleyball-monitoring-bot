@@ -288,8 +288,16 @@ export class MatchRosterMonitoringService {
 
       // Первый live-снимок задаёт исходное состояние и не считается заменой.
       if (!monitoring.liveStatus) {
-        monitoring.liveStatus = status;
-        await this.saveState(match, subscription.playerId, monitoring, now);
+        if (status === ELivePlayerMonitoringStatus.Active) {
+          changedPlayers.push({
+            playerId: subscription.playerId,
+            status,
+            monitoring,
+          });
+        } else {
+          monitoring.liveStatus = status;
+          await this.saveState(match, subscription.playerId, monitoring, now);
+        }
         continue;
       }
       if (monitoring.liveStatus === status) continue;
