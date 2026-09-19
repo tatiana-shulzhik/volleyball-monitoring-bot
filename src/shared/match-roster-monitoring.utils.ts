@@ -14,7 +14,11 @@ import { ILiveLineupMonitoringMessageData } from '../interfaces/requests/live-li
 import { IStartingLineupMonitoringMessageData } from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
-import { formatPlayerPosition } from './player-statistics.utils';
+import {
+  formatPlayerPosition,
+  normalizePlayerName as normalizeStatisticsPlayerName,
+} from './player-statistics.utils';
+import type { ITeamPlayerStatistics } from '../interfaces/responses/team-statistics.interface';
 
 export function getTeamData<T>(
   teamId: number,
@@ -61,6 +65,70 @@ export function addRosterPositions(
       context.positionsByTeamAndPlayer.get(`${teamId}:${player.externalId}`) ??
       player.position,
   }));
+}
+
+export function addRosterStatistics(
+  roster: ICevMatchRosterPlayer[],
+  statistics: ITeamPlayerStatistics[] | undefined,
+): ICevMatchRosterPlayer[] {
+  if (!statistics) return roster;
+
+  const statisticsByName = new Map<string, ITeamPlayerStatistics[]>();
+  for (const item of statistics) {
+    const name = normalizeStatisticsPlayerName(item.fullName);
+    const items = statisticsByName.get(name) ?? [];
+    items.push(item);
+    statisticsByName.set(name, items);
+  }
+
+  return roster.map((player) => {
+    const matched = statisticsByName
+      .get(normalizeStatisticsPlayerName(player.playerName))
+      ?.find(
+        (item) =>
+          player.shirtNumber === null ||
+          item.shirtNumber === null ||
+          item.shirtNumber === player.shirtNumber,
+      );
+
+    return matched
+      ? {
+          ...player,
+          statistics: {
+            points: matched.points,
+            setsPlayed: matched.setsPlayed,
+            attackAttempts: matched.attackAttempts,
+            successfulAttacks: matched.successfulAttacks,
+          },
+        }
+      : player;
+  });
+}
+
+export function getMonitoredRoster(
+  monitored: IMonitoredPlayer<ICevMatchRosterPlayer[]>[],
+  teamId: number,
+  statistics: ITeamPlayerStatistics[] | undefined,
+): ICevMatchRosterPlayer[] {
+  const roster = monitored
+    .filter(({ relation }) => relation.team.id === teamId)
+    .map(({ subscription, relation, teamData }) => {
+      const player = teamData.find(
+        ({ externalId }) => externalId === subscription.player.externalId,
+      );
+
+      return (
+        player ?? {
+          externalId: subscription.player.externalId,
+          playerName: subscription.player.fullName,
+          shirtNumber: relation.shirtNumber,
+          position: relation.position ?? undefined,
+          isInRoster: false,
+        }
+      );
+    });
+
+  return addRosterStatistics(roster, statistics);
 }
 
 /** Формирует ключ Redis для состояния игрока в матче. */
@@ -133,6 +201,23 @@ export function formatMatchRosterMonitoringMessage(
     '<p><b>🏐 Заявка на матч</b></p>',
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     `<p>Проверка: за ${escapeHtml(timeUntilMatch)} до начала</p>`,
+    '<p><b>Отслеживаемые игроки</b></p>',
+    data.monitoredHome.length
+      ? formatMatchRosterTable(data.homeTeamName, data.monitoredHome)
+      : '',
+    data.monitoredAway.length
+      ? formatMatchRosterTable(data.awayTeamName, data.monitoredAway)
+      : '',
+  ].join('');
+}
+
+export function formatFullMatchRosterMonitoringMessage(
+  data: IMatchRosterMonitoringMessageData,
+): string {
+  return [
+    '<p><b>🏐 Заявка на матч</b></p>',
+    `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
+    '<p><b>Заявка на матч</b></p>',
     formatMatchRosterTable(data.homeTeamName, data.home),
     formatMatchRosterTable(data.awayTeamName, data.away),
   ].join('');
@@ -145,6 +230,7 @@ function formatMatchRosterTable(
   const rows = [...roster]
     .sort(
       (left, right) =>
+        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
         (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.playerName.localeCompare(right.playerName),
@@ -154,6 +240,9 @@ function formatMatchRosterTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td align="center">${player.isInRoster === false ? '🔴' : '🟢'}</td>` +
+        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
+        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
@@ -163,12 +252,37 @@ function formatMatchRosterTable(
     rows.length
       ? [
           '<table bordered striped>',
-          '<tr><th>№</th><th>Игрок</th><th>Поз.</th></tr>',
+          '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Рейтинг (очки/сеты)</th><th>Атака (успешные/попытки)</th><th>Поз.</th></tr>',
           ...rows,
           '</table>',
         ].join('')
       : '<p><i>Заявка пока не опубликована.</i></p>',
   ].join('');
+}
+
+function formatRosterPlayerRating(player: ICevMatchRosterPlayer): string {
+  const statistics = player.statistics;
+  if (
+    statistics?.points === null ||
+    statistics?.points === undefined ||
+    !statistics.setsPlayed
+  ) {
+    return '—';
+  }
+
+  return `${(statistics.points / statistics.setsPlayed).toFixed(2)} (${statistics.points}/${statistics.setsPlayed})`;
+}
+
+function formatRosterPlayerAttacks(player: ICevMatchRosterPlayer): string {
+  const statistics = player.statistics;
+  if (!statistics?.attackAttempts || statistics.successfulAttacks === null) {
+    return '—';
+  }
+
+  return `${statistics.successfulAttacks}/${statistics.attackAttempts} (${(
+    (statistics.successfulAttacks / statistics.attackAttempts) *
+    100
+  ).toFixed(0)}%)`;
 }
 
 export function formatStartingLineupMessage(

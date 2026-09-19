@@ -5,7 +5,7 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Context, Telegraf } from 'telegraf';
+import { Context, Markup, Telegraf } from 'telegraf';
 import { LessThan } from 'typeorm';
 import { TelegramConfig } from '../../configs/telegram.config';
 import { ChampionshipsEntity } from '../../databases/entities/championships.entity';
@@ -19,10 +19,12 @@ import { SeasonsRepository } from '../../databases/repositories/seasons.reposito
 import { SourcesRepository } from '../../databases/repositories/sources.repository';
 import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues.repository';
 import { TelegramAccessRepository } from '../../databases/repositories/telegram-access.repository';
+import { RedisCacheService } from '../../cache/redis-cache.service';
 import {
   AGGREGATED_SEASONS_COUNT,
   MOSCOW_TIME_ZONE,
   PREVIOUS_YEARS_COUNT,
+  ROSTER_NOTIFICATION_TTL_SECONDS,
 } from '../../shared/consts/constants';
 import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import { getErrorMessage } from '../../shared/error.utils';
@@ -39,11 +41,13 @@ import {
 } from '../../shared/telegram-menu.utils';
 import {
   editTelegramRichMessage,
+  getRosterDetailsKey,
   isTelegramMenuCommand,
 } from '../../shared/telegram.utils';
 import { TELEGRAM_MESSAGES } from './telegram.constants';
 import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { IFindRecentSeasonsFromParams } from '../../interfaces/requests/seasons.interface';
+import { IRosterNotificationViews } from '../../interfaces/requests/match-roster-monitoring.interface';
 import { MatchesService } from '../matches/matches.service';
 import { PlayersService } from '../players/players.service';
 import {
@@ -62,6 +66,7 @@ export class TelegramService
 
   constructor(
     private readonly config: TelegramConfig,
+    private readonly cache: RedisCacheService,
     private readonly statisticsHandlers: TelegramStatisticsHandlers,
     private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
@@ -145,7 +150,10 @@ export class TelegramService
     }
   }
 
-  async sendRosterMonitoringNotification(html: string): Promise<boolean> {
+  async sendRosterMonitoringNotification(
+    html: string,
+    details?: { fullHtml: string; matchId: number },
+  ): Promise<boolean> {
     try {
       const sendRichMessage = this.bot.telegram.callApi.bind(
         this.bot.telegram,
@@ -154,9 +162,27 @@ export class TelegramService
         payload: Record<string, unknown>,
       ) => Promise<unknown>;
 
+      if (details) {
+        await this.cache.set(
+          getRosterDetailsKey(details.matchId),
+          { watchedHtml: html, fullHtml: details.fullHtml },
+          ROSTER_NOTIFICATION_TTL_SECONDS,
+        );
+      }
+
       await sendRichMessage('sendRichMessage', {
         chat_id: this.config.groupId,
         rich_message: { html },
+        reply_markup: details
+          ? Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  'Заявка на матч',
+                  TELEGRAM_CALLBACKS.roster.all(details.matchId),
+                ),
+              ],
+            ]).reply_markup
+          : undefined,
       });
       return true;
     } catch (error) {
@@ -210,6 +236,25 @@ export class TelegramService
         this.statisticsHandlers.getSelectedSource(context.chat?.id),
       );
     });
+
+    this.bot.action(TELEGRAM_CALLBACK_PATTERNS.rosterAll, async (context) => {
+      await this.showRosterNotificationView(
+        context,
+        Number(context.match[1]),
+        'fullHtml',
+      );
+    });
+
+    this.bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.rosterWatched,
+      async (context) => {
+        await this.showRosterNotificationView(
+          context,
+          Number(context.match[1]),
+          'watchedHtml',
+        );
+      },
+    );
 
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.livePeriod, async (context) => {
       await this.showLiveMatches(
@@ -481,6 +526,39 @@ export class TelegramService
 
     return [...uniqueTeams.values()].sort((left, right) =>
       left.team.name.localeCompare(right.team.name),
+    );
+  }
+
+  private async showRosterNotificationView(
+    context: Context,
+    matchId: number,
+    view: keyof IRosterNotificationViews,
+  ): Promise<void> {
+    const details = await this.cache.get<IRosterNotificationViews>(
+      getRosterDetailsKey(matchId),
+    );
+    if (!details) {
+      await context.answerCbQuery('Детали заявки больше недоступны.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    const showFullRoster = view === 'fullHtml';
+    await context.answerCbQuery();
+    await editTelegramRichMessage(
+      context,
+      details[view],
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            showFullRoster ? 'Отслеживаемые игроки' : 'Заявка на матч',
+            showFullRoster
+              ? TELEGRAM_CALLBACKS.roster.watched(matchId)
+              : TELEGRAM_CALLBACKS.roster.all(matchId),
+          ),
+        ],
+      ]),
     );
   }
 

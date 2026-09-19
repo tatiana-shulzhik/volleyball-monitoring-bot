@@ -14,6 +14,13 @@ export interface ICevMatchRosterPlayer {
   playerName: string;
   shirtNumber: number | null;
   position?: string;
+  isInRoster?: boolean;
+  statistics?: {
+    points: number | null;
+    setsPlayed: number | null;
+    attackAttempts: number | null;
+    successfulAttacks: number | null;
+  };
 }
 
 export interface IFetchedMatchRoster {

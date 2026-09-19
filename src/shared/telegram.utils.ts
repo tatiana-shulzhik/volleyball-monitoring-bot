@@ -1,5 +1,9 @@
 import { Context, Markup } from 'telegraf';
 
+export function getRosterDetailsKey(matchId: number): string {
+  return `telegram:roster-details:${matchId}`;
+}
+
 export function isTelegramMenuCommand(context: Context): boolean {
   const text =
     context.message && 'text' in context.message
