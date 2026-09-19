@@ -37,6 +37,32 @@ export class RedisCacheService {
     }
   }
 
+  async acquire(key: string, ttlSeconds: number): Promise<boolean> {
+    if (this.client.status !== 'ready') {
+      return true;
+    }
+
+    try {
+      const result = await this.client.set(key, '1', 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch (error) {
+      this.logger.warn(`Redis acquire failed: ${this.getErrorMessage(error)}`);
+      return true;
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    if (this.client.status !== 'ready') {
+      return;
+    }
+
+    try {
+      await this.client.del(key);
+    } catch (error) {
+      this.logger.warn(`Redis DELETE failed: ${this.getErrorMessage(error)}`);
+    }
+  }
+
   async deleteByPattern(pattern: string): Promise<void> {
     if (this.client.status !== 'ready') {
       return;

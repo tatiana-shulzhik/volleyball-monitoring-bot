@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { CevGateway } from '../../gateway/cev.gateway';
@@ -160,6 +161,18 @@ export class MatchRosterMonitoringService {
 
     if (!changedPlayers.length) return 0;
 
+    const notificationKey = this.getRosterNotificationKey(match, roster);
+    const acquired = await this.cache.acquire(
+      notificationKey,
+      getPlayerMonitoringStateTtl(match, now),
+    );
+    if (!acquired) {
+      this.logger.debug(
+        `Duplicate roster notification skipped for CEV match ${match.externalId ?? match.id}`,
+      );
+      return 0;
+    }
+
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatMatchRosterMonitoringMessage({
         homeTeamName: match.homeTeam.name,
@@ -170,7 +183,10 @@ export class MatchRosterMonitoringService {
         checkedAt: now,
       }),
     );
-    if (!sent) return 0;
+    if (!sent) {
+      await this.cache.delete(notificationKey);
+      return 0;
+    }
 
     for (const { playerId, status, monitoring } of changedPlayers) {
       monitoring.rosterStatus = status;
@@ -414,6 +430,31 @@ export class MatchRosterMonitoringService {
     return this.cache
       .get<IPlayerMonitoringState>(getPlayerMonitoringStateKey(match, playerId))
       .then((state) => state ?? {});
+  }
+
+  private getRosterNotificationKey(
+    match: MatchEntity,
+    roster: IProcessRosterMatchParams['roster'],
+  ): string {
+    const signature = [roster.home, roster.away]
+      .map((team) =>
+        [...team]
+          .sort(
+            (left, right) =>
+              left.externalId.localeCompare(right.externalId) ||
+              (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
+              (left.position ?? '').localeCompare(right.position ?? ''),
+          )
+          .map(
+            ({ externalId, shirtNumber, position }) =>
+              `${externalId}:${shirtNumber ?? ''}:${position ?? ''}`,
+          )
+          .join(','),
+      )
+      .join('|');
+    const digest = createHash('sha256').update(signature).digest('hex');
+
+    return `match-monitoring:${match.id}:roster-notification:${digest}`;
   }
 
   private saveState(

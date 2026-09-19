@@ -293,8 +293,8 @@ function formatLiveLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${formatPlayerPosition(position)}</td>` +
         `<td align="center">${status}</td>` +
+        `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
     });
@@ -302,7 +302,7 @@ function formatLiveLineupTable(
   return [
     `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Поз.</th><th>Статус</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Поз.</th></tr>',
     ...rows,
     '</table>',
   ].join('');
