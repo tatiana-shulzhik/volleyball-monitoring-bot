@@ -1,10 +1,15 @@
-import { ICevMatchLineupPlayer } from './player-statistics.interface';
+import {
+  ICevMatchLineupPlayer,
+  ICevPlayerAttackStatistics,
+} from './player-statistics.interface';
 
 export interface ILiveLineupMonitoringMessageData {
   homeTeamName: string;
   awayTeamName: string;
   home: ICevMatchLineupPlayer[];
   away: ICevMatchLineupPlayer[];
+  homeAttackStatistics?: ICevPlayerAttackStatistics[];
+  awayAttackStatistics?: ICevPlayerAttackStatistics[];
   homePositionsByShirtNumber: Map<number, string>;
   awayPositionsByShirtNumber: Map<number, string>;
   currentSet: number;

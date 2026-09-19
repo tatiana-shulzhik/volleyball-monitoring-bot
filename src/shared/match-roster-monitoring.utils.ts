@@ -6,6 +6,7 @@ import {
 } from '../interfaces/responses/match-player-monitoring.interface';
 import {
   ICevMatchLineupPlayer,
+  ICevPlayerAttackStatistics,
   ICevMatchRosterPlayer,
 } from '../interfaces/requests/player-statistics.interface';
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
@@ -253,12 +254,14 @@ export function formatLiveMonitoringMessage(
     formatLiveLineupTable(
       data.homeTeamName,
       data.home,
+      data.homeAttackStatistics,
       data.homePositionsByShirtNumber,
       data.currentSet,
     ),
     formatLiveLineupTable(
       data.awayTeamName,
       data.away,
+      data.awayAttackStatistics,
       data.awayPositionsByShirtNumber,
       data.currentSet,
     ),
@@ -271,6 +274,7 @@ export function formatLiveMonitoringMessage(
 function formatLiveLineupTable(
   teamName: string,
   lineup: ICevMatchLineupPlayer[],
+  attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
 ): string {
@@ -278,14 +282,19 @@ function formatLiveLineupTable(
     { length: currentSet },
     (_, index) => `<th>С${index + 1}</th>`,
   );
-  const rows = [...lineup]
+  const rows = lineup
+    .map((player) => ({
+      player,
+      statistics: findLivePlayerStatistics(player, attackStatistics),
+    }))
     .sort(
       (left, right) =>
-        (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
-          (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
-        left.playerName.localeCompare(right.playerName),
+        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
+        (left.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
+        left.player.playerName.localeCompare(right.player.playerName),
     )
-    .map((player) => {
+    .map(({ player, statistics }) => {
       const statuses = Array.from(
         { length: currentSet },
         (_, index) =>
@@ -300,6 +309,8 @@ function formatLiveLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
+        `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
         statuses.join('') +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
@@ -309,12 +320,47 @@ function formatLiveLineupTable(
   return [
     `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th>' +
+    '<tr><th>№</th><th>Игрок</th><th>Рейтинг (очки/сеты)</th>' +
+      '<th>Атака (успешные/попытки)</th>' +
       setHeaders.join('') +
       '<th>Поз.</th></tr>',
     ...rows,
     '</table>',
   ].join('');
+}
+
+function findLivePlayerStatistics(
+  player: ICevMatchLineupPlayer,
+  statistics: ICevPlayerAttackStatistics[] | undefined,
+): ICevPlayerAttackStatistics | undefined {
+  if (!statistics) return undefined;
+
+  return statistics.find(
+    (item) =>
+      (player.shirtNumber === null ||
+        item.shirtNumber === player.shirtNumber) &&
+      normalizePlayerName(item.playerName) ===
+        normalizePlayerName(player.playerName),
+  );
+}
+
+function formatLivePlayerRating(
+  statistics: ICevPlayerAttackStatistics | undefined,
+): string {
+  if (!statistics?.setsPlayed) return '—';
+
+  return `${(statistics.points / statistics.setsPlayed).toFixed(2)} (${statistics.points}/${statistics.setsPlayed})`;
+}
+
+function formatLivePlayerAttacks(
+  statistics: ICevPlayerAttackStatistics | undefined,
+): string {
+  if (!statistics?.attempts) return '—';
+
+  return `${statistics.successful}/${statistics.attempts} (${(
+    (statistics.successful / statistics.attempts) *
+    100
+  ).toFixed(0)}%)`;
 }
 
 function formatLineupStatus(mark: string | undefined): string {

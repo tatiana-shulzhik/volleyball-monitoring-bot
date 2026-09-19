@@ -5,6 +5,7 @@ import { MatchEntity } from '../../databases/entities/match.entity';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
+import { IFetchedMatchAttackStatistics } from '../../interfaces/requests/player-statistics.interface';
 import {
   ILivePlayerMonitoringChange,
   IMonitoringContext,
@@ -114,9 +115,15 @@ export class MatchRosterMonitoringService {
     const notifications = await this.processMatches(
       matches,
       now,
-      (items) => this.gateway.fetchMatchLineups(items),
-      (match, lineup, context, now) =>
-        this.processLiveMatch({ match, lineup, context, now }),
+      (items) => this.gateway.fetchLiveMatchData(items),
+      (match, data, context, now) =>
+        this.processLiveMatch({
+          match,
+          lineup: data.lineup,
+          attackStatistics: data.attackStatistics,
+          context,
+          now,
+        }),
     );
     if (notifications) {
       this.logger.log(`Sent ${notifications} live monitoring notification(s)`);
@@ -263,9 +270,11 @@ export class MatchRosterMonitoringService {
   }
 
   private async processLiveMatch(
-    data: IProcessLineupMatchParams,
+    data: IProcessLineupMatchParams & {
+      attackStatistics: IFetchedMatchAttackStatistics;
+    },
   ): Promise<number> {
-    const { match, lineup, context, now } = data;
+    const { match, lineup, attackStatistics, context, now } = data;
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (!currentSet) return 0;
 
@@ -332,6 +341,8 @@ export class MatchRosterMonitoringService {
         awayTeamName: match.awayTeam.name,
         home: lineup.home,
         away: lineup.away,
+        homeAttackStatistics: attackStatistics.home,
+        awayAttackStatistics: attackStatistics.away,
         homePositionsByShirtNumber: this.getPositionsByShirtNumber(
           match.homeTeam.id,
           match.league.id,
