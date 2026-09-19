@@ -26,12 +26,15 @@ import {
 } from '../../shared/enums';
 import {
   addRosterPositions,
+  addRosterStatistics,
   findLineupPlayer,
   formatLiveMonitoringMessage,
+  formatFullMatchRosterMonitoringMessage,
   formatMatchRosterMonitoringMessage,
   formatStartingLineupMonitoringMessage,
   getCurrentSet,
   getMonitoredPlayers,
+  getMonitoredRoster,
   getPlayerMonitoringStateKey,
   getPlayerMonitoringStateTtl,
   isActiveMark,
@@ -41,6 +44,7 @@ import { MonitoringSubscriptionsService } from '../monitoring-subscriptions/moni
 import { TelegramService } from '../telegram/telegram.service';
 import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
+import { PlayersService } from '../players/players.service';
 
 /** Проверяет заявку, стартовый состав и live-статус игроков в матчах CEV. */
 @Injectable()
@@ -50,6 +54,7 @@ export class MatchRosterMonitoringService {
     private readonly matchesService: MatchesService,
     private readonly subscriptionsService: MonitoringSubscriptionsService,
     private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
+    private readonly playersService: PlayersService,
     private readonly gateway: CevGateway,
     private readonly telegramService: TelegramService,
     private readonly cache: RedisCacheService,
@@ -180,15 +185,52 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const sent = await this.telegramService.sendRosterMonitoringNotification(
-      formatMatchRosterMonitoringMessage({
-        homeTeamName: match.homeTeam.name,
-        awayTeamName: match.awayTeam.name,
-        home: addRosterPositions(roster.home, match.homeTeam.id, context),
-        away: addRosterPositions(roster.away, match.awayTeam.id, context),
-        scheduledAt: match.scheduledAt,
-        checkedAt: now,
+    const [homeStatistics, awayStatistics] = await Promise.all([
+      this.playersService.findTeamStatistics({
+        teamId: match.homeTeam.id,
+        leagueId: match.league.id,
       }),
+      this.playersService.findTeamStatistics({
+        teamId: match.awayTeam.id,
+        leagueId: match.league.id,
+      }),
+    ]);
+
+    const home = addRosterStatistics(
+      addRosterPositions(roster.home, match.homeTeam.id, context),
+      homeStatistics?.players,
+    );
+    const away = addRosterStatistics(
+      addRosterPositions(roster.away, match.awayTeam.id, context),
+      awayStatistics?.players,
+    );
+    const monitored = getMonitoredPlayers(match, context, home, away);
+    const monitoredHome = getMonitoredRoster(
+      monitored,
+      match.homeTeam.id,
+      homeStatistics?.players,
+    );
+    const monitoredAway = getMonitoredRoster(
+      monitored,
+      match.awayTeam.id,
+      awayStatistics?.players,
+    );
+    const message = {
+      homeTeamName: match.homeTeam.name,
+      awayTeamName: match.awayTeam.name,
+      home,
+      away,
+      monitoredHome,
+      monitoredAway,
+      scheduledAt: match.scheduledAt,
+      checkedAt: now,
+    };
+    const sent = await this.telegramService.sendRosterMonitoringNotification(
+      formatMatchRosterMonitoringMessage(message),
+      {
+        fullHtml: formatFullMatchRosterMonitoringMessage(message),
+        matchId: match.id,
+      },
     );
     if (!sent) {
       await this.cache.delete(notificationKey);

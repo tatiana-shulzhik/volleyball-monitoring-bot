@@ -12,6 +12,10 @@ export function parseCompetitionType(code: string): ECompetitionType {
 }
 
 export const TELEGRAM_CALLBACKS = {
+  roster: {
+    all: (matchId: number) => `roster:all:${matchId}`,
+    watched: (matchId: number) => `roster:watched:${matchId}`,
+  },
   live: {
     group: 'live:group',
     match: (matchId: number, dayOffset = 0, sourceCode?: ESourceCode) =>
@@ -159,6 +163,8 @@ export const TELEGRAM_CALLBACKS = {
 const COMPETITION_TYPE_PATTERN = '(c|n)';
 
 export const TELEGRAM_CALLBACK_PATTERNS = {
+  rosterAll: /^roster:all:(\d+)$/,
+  rosterWatched: /^roster:watched:(\d+)$/,
   liveGroup: /^live:group$/,
   liveMatch: new RegExp(
     `^live:match:(\\d+)(?::([01]))?(?::(${Object.values(ESourceCode).join('|')}))?$`,
