@@ -157,23 +157,13 @@ export class PlayerStatisticsService {
     await this.matchesRepository.updateExternalIds(
       [...externalIdsByMatchId].map(([id, externalId]) => ({ id, externalId })),
     );
-    if (rows.length) {
-      await this.matchAttacksRepository.useTransaction(async (manager) => {
-        await this.matchAttacksRepository.replaceMany(
-          [...loadedMatchIds],
-          rows,
-          manager,
-        );
-        await this.matchesRepository.markAttackStatisticsLoaded(
-          [...loadedMatchIds],
-          sourceUpdatedAt,
-          manager,
-        );
-      });
-      await this.cache.deleteByPattern(
-        `team-statistics:${ESourceCode.LegaVolley}:*`,
-      );
-    }
+    await this.replaceMatchStatistics({
+      rows,
+      replacedMatchIds: [...loadedMatchIds],
+      completedMatchIds: [...loadedMatchIds],
+      sourceCode: ESourceCode.LegaVolley,
+      sourceUpdatedAt,
+    });
 
     return rows.length;
   }
@@ -253,25 +243,48 @@ export class PlayerStatisticsService {
       }
     }
 
-    if (replacedMatchIds.length) {
-      await this.matchAttacksRepository.useTransaction(async (manager) => {
-        await this.matchAttacksRepository.replaceMany(
-          replacedMatchIds,
-          rows,
-          manager,
-        );
-        if (completedMatchIds.length) {
-          await this.matchesRepository.markAttackStatisticsLoaded(
-            completedMatchIds,
-            sourceUpdatedAt,
-            manager,
-          );
-        }
-      });
-      await this.cache.deleteByPattern(`team-statistics:${sourceCode}:*`);
-    }
+    await this.replaceMatchStatistics({
+      rows,
+      replacedMatchIds,
+      completedMatchIds,
+      sourceCode,
+      sourceUpdatedAt,
+    });
 
     return rows.length;
+  }
+
+  private async replaceMatchStatistics(data: {
+    rows: Partial<MatchPlayerAttackStatisticsEntity>[];
+    replacedMatchIds: number[];
+    completedMatchIds: number[];
+    sourceCode: ESourceCode;
+    sourceUpdatedAt: Date;
+  }): Promise<void> {
+    const {
+      rows,
+      replacedMatchIds,
+      completedMatchIds,
+      sourceCode,
+      sourceUpdatedAt,
+    } = data;
+    if (!rows.length || !replacedMatchIds.length) return;
+
+    await this.matchAttacksRepository.useTransaction(async (manager) => {
+      await this.matchAttacksRepository.replaceMany(
+        replacedMatchIds,
+        rows,
+        manager,
+      );
+      if (completedMatchIds.length) {
+        await this.matchesRepository.markAttackStatisticsLoaded(
+          completedMatchIds,
+          sourceUpdatedAt,
+          manager,
+        );
+      }
+    });
+    await this.cache.deleteByPattern(`team-statistics:${sourceCode}:*`);
   }
 
   findPendingLegaMatches(
