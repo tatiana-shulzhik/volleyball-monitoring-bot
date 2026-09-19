@@ -248,7 +248,7 @@ export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
   return [
-    `<p><b>🔄 Состав в текущем сете (${data.currentSet})</b></p>`,
+    `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     formatLiveLineupTable(
       data.homeTeamName,
@@ -274,6 +274,10 @@ function formatLiveLineupTable(
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
 ): string {
+  const setHeaders = Array.from(
+    { length: currentSet },
+    (_, index) => `<th>С${index + 1}</th>`,
+  );
   const rows = [...lineup]
     .sort(
       (left, right) =>
@@ -282,8 +286,11 @@ function formatLiveLineupTable(
         left.playerName.localeCompare(right.playerName),
     )
     .map((player) => {
-      const mark = player.setMarks[currentSet - 1] ?? '';
-      const status = formatLineupStatus(mark);
+      const statuses = Array.from(
+        { length: currentSet },
+        (_, index) =>
+          `<td align="center">${formatLineupStatus(player.setMarks[index])}</td>`,
+      );
       const position =
         player.shirtNumber === null
           ? '—'
@@ -293,7 +300,7 @@ function formatLiveLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${status}</td>` +
+        statuses.join('') +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
@@ -302,7 +309,9 @@ function formatLiveLineupTable(
   return [
     `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Поз.</th></tr>',
+    '<tr><th>№</th><th>Игрок</th>' +
+      setHeaders.join('') +
+      '<th>Поз.</th></tr>',
     ...rows,
     '</table>',
   ].join('');
