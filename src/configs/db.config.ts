@@ -41,6 +41,7 @@ import { ResetLegaVolleyInitialCatalogSync1760000023000 } from '../databases/mig
 import { CreateMonitoringSubscriptions1760000024000 } from '../databases/migrations/1760000024000-CreateMonitoringSubscriptions';
 import { ResetCevCatalog1760000025000 } from '../databases/migrations/1760000025000-ResetCevCatalog';
 import { DropMatchMonitoringStartedAt1760000026000 } from '../databases/migrations/1760000026000-DropMatchMonitoringStartedAt';
+import { AddQueryIndexes1760000027000 } from '../databases/migrations/1760000027000-AddQueryIndexes';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -114,6 +115,7 @@ export class DbConfig implements TypeOrmOptionsFactory {
         CreateMonitoringSubscriptions1760000024000,
         ResetCevCatalog1760000025000,
         DropMatchMonitoringStartedAt1760000026000,
+        AddQueryIndexes1760000027000,
       ],
     };
   }

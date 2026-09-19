@@ -20,11 +20,12 @@ export class MatchPlayerAttackStatisticsEntity {
   @JoinColumn({ name: 'match_id' })
   match: MatchEntity;
 
-  @Index()
+  @Index('IDX_match_attack_stats_team')
   @ManyToOne(() => PlayersEntity, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'player_id' })
   player: PlayersEntity;
 
+  @Index()
   @ManyToOne(() => TeamEntity, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'team_id' })
   team: TeamEntity;
