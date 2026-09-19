@@ -38,12 +38,27 @@ export class PlayerStatisticsService {
   async upsertLegaMatchStatistics(
     statistics: ILegaMatchStatistics[],
   ): Promise<number> {
+    const playerExternalIds = [
+      ...new Set(
+        statistics.flatMap(({ home, away }) => [
+          ...home.map(({ externalId }) => externalId),
+          ...away.map(({ externalId }) => externalId),
+        ]),
+      ),
+    ];
+    const leagueExternalIds = [
+      ...new Set(statistics.map(({ leagueExternalId }) => leagueExternalId)),
+    ];
+    if (!playerExternalIds.length || !leagueExternalIds.length) return 0;
+
     const [players, matches] = await Promise.all([
       this.playersRepository.getWhere({
+        externalId: In(playerExternalIds),
         source: { code: ESourceCode.LegaVolley },
       }),
       this.matchesRepository.getWhere({
         league: {
+          externalId: In(leagueExternalIds),
           stage: { championship: { source: { code: ESourceCode.LegaVolley } } },
         },
       }),
@@ -167,9 +182,26 @@ export class PlayerStatisticsService {
     statistics: ILegaVolleyFemminileMatchStatistics[],
   ): Promise<number> {
     const sourceCode = ESourceCode.LegaVolleyFemminile;
+    const playerExternalIds = [
+      ...new Set(
+        statistics.flatMap(({ home, away }) => [
+          ...home.map(({ externalId }) => externalId),
+          ...away.map(({ externalId }) => externalId),
+        ]),
+      ),
+    ];
+    const matchExternalIds = [
+      ...new Set(statistics.map(({ matchExternalId }) => matchExternalId)),
+    ];
+    if (!playerExternalIds.length || !matchExternalIds.length) return 0;
+
     const [players, matches] = await Promise.all([
-      this.playersRepository.getWhere({ source: { code: sourceCode } }),
+      this.playersRepository.getWhere({
+        externalId: In(playerExternalIds),
+        source: { code: sourceCode },
+      }),
       this.matchesRepository.getWhere({
+        externalId: In(matchExternalIds),
         league: { stage: { championship: { source: { code: sourceCode } } } },
       }),
     ]);
