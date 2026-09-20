@@ -12,6 +12,7 @@ import { TeamEntity } from './team.entity';
 
 @Entity({ name: 'player_team_leagues' })
 @Index(['player', 'team', 'league'], { unique: true })
+@Index('IDX_ptl_league_team', ['league', 'team'])
 export class PlayerTeamLeagueEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -24,7 +25,6 @@ export class PlayerTeamLeagueEntity {
   @JoinColumn({ name: 'team_id' })
   team: TeamEntity;
 
-  @Index()
   @ManyToOne(() => LeaguesEntity, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'league_id' })
   league: LeaguesEntity;

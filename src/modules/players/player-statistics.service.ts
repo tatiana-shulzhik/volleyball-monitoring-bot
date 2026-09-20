@@ -38,12 +38,27 @@ export class PlayerStatisticsService {
   async upsertLegaMatchStatistics(
     statistics: ILegaMatchStatistics[],
   ): Promise<number> {
+    const playerExternalIds = [
+      ...new Set(
+        statistics.flatMap(({ home, away }) => [
+          ...home.map(({ externalId }) => externalId),
+          ...away.map(({ externalId }) => externalId),
+        ]),
+      ),
+    ];
+    const leagueExternalIds = [
+      ...new Set(statistics.map(({ leagueExternalId }) => leagueExternalId)),
+    ];
+    if (!playerExternalIds.length || !leagueExternalIds.length) return 0;
+
     const [players, matches] = await Promise.all([
       this.playersRepository.getWhere({
+        externalId: In(playerExternalIds),
         source: { code: ESourceCode.LegaVolley },
       }),
       this.matchesRepository.getWhere({
         league: {
+          externalId: In(leagueExternalIds),
           stage: { championship: { source: { code: ESourceCode.LegaVolley } } },
         },
       }),
@@ -142,23 +157,13 @@ export class PlayerStatisticsService {
     await this.matchesRepository.updateExternalIds(
       [...externalIdsByMatchId].map(([id, externalId]) => ({ id, externalId })),
     );
-    if (rows.length) {
-      await this.matchAttacksRepository.useTransaction(async (manager) => {
-        await this.matchAttacksRepository.replaceMany(
-          [...loadedMatchIds],
-          rows,
-          manager,
-        );
-        await this.matchesRepository.markAttackStatisticsLoaded(
-          [...loadedMatchIds],
-          sourceUpdatedAt,
-          manager,
-        );
-      });
-      await this.cache.deleteByPattern(
-        `team-statistics:${ESourceCode.LegaVolley}:*`,
-      );
-    }
+    await this.replaceMatchStatistics({
+      rows,
+      replacedMatchIds: [...loadedMatchIds],
+      completedMatchIds: [...loadedMatchIds],
+      sourceCode: ESourceCode.LegaVolley,
+      sourceUpdatedAt,
+    });
 
     return rows.length;
   }
@@ -167,9 +172,26 @@ export class PlayerStatisticsService {
     statistics: ILegaVolleyFemminileMatchStatistics[],
   ): Promise<number> {
     const sourceCode = ESourceCode.LegaVolleyFemminile;
+    const playerExternalIds = [
+      ...new Set(
+        statistics.flatMap(({ home, away }) => [
+          ...home.map(({ externalId }) => externalId),
+          ...away.map(({ externalId }) => externalId),
+        ]),
+      ),
+    ];
+    const matchExternalIds = [
+      ...new Set(statistics.map(({ matchExternalId }) => matchExternalId)),
+    ];
+    if (!playerExternalIds.length || !matchExternalIds.length) return 0;
+
     const [players, matches] = await Promise.all([
-      this.playersRepository.getWhere({ source: { code: sourceCode } }),
+      this.playersRepository.getWhere({
+        externalId: In(playerExternalIds),
+        source: { code: sourceCode },
+      }),
       this.matchesRepository.getWhere({
+        externalId: In(matchExternalIds),
         league: { stage: { championship: { source: { code: sourceCode } } } },
       }),
     ]);
@@ -221,25 +243,48 @@ export class PlayerStatisticsService {
       }
     }
 
-    if (replacedMatchIds.length) {
-      await this.matchAttacksRepository.useTransaction(async (manager) => {
-        await this.matchAttacksRepository.replaceMany(
-          replacedMatchIds,
-          rows,
-          manager,
-        );
-        if (completedMatchIds.length) {
-          await this.matchesRepository.markAttackStatisticsLoaded(
-            completedMatchIds,
-            sourceUpdatedAt,
-            manager,
-          );
-        }
-      });
-      await this.cache.deleteByPattern(`team-statistics:${sourceCode}:*`);
-    }
+    await this.replaceMatchStatistics({
+      rows,
+      replacedMatchIds,
+      completedMatchIds,
+      sourceCode,
+      sourceUpdatedAt,
+    });
 
     return rows.length;
+  }
+
+  private async replaceMatchStatistics(data: {
+    rows: Partial<MatchPlayerAttackStatisticsEntity>[];
+    replacedMatchIds: number[];
+    completedMatchIds: number[];
+    sourceCode: ESourceCode;
+    sourceUpdatedAt: Date;
+  }): Promise<void> {
+    const {
+      rows,
+      replacedMatchIds,
+      completedMatchIds,
+      sourceCode,
+      sourceUpdatedAt,
+    } = data;
+    if (!rows.length || !replacedMatchIds.length) return;
+
+    await this.matchAttacksRepository.useTransaction(async (manager) => {
+      await this.matchAttacksRepository.replaceMany(
+        replacedMatchIds,
+        rows,
+        manager,
+      );
+      if (completedMatchIds.length) {
+        await this.matchesRepository.markAttackStatisticsLoaded(
+          completedMatchIds,
+          sourceUpdatedAt,
+          manager,
+        );
+      }
+    });
+    await this.cache.deleteByPattern(`team-statistics:${sourceCode}:*`);
   }
 
   findPendingLegaMatches(

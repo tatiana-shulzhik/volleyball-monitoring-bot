@@ -29,6 +29,7 @@ import { applyEntityChanges } from '../../shared/synchronization.utils';
 import { ESourceCode } from '../../shared/enums';
 import { splitIntoBatches, uniqueBy } from '../../shared/array.utils';
 import { normalizePlayerName } from '../../shared/player-name.utils';
+import { createTeamLeaguePairsQuery } from '../../shared/team-league.utils';
 import {
   applyHistoricalRosterChanges,
   getRosterStatisticsInput,
@@ -122,24 +123,24 @@ export class PlayersService {
     );
     const scopedRelations =
       relationScopes ??
-      [...teamsByExternalId.values()].flatMap((team) =>
-        [...leaguesByExternalId.values()].map((league) => ({ team, league })),
+      uniqueBy(
+        incomingPlayers.flatMap((player) => {
+          const team = teamsByExternalId.get(player.teamExternalId);
+          const league = leaguesByExternalId.get(player.leagueExternalId);
+
+          return team && league ? [{ team, league }] : [];
+        }),
+        ({ team, league }) => `${team.id}:${league.id}`,
       );
-    const teamIds = [...new Set(scopedRelations.map(({ team }) => team.id))];
-    const leagueIds = [
-      ...new Set(scopedRelations.map(({ league }) => league.id)),
-    ];
-    const scopeKeys = new Set(
-      scopedRelations.map(({ team, league }) => `${team.id}:${league.id}`),
+    const pairsQuery = createTeamLeaguePairsQuery(
+      scopedRelations.map(({ team, league }) => ({
+        teamId: team.id,
+        leagueId: league.id,
+      })),
     );
-    const existingRelations = (
-      teamIds.length && leagueIds.length
-        ? await this.relationsRepository.getWhere({
-            team: { id: In(teamIds) },
-            league: { id: In(leagueIds) },
-          })
-        : []
-    ).filter(({ team, league }) => scopeKeys.has(`${team.id}:${league.id}`));
+    const existingRelations = pairsQuery
+      ? await this.relationsRepository.getForTeamLeaguePairs(pairsQuery)
+      : [];
     const existingRelationsByKey = new Map(
       existingRelations.map((relation) => [
         `${relation.player.id}:${relation.team.id}:${relation.league.id}`,

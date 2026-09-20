@@ -1,9 +1,10 @@
 import { ChampionshipsEntity } from './championships.entity';
-import { Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import { Entity, Index, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 import { PlayersEntity } from './players.entity';
 
 /** A player selected for monitoring in a particular championship. */
 @Entity({ name: 'monitoring_subscriptions' })
+@Index('IDX_monitoring_subscriptions_championship', ['championshipId'])
 export class MonitoringSubscriptionEntity {
   @PrimaryColumn({ name: 'player_id' })
   playerId: number;

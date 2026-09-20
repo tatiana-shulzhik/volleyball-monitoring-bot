@@ -35,12 +35,6 @@ export interface ILegaPlayer {
   leagueExternalId: number;
 }
 
-export interface IMapSettledParams<TInput, TOutput> {
-  items: TInput[];
-  mapper: (item: TInput) => Promise<TOutput>;
-  concurrency: number;
-}
-
 export interface ILegaLeagueSchedule {
   year: number;
   leagueExternalId: number;

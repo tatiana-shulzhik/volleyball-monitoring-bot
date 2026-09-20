@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { splitIntoBatches } from '../../shared/array.utils';
+import { ITeamLeaguePairsQuery } from '../../interfaces/requests/team-league-pairs-query.interface';
 import { PlayerTeamLeagueEntity } from '../entities/player-team-league.entity';
 
 @Injectable()
@@ -26,6 +27,26 @@ export class PlayerTeamLeaguesRepository {
         league: { stage: { championship: { source: true }, season: true } },
       },
     });
+  }
+
+  getForTeamLeaguePairs(
+    query: ITeamLeaguePairsQuery,
+    manager?: EntityManager,
+  ): Promise<PlayerTeamLeagueEntity[]> {
+    const repository =
+      manager?.getRepository(PlayerTeamLeagueEntity) ?? this.repository;
+
+    return repository
+      .createQueryBuilder('relation')
+      .leftJoinAndSelect('relation.player', 'player')
+      .leftJoinAndSelect('relation.team', 'team')
+      .leftJoinAndSelect('relation.league', 'league')
+      .leftJoinAndSelect('league.stage', 'stage')
+      .leftJoinAndSelect('stage.championship', 'championship')
+      .leftJoinAndSelect('championship.source', 'source')
+      .leftJoinAndSelect('stage.season', 'season')
+      .where(query.condition, query.parameters)
+      .getMany();
   }
 
   async insertMany(

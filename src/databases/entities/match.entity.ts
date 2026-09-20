@@ -25,15 +25,17 @@ export class MatchEntity {
   })
   externalId: string | null;
 
-  @Index()
+  @Index('IDX_matches_home_team')
   @ManyToOne(() => LeaguesEntity, { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'league_id' })
   league: LeaguesEntity;
 
+  @Index('IDX_matches_away_team')
   @ManyToOne(() => TeamEntity, { nullable: false, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'home_team_id' })
   homeTeam: TeamEntity;
 
+  @Index()
   @ManyToOne(() => TeamEntity, { nullable: false, onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'away_team_id' })
   awayTeam: TeamEntity;
