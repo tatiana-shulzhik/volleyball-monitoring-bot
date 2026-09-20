@@ -10,7 +10,6 @@ import { IFetchedSeasonCatalog } from '../interfaces/requests/seasons.interface'
 import {
   ILegaCatalog,
   ILegaDateRange,
-  IMapSettledParams,
   ILegaLeagueSchedule,
   ILegaPlayer,
   ILegaMatchReference,
@@ -40,6 +39,7 @@ import {
 import { HttpService } from '../shared/http/http.service';
 import { getErrorMessage } from '../shared/error.utils';
 import { parseSeasonEndYear } from '../shared/season.utils';
+import { mapSettledWithConcurrency } from '../shared/promise.utils';
 
 const LEGA_VOLLEY_POST_GARA_FALLBACK_BATCH_SIZE = 5;
 
@@ -151,7 +151,7 @@ export class LegaVolleyGateway {
         )
         .map((league) => ({ league, year: catalog.year })),
     );
-    const teamResults = await this.mapSettled({
+    const teamResults = await mapSettledWithConcurrency({
       items: catalogLeagues,
       mapper: async ({ league, year }) => {
         const html = await this.fetchLeagueSchedule(year, league.externalId);
@@ -189,7 +189,7 @@ export class LegaVolleyGateway {
     const teamsToEnrich = [
       ...new Map(uniqueTeams.map((team) => [team.externalId, team])).values(),
     ];
-    const enrichedResults = await this.mapSettled<
+    const enrichedResults = await mapSettledWithConcurrency<
       ICevTeam,
       ICevTeam & { players: ILegaPlayer[] }
     >({
@@ -247,7 +247,7 @@ export class LegaVolleyGateway {
   async fetchMatches(
     schedules: ILegaLeagueSchedule[],
   ): Promise<IFetchedMatches> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: schedules,
       mapper: async ({ year, leagueExternalId }) =>
         readLegaMatches(
@@ -283,7 +283,7 @@ export class LegaVolleyGateway {
     >,
   ): Promise<ILegaMatchStatistics[]> {
     const pendingSeasons = [...pendingMatchKeysByYearAndLeague.entries()];
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: pendingSeasons,
       mapper: ([year, pendingMatchKeysByLeague]) =>
         this.fetchSeasonMatchStatistics(year, pendingMatchKeysByLeague),
@@ -310,7 +310,7 @@ export class LegaVolleyGateway {
       awayTeamName: string;
     }>,
   ): Promise<ILegaMatchStatistics[]> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async ({
         sourceMatchId,
@@ -353,7 +353,7 @@ export class LegaVolleyGateway {
   ): Promise<ILegaMatchStatistics[]> {
     const html = await this.fetchPostGara({ year });
     const series = readLegaOptions(html, 'serie');
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: series,
       mapper: (item) =>
         this.fetchSeriesMatchStatistics(year, item, pendingMatchKeysByLeague),
@@ -382,7 +382,7 @@ export class LegaVolleyGateway {
     const championships = readLegaOptions(html, 'campionato').filter((item) =>
       pendingMatchKeysByLeague.has(Number(item.value)),
     );
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: championships,
       mapper: (item) => {
         const pendingMatchKeys = pendingMatchKeysByLeague.get(
@@ -432,7 +432,7 @@ export class LegaVolleyGateway {
       phases,
       pendingMatchKeys,
     );
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async ({ id, playedOn, teamNames }) =>
         parseLegaMatchStatistics(
@@ -457,7 +457,7 @@ export class LegaVolleyGateway {
     phases: ILegaOption[],
     pendingMatchKeys: ILegaPendingMatchKeys,
   ): Promise<ILegaPendingMatchReference[]> {
-    const phaseResults = await this.mapSettled({
+    const phaseResults = await mapSettledWithConcurrency({
       items: phases,
       mapper: async (phase): Promise<ILegaPhaseDays> => ({
         phase: phase.value,
@@ -579,7 +579,7 @@ export class LegaVolleyGateway {
     championship: string,
     days: ILegaPhaseDay[],
   ): Promise<Array<ILegaPhaseDay & { html: string }>> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: days,
       mapper: async (item) => ({
         ...item,
@@ -718,7 +718,7 @@ export class LegaVolleyGateway {
     const uniqueMatches = [
       ...new Map(matches.map((match) => [match.id, match])).values(),
     ];
-    const matchResults = await this.mapSettled({
+    const matchResults = await mapSettledWithConcurrency({
       items: uniqueMatches,
       mapper: async ({ id, playedOn, teamNames }) => {
         const statistics = parseLegaMatchStatistics(
@@ -745,7 +745,7 @@ export class LegaVolleyGateway {
     phase: string,
     days: ILegaOption[],
   ): Promise<Array<{ day: ILegaOption; html: string }>> {
-    const dayResults = await this.mapSettled({
+    const dayResults = await mapSettledWithConcurrency({
       items: days,
       mapper: async (day) => ({
         day,
@@ -808,7 +808,7 @@ export class LegaVolleyGateway {
     const leagueSources = catalogs.flatMap(({ year, leagues }) =>
       leagues.map((league) => ({ year, league })),
     );
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: leagueSources,
       mapper: async ({ year, league }) =>
         readLegaDateRange(
@@ -887,34 +887,5 @@ export class LegaVolleyGateway {
     }
 
     this.activeRequests--;
-  }
-
-  private async mapSettled<TInput, TOutput>(
-    data: IMapSettledParams<TInput, TOutput>,
-  ): Promise<PromiseSettledResult<TOutput>[]> {
-    const { items, mapper, concurrency } = data;
-    const results = new Array<PromiseSettledResult<TOutput>>(items.length);
-    let nextIndex = 0;
-
-    const worker = async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex++;
-
-        try {
-          results[index] = {
-            status: 'fulfilled',
-            value: await mapper(items[index]),
-          };
-        } catch (reason: unknown) {
-          results[index] = { status: 'rejected', reason };
-        }
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, items.length) }, worker),
-    );
-
-    return results;
   }
 }

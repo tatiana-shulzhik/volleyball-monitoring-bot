@@ -55,12 +55,7 @@ import {
   createMatchStatisticsUrl,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
-
-interface IMapSettledParams<TInput, TOutput> {
-  items: TInput[];
-  mapper: (item: TInput) => Promise<TOutput>;
-  concurrency: number;
-}
+import { mapSettledWithConcurrency } from '../shared/promise.utils';
 
 @Injectable()
 export class CevGateway {
@@ -162,7 +157,7 @@ export class CevGateway {
   async fetchCompetitionStages(
     championships: ChampionshipsEntity[],
   ): Promise<FetchedCompetitionStages> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: championships,
       mapper: async (championship) =>
         extractChampionships(
@@ -183,7 +178,7 @@ export class CevGateway {
   async fetchLeagueCatalog(
     stages: CompetitionStagesEntity[],
   ): Promise<FetchedLeagueCatalog> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: stages,
       mapper: async (stage) => {
         const html = await this.http.get(
@@ -218,7 +213,7 @@ export class CevGateway {
     matches: MatchEntity[],
     birthYears = new Map<string, number>(),
   ): Promise<IFetchedPlayers> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
         if (!match.externalId) {
@@ -298,7 +293,7 @@ export class CevGateway {
         ]),
       ).values(),
     ];
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: uniqueSources,
       mapper: async ({ team, championship }) => {
         const html = await this.getTeamDetailsHtml(
@@ -328,7 +323,7 @@ export class CevGateway {
         ]),
       ).values(),
     ];
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: uniqueSources,
       mapper: async ({ team, championship }) =>
         extractCevPlayerBirthYears(
@@ -361,7 +356,7 @@ export class CevGateway {
         ]),
       ).values(),
     ];
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: uniqueSources,
       mapper: async ({ team, championship }) =>
         [
@@ -386,7 +381,7 @@ export class CevGateway {
   async fetchMatches(
     stages: CompetitionStagesEntity[],
   ): Promise<IFetchedMatches> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: stages,
       mapper: async (stage) => {
         const html = await this.http.get(
@@ -421,7 +416,7 @@ export class CevGateway {
   async fetchMatchAttackStatistics(
     matches: MatchEntity[],
   ): Promise<PromiseSettledResult<IFetchedMatchAttackStatistics>[]> {
-    return this.mapSettled({
+    return mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
         if (!match.externalId) {
@@ -442,7 +437,7 @@ export class CevGateway {
   async fetchMatchRosters(
     matches: MatchEntity[],
   ): Promise<PromiseSettledResult<IFetchedMatchRoster>[]> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
         if (!match.externalId) {
@@ -480,7 +475,7 @@ export class CevGateway {
   async fetchMatchLineups(
     matches: MatchEntity[],
   ): Promise<PromiseSettledResult<IFetchedMatchLineup>[]> {
-    const results = await this.mapSettled({
+    const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
         if (!match.externalId) {
@@ -517,7 +512,7 @@ export class CevGateway {
       attackStatistics: IFetchedMatchAttackStatistics;
     }>[]
   > {
-    return this.mapSettled({
+    return mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
         if (!match.externalId) {
@@ -626,35 +621,6 @@ export class CevGateway {
     }
 
     cache.set(key, value);
-  }
-
-  private async mapSettled<TInput, TOutput>(
-    data: IMapSettledParams<TInput, TOutput>,
-  ): Promise<PromiseSettledResult<TOutput>[]> {
-    const { items, mapper, concurrency } = data;
-    const results = new Array<PromiseSettledResult<TOutput>>(items.length);
-    let nextIndex = 0;
-
-    const worker = async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex++;
-
-        try {
-          results[index] = {
-            status: 'fulfilled',
-            value: await mapper(items[index]),
-          };
-        } catch (reason: unknown) {
-          results[index] = { status: 'rejected', reason };
-        }
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, items.length) }, worker),
-    );
-
-    return results;
   }
 }
 

@@ -16,9 +16,9 @@ import {
   LEGA_VOLLEY_HTTP_TIMEOUT_MS,
 } from '../shared/consts/constants';
 import { HttpService } from '../shared/http/http.service';
-import { splitIntoBatches } from '../shared/array.utils';
 import { getErrorMessage } from '../shared/error.utils';
 import { EMatchStatus } from '../shared/enums';
+import { mapSettledWithConcurrency } from '../shared/promise.utils';
 import {
   createSummerTourPlayerNamesBySurname,
   parseLegaVolleyFemminileCatalog,
@@ -45,45 +45,37 @@ export class LegaVolleyFemminileGateway {
       `${LEGA_VOLLEY_FEMMINILE_BASE_URL}${LEGA_VOLLEY_FEMMINILE_SEASONS_PATH}`,
     );
     const seasons = readLegaVolleyFemminileSeasons(firstHtml, earliestYear);
-    const pages: Array<{ season: (typeof seasons)[number]; html: string }> = [];
-    for (const batch of splitIntoBatches(
-      seasons,
-      LEGA_VOLLEY_HTTP_CONCURRENCY,
-    )) {
-      pages.push(
-        ...(await Promise.all(
-          batch.map(async (season) => ({
-            season,
-            html: await this.http.get(`${catalogUrl}?stagione=${season.year}`),
-          })),
-        )),
-      );
-    }
+    const pages = (
+      await mapSettledWithConcurrency({
+        items: seasons,
+        mapper: async (season) => ({
+          season,
+          html: await this.http.get(`${catalogUrl}?stagione=${season.year}`),
+        }),
+        concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+      })
+    ).map((result) => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    });
 
     const catalog = parseLegaVolleyFemminileCatalog(pages);
-    const scheduleResults: Array<{
-      leagueExternalId: number;
-      serie: number;
-      fetched: Array<ReturnType<typeof readLegaVolleyFemminileMatches>>;
-      range: ReturnType<typeof readLegaVolleyFemminileDateRange>;
-    }> = [];
-    for (const batch of splitIntoBatches(
-      catalog.competitions,
-      LEGA_VOLLEY_HTTP_CONCURRENCY,
-    )) {
-      scheduleResults.push(
-        ...(await Promise.all(
-          batch.map(({ externalId, seasonYear, serie, name }) =>
-            this.fetchLeagueMatches(
-              seasonYear,
-              externalId,
-              serie,
-              /\bA2\b/i.test(name),
-            ),
+    const scheduleResults = (
+      await mapSettledWithConcurrency({
+        items: catalog.competitions,
+        mapper: ({ externalId, seasonYear, serie, name }) =>
+          this.fetchLeagueMatches(
+            seasonYear,
+            externalId,
+            serie,
+            /\bA2\b/i.test(name),
           ),
-        )),
-      );
-    }
+        concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+      })
+    ).map((result) => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    });
     const fetched = scheduleResults.flatMap(({ fetched }) => fetched);
     const matches = this.mergeMatches(fetched);
     const datesByStageKey = new Map<string, Date[]>();
@@ -134,29 +126,25 @@ export class LegaVolleyFemminileGateway {
     const fetched = [] as ReturnType<typeof readLegaVolleyFemminileMatches>[];
     let isComplete = true;
 
-    for (const batch of splitIntoBatches(
-      uniqueSchedules,
-      LEGA_VOLLEY_HTTP_CONCURRENCY,
-    )) {
-      const results = await Promise.allSettled(
-        batch.map(({ year, leagueExternalId, serie }) =>
-          this.fetchLeagueMatches(year, leagueExternalId, serie, false, false),
-        ),
-      );
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          fetched.push(...result.value.fetched);
-          return;
-        }
+    const results = await mapSettledWithConcurrency({
+      items: uniqueSchedules,
+      mapper: ({ year, leagueExternalId, serie }) =>
+        this.fetchLeagueMatches(year, leagueExternalId, serie, false, false),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        fetched.push(...result.value.fetched);
+        return;
+      }
 
-        isComplete = false;
-        const schedule = batch[index];
-        this.logger.warn(
-          `League matches request failed for ${schedule.leagueExternalId} ` +
-            `(${schedule.year}): ${getErrorMessage(result.reason)}`,
-        );
-      });
-    }
+      isComplete = false;
+      const schedule = uniqueSchedules[index];
+      this.logger.warn(
+        `League matches request failed for ${schedule.leagueExternalId} ` +
+          `(${schedule.year}): ${getErrorMessage(result.reason)}`,
+      );
+    });
 
     return {
       matches: [...this.mergeMatches(fetched).values()],
@@ -177,41 +165,38 @@ export class LegaVolleyFemminileGateway {
     );
     const statistics: ILegaVolleyFemminileMatchStatistics[] = [];
 
-    for (const batch of splitIntoBatches(
-      sourceMatches,
-      LEGA_VOLLEY_HTTP_CONCURRENCY,
-    )) {
-      const results = await Promise.allSettled(
-        batch.map(async (sourceMatch) => ({
-          ...sourceMatch,
-          html: await this.http.get(
-            `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${sourceMatch.sourceMatchId}`,
-            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
-          ),
-        })),
-      );
+    const results = await mapSettledWithConcurrency({
+      items: sourceMatches,
+      mapper: async (sourceMatch) => ({
+        ...sourceMatch,
+        html: await this.http.get(
+          `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${sourceMatch.sourceMatchId}`,
+          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+        ),
+      }),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
 
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          this.logger.warn(
-            `Match statistics request failed for ${batch[index].externalId}: ` +
-              getErrorMessage(result.reason),
-          );
-          return;
-        }
-
-        const parsed = parseLegaVolleyFemminileMatchStatistics(
-          result.value.html,
-          result.value.sourceMatchId,
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match statistics request failed for ${sourceMatches[index].externalId}: ` +
+            getErrorMessage(result.reason),
         );
-        if (parsed) {
-          statistics.push({
-            ...parsed,
-            matchExternalId: result.value.externalId,
-          });
-        }
-      });
-    }
+        return;
+      }
+
+      const parsed = parseLegaVolleyFemminileMatchStatistics(
+        result.value.html,
+        result.value.sourceMatchId,
+      );
+      if (parsed) {
+        statistics.push({
+          ...parsed,
+          matchExternalId: result.value.externalId,
+        });
+      }
+    });
 
     return statistics;
   }
@@ -222,34 +207,31 @@ export class LegaVolleyFemminileGateway {
     externalIds = [...new Set(externalIds)];
     const birthYears = new Map<string, number>();
 
-    for (const batch of splitIntoBatches(
-      externalIds,
-      LEGA_VOLLEY_HTTP_CONCURRENCY,
-    )) {
-      const results = await Promise.allSettled(
-        batch.map(async (externalId) => ({
-          externalId,
-          birthYear: readLegaVolleyFemminilePlayerBirthYear(
-            await this.http.get(
-              `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/player/x/${encodeURIComponent(externalId)}/`,
-            ),
+    const results = await mapSettledWithConcurrency({
+      items: externalIds,
+      mapper: async (externalId) => ({
+        externalId,
+        birthYear: readLegaVolleyFemminilePlayerBirthYear(
+          await this.http.get(
+            `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/player/x/${encodeURIComponent(externalId)}/`,
           ),
-        })),
-      );
+        ),
+      }),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
 
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          this.logger.warn(
-            `Player profile request failed for ${batch[index]}: ` +
-              getErrorMessage(result.reason),
-          );
-          return;
-        }
-        if (result.value.birthYear !== null) {
-          birthYears.set(result.value.externalId, result.value.birthYear);
-        }
-      });
-    }
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Player profile request failed for ${externalIds[index]}: ` +
+            getErrorMessage(result.reason),
+        );
+        return;
+      }
+      if (result.value.birthYear !== null) {
+        birthYears.set(result.value.externalId, result.value.birthYear);
+      }
+    });
 
     return birthYears;
   }
@@ -284,46 +266,44 @@ export class LegaVolleyFemminileGateway {
       standardSourcesByTeam.set(key, sources);
     }
 
-    for (const batch of splitIntoBatches(
-      [...standardSourcesByTeam.values()],
-      LEGA_VOLLEY_HTTP_CONCURRENCY,
-    )) {
-      const results = await Promise.allSettled(
-        batch.map(async (sources) => ({
-          sources,
-          html: await this.http.get(
-            `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/club/x/${sources[0].teamExternalId}/roster/` +
-              `?stagione=${sources[0].year}&view=elenco`,
-          ),
+    const standardSourceGroups = [...standardSourcesByTeam.values()];
+    const results = await mapSettledWithConcurrency({
+      items: standardSourceGroups,
+      mapper: async (sources) => ({
+        sources,
+        html: await this.http.get(
+          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/club/x/${sources[0].teamExternalId}/roster/` +
+            `?stagione=${sources[0].year}&view=elenco`,
+        ),
+      }),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        isComplete = false;
+        const source = standardSourceGroups[index][0];
+        this.logger.warn(
+          `Team roster request failed for ${source.teamExternalId} ` +
+            `(${source.year}): ${getErrorMessage(result.reason)}`,
+        );
+        return;
+      }
+
+      const players = parseLegaVolleyFemminileTeamRoster(result.value.html);
+      if (!players.length) {
+        isComplete = false;
+        return;
+      }
+
+      rosters.push(
+        ...result.value.sources.map((source) => ({
+          teamExternalId: source.teamExternalId,
+          leagueExternalId: source.leagueExternalId,
+          players,
         })),
       );
-
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          isComplete = false;
-          const source = batch[index][0];
-          this.logger.warn(
-            `Team roster request failed for ${source.teamExternalId} ` +
-              `(${source.year}): ${getErrorMessage(result.reason)}`,
-          );
-          return;
-        }
-
-        const players = parseLegaVolleyFemminileTeamRoster(result.value.html);
-        if (!players.length) {
-          isComplete = false;
-          return;
-        }
-
-        rosters.push(
-          ...result.value.sources.map((source) => ({
-            teamExternalId: source.teamExternalId,
-            leagueExternalId: source.leagueExternalId,
-            players,
-          })),
-        );
-      });
-    }
+    });
 
     return { rosters, isComplete };
   }
@@ -369,9 +349,11 @@ export class LegaVolleyFemminileGateway {
         }),
       ),
     ];
-    const results = await Promise.allSettled(
-      urls.map(async (url) => ({ url, html: await this.http.get(url) })),
-    );
+    const results = await mapSettledWithConcurrency({
+      items: urls,
+      mapper: async (url) => ({ url, html: await this.http.get(url) }),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
     const rosters: ILegaVolleyFemminileTeamRoster[] = [];
 
     results.forEach((result, index) => {
