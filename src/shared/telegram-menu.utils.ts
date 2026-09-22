@@ -189,11 +189,12 @@ export function formatChampionshipButton(name: string): string {
 
 export function formatCurrentMonitoringButton(
   playerName: string,
+  shirtNumber: number | null,
   teamNames: string | null,
   championshipName: string,
 ): string {
   const text =
-    `🗑 ${playerName}` +
+    `🗑 ${shirtNumber ?? '—'} ${playerName}` +
     (teamNames ? ` — ${teamNames}` : '') +
     ` — ${formatChampionshipButton(championshipName)}`;
 
