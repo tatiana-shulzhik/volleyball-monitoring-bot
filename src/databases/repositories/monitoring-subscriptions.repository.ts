@@ -56,6 +56,7 @@ export class MonitoringSubscriptionsRepository {
       `SELECT
        p.id AS "playerId",
        p.full_name AS "playerName",
+       MIN(ptl.shirt_number) FILTER (WHERE cs.id IS NOT NULL) AS "shirtNumber",
        c.id AS "championshipId",
        c.name AS "championshipName",
        STRING_AGG(DISTINCT t.name, ', ' ORDER BY t.name)
@@ -71,7 +72,7 @@ export class MonitoringSubscriptionsRepository {
      LEFT JOIN teams t ON t.id = ptl.team_id
      WHERE s.code = $1
      GROUP BY p.id, c.id
-     ORDER BY c.name, p.full_name`,
+     ORDER BY c.name, "shirtNumber" ASC NULLS LAST, p.full_name`,
       [sourceCode],
     );
   }

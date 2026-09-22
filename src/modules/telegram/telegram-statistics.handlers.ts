@@ -804,6 +804,7 @@ export class TelegramStatisticsHandlers {
         ({
           playerId,
           playerName,
+          shirtNumber,
           teamNames,
           championshipId,
           championshipName,
@@ -811,6 +812,7 @@ export class TelegramStatisticsHandlers {
           Markup.button.callback(
             formatCurrentMonitoringButton(
               playerName,
+              shirtNumber,
               teamNames,
               championshipName,
             ),
@@ -867,7 +869,7 @@ export class TelegramStatisticsHandlers {
     const keyboard = Markup.inlineKeyboard([
       ...players.map((player) => [
         Markup.button.callback(
-          `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ${player.fullName}`,
+          `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ${player.shirtNumber ?? '—'} ${player.fullName}`,
           TELEGRAM_CALLBACKS.monitoring.player(
             player.id,
             options.teamId,

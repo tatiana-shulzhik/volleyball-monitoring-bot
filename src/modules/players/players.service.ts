@@ -66,15 +66,20 @@ export class PlayersService {
   async findTeamPlayers(
     teamId: number,
     leagueId: number,
-  ): Promise<PlayersEntity[]> {
+  ): Promise<Array<PlayersEntity & { shirtNumber: number | null }>> {
     const relations = await this.relationsRepository.getWhere({
       team: { id: teamId },
       league: { id: leagueId },
     });
 
     return relations
-      .map(({ player }) => player)
-      .sort((left, right) => left.fullName.localeCompare(right.fullName));
+      .map(({ player, shirtNumber }) => ({ ...player, shirtNumber }))
+      .sort(
+        (left, right) =>
+          (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+            (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
+          left.fullName.localeCompare(right.fullName),
+      );
   }
 
   async upsertCatalogPlayers(
