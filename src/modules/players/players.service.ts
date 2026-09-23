@@ -34,6 +34,7 @@ import {
   applyHistoricalRosterChanges,
   getRosterStatisticsInput,
 } from '../../shared/team-roster-retro.utils';
+import { hasSameChampionshipAgeCategory } from '../../shared/championship.utils';
 
 @Injectable()
 export class PlayersService {
@@ -393,11 +394,19 @@ export class PlayersService {
       },
     });
     const matchingRelations = relations.filter(({ league }) => {
+      const candidateChampionshipName = league.stage.championship.name;
+      if (
+        !hasSameChampionshipAgeCategory(
+          championshipName,
+          candidateChampionshipName,
+        )
+      ) {
+        return false;
+      }
+
       if (!gender) return true;
 
-      return new RegExp(`\\b${gender}\\b`, 'i').test(
-        league.stage.championship.name,
-      );
+      return new RegExp(`\\b${gender}\\b`, 'i').test(candidateChampionshipName);
     });
     const teamIds = [
       ...new Set(
