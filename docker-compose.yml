@@ -27,19 +27,6 @@ services:
       - pg
     restart: always
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION}
-    ports:
-      - "${CLICKHOUSE_HTTP_PORT}:8123"
-      - "9000:9000"
-    environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_logs:/var/log/clickhouse-server
-
   redis:
     image: bitnami/redis:latest
     environment:
@@ -50,20 +37,10 @@ services:
       - redis_data:/bitnami/redis/data
     restart: unless-stopped
 
-  tabix:
-    image: spoonest/clickhouse-tabix-web-client
-    ports:
-      - "8080:80"
-    volumes:
-      - tabix_data:/data
-    depends_on:
-      - clickhouse
-
   app:
     build: .
     depends_on:
       - pg
-      - clickhouse
       - redis
     ports:
       - "${APP_PORT}:3000"
@@ -71,7 +48,6 @@ services:
       - .env
     environment:
       POSTGRES_HOST: pg
-      CLICKHOUSE_HOST: clickhouse
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -79,7 +55,4 @@ services:
 volumes:
   postgres_data:
   pgadmin_local:
-  clickhouse_data:
-  clickhouse_logs:
-  tabix_data:
   redis_data:

@@ -12,19 +12,6 @@ services:
       - "127.0.0.1:5432:5432"
     restart: unless-stopped
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-latest}
-    environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_logs:/var/log/clickhouse-server
-    ports:
-      - "127.0.0.1:8123:8123"
-    restart: unless-stopped
-
   redis:
     image: bitnami/redis:latest
     environment:
@@ -39,15 +26,12 @@ services:
       target: production
     depends_on:
       - pg
-      - clickhouse
       - redis
     env_file:
       - .env
     environment:
       POSTGRES_HOST: pg
       POSTGRES_PORT: 5432
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_HTTP_PORT: 8123
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -57,6 +41,4 @@ services:
 
 volumes:
   postgres_data:
-  clickhouse_data:
-  clickhouse_logs:
   redis_data:
