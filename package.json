@@ -20,7 +20,6 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@clickhouse/client": "^1.23.1",
     "@fastify/static": "^9.3.0",
     "@nestjs-modules/ioredis": "^2.2.2",
     "@nestjs/common": "^11.0.1",

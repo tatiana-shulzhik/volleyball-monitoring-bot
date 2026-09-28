@@ -1,7 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import * as NestConfig from '@nestjs/config';
 import { AppConfig } from './app.config';
-import { ClickHouseConfig } from './clickhouse.config';
 import { ConfigService } from './config.service';
 import { DbConfig } from './db.config';
 import { RedisConfig } from './redis.config';
@@ -14,21 +13,7 @@ import { TelegramConfig } from './telegram.config';
       envFilePath: ['.env'],
     }),
   ],
-  providers: [
-    ConfigService,
-    AppConfig,
-    ClickHouseConfig,
-    DbConfig,
-    RedisConfig,
-    TelegramConfig,
-  ],
-  exports: [
-    ConfigService,
-    AppConfig,
-    ClickHouseConfig,
-    DbConfig,
-    RedisConfig,
-    TelegramConfig,
-  ],
+  providers: [ConfigService, AppConfig, DbConfig, RedisConfig, TelegramConfig],
+  exports: [ConfigService, AppConfig, DbConfig, RedisConfig, TelegramConfig],
 })
 export class ConfigModule {}
