@@ -103,7 +103,11 @@ export class MatchesRepository {
     return repository.delete(ids);
   }
 
-  findCevMonitoredWithin(start: Date, end: Date): Promise<MatchEntity[]> {
+  findMonitoredWithin(
+    sourceCode: ESourceCode,
+    start: Date,
+    end: Date,
+  ): Promise<MatchEntity[]> {
     return this.repository
       .createQueryBuilder('match')
       .innerJoinAndSelect('match.league', 'league')
@@ -115,7 +119,7 @@ export class MatchesRepository {
       .where('match.status = :status', { status: EMatchStatus.Scheduled })
       .andWhere('match.scheduled_at >= :start', { start })
       .andWhere('match.scheduled_at < :end', { end })
-      .andWhere('source.code = :sourceCode', { sourceCode: ESourceCode.Cev })
+      .andWhere('source.code = :sourceCode', { sourceCode })
       .orderBy('match.scheduled_at', 'ASC')
       .getMany();
   }

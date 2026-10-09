@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { CevGateway } from '../../gateway/cev.gateway';
+import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
 import { IFetchedMatchAttackStatistics } from '../../interfaces/requests/player-statistics.interface';
@@ -14,6 +15,7 @@ import {
 } from '../../interfaces/responses/match-player-monitoring.interface';
 import {
   createMatchStatisticsUrl,
+  LEGA_VOLLEY_FEMMINILE_BASE_URL,
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
@@ -46,7 +48,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку, стартовый состав и live-статус игроков в матчах CEV. */
+/** Проверяет заявку и стартовый состав CEV, а также live-статус игроков CEV и Lega Volley Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -56,6 +58,7 @@ export class MatchRosterMonitoringService {
     private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
     private readonly playersService: PlayersService,
     private readonly gateway: CevGateway,
+    private readonly femminileGateway: LegaVolleyFemminileGateway,
     private readonly telegramService: TelegramService,
     private readonly cache: RedisCacheService,
   ) {}
@@ -110,26 +113,53 @@ export class MatchRosterMonitoringService {
     return notifications;
   }
 
-  /** Опрашивает старый протокол CEV во время матча. */
+  /** Опрашивает протокол матча, пока не истекло live-окно после местного старта. */
   async monitorLiveMatches(): Promise<number> {
     const now = new Date();
-    const matches = await this.matchesService.findCevMonitoredWithin(
-      new Date(now.getTime() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 3_600_000),
-      now,
+    const windowStart = new Date(
+      now.getTime() - LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 3_600_000,
     );
-    const notifications = await this.processMatches(
-      matches,
-      now,
-      (items) => this.gateway.fetchLiveMatchData(items),
-      (match, data, context, now) =>
-        this.processLiveMatch({
-          match,
-          lineup: data.lineup,
-          attackStatistics: data.attackStatistics,
-          context,
+    const handleLiveMatch = (
+      match: MatchEntity,
+      data: {
+        lineup: IProcessLineupMatchParams['lineup'];
+        attackStatistics: IFetchedMatchAttackStatistics;
+      },
+      context: IMonitoringContext,
+      checkedAt: Date,
+    ) =>
+      this.processLiveMatch({
+        match,
+        lineup: data.lineup,
+        attackStatistics: data.attackStatistics,
+        context,
+        now: checkedAt,
+      });
+    const [cevNotifications, femminileNotifications] = await Promise.all([
+      this.processMatches(
+        await this.matchesService.findMonitoredWithin(
+          ESourceCode.Cev,
+          windowStart,
           now,
-        }),
-    );
+        ),
+        now,
+        (items) => this.gateway.fetchLiveMatchData(items),
+        handleLiveMatch,
+        ESourceCode.Cev,
+      ),
+      this.processMatches(
+        await this.matchesService.findMonitoredWithin(
+          ESourceCode.LegaVolleyFemminile,
+          windowStart,
+          now,
+        ),
+        now,
+        (items) => this.femminileGateway.fetchLiveMatchData(items),
+        handleLiveMatch,
+        ESourceCode.LegaVolleyFemminile,
+      ),
+    ]);
+    const notifications = cevNotifications + femminileNotifications;
     if (notifications) {
       this.logger.log(`Sent ${notifications} live monitoring notification(s)`);
     }
@@ -403,7 +433,7 @@ export class MatchRosterMonitoringService {
     );
     if (!acquired) {
       this.logger.debug(
-        `Duplicate live notification skipped for CEV match ${match.externalId ?? match.id}`,
+        `Duplicate live notification skipped for match ${match.externalId ?? match.id}`,
       );
       return 0;
     }
@@ -427,9 +457,7 @@ export class MatchRosterMonitoringService {
           context,
         ),
         currentSet,
-        matchProtocolUrl: match.externalId
-          ? createMatchStatisticsUrl(match.externalId)
-          : undefined,
+        matchProtocolUrl: this.getMatchProtocolUrl(match),
       }),
     );
     if (!sent) {
@@ -472,8 +500,9 @@ export class MatchRosterMonitoringService {
       context: IMonitoringContext,
       now: Date,
     ) => Promise<number>,
+    sourceCode = ESourceCode.Cev,
   ): Promise<number> {
-    const context = await this.getContext(matches);
+    const context = await this.getContext(matches, sourceCode);
     if (!context) return 0;
 
     const results = await fetchData(context.matches);
@@ -492,13 +521,21 @@ export class MatchRosterMonitoringService {
     return notifications;
   }
 
+  private getMatchProtocolUrl(match: MatchEntity): string | undefined {
+    if (!match.externalId) return undefined;
+
+    return match.league.stage.championship.source?.code ===
+      ESourceCode.LegaVolleyFemminile
+      ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${match.externalId}/startingsix/`
+      : createMatchStatisticsUrl(match.externalId);
+  }
+
   private async getContext(
     matches: MatchEntity[],
+    sourceCode = ESourceCode.Cev,
   ): Promise<IMonitoringContext | null> {
     if (!matches.length) return null;
-    const subscriptions = await this.subscriptionsService.findAll(
-      ESourceCode.Cev,
-    );
+    const subscriptions = await this.subscriptionsService.findAll(sourceCode);
     if (!subscriptions.length) return null;
 
     const subscriptionsByChampionship = new Map<number, typeof subscriptions>();
