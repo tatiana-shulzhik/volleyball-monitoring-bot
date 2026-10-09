@@ -10,7 +10,6 @@ import { TeamEntity } from '../../databases/entities/team.entity';
 import { ICevMatch } from '../../interfaces/requests/matches.interface';
 import { IFetchedMatches } from '../../interfaces/requests/matches.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
-import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from '../../shared/consts/constants';
 import { calculateMatchChanges } from '../../shared/matches.utils';
 import {
   applyEntityChanges,
@@ -20,7 +19,10 @@ import { uniqueBy } from '../../shared/array.utils';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
 import { EMatchStatus, ESourceCode } from '../../shared/enums';
 import { parseCevDate } from '../../shared/cev-matches.utils';
-import { CEV_COUNTRIES } from '../../shared/consts/constants';
+import {
+  CEV_COUNTRIES,
+  LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
+} from '../../shared/consts/constants';
 import { getErrorMessage } from '../../shared/error.utils';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
@@ -154,7 +156,10 @@ export class MatchesService {
           awayTeam,
           scheduledAt: match.scheduledAt,
           attackStatisticsUpdatedAt: stored?.attackStatisticsUpdatedAt ?? null,
-          status: match.status,
+          status:
+            sourceCode === ESourceCode.LegaVolleyFemminile
+              ? resolveCevMatchStatus(match.status, match.scheduledAt)
+              : match.status,
         };
       }),
     );
@@ -324,18 +329,16 @@ export class MatchesService {
   }
 
   findCevMonitoredWithin(start: Date, end: Date): Promise<MatchEntity[]> {
-    return this.matchesRepository.findCevMonitoredWithin(start, end);
+    return this.findMonitoredWithin(ESourceCode.Cev, start, end);
   }
-}
 
-function getCevCountryCode(
-  country: string | null | undefined,
-): string | undefined {
-  if (!country) return undefined;
-
-  return Object.entries(CEV_COUNTRIES).find(
-    ([, name]) => name === country,
-  )?.[0];
+  findMonitoredWithin(
+    sourceCode: ESourceCode,
+    start: Date,
+    end: Date,
+  ): Promise<MatchEntity[]> {
+    return this.matchesRepository.findMonitoredWithin(sourceCode, start, end);
+  }
 }
 
 function resolveCevMatchStatus(
@@ -352,4 +355,14 @@ function resolveCevMatchStatus(
   }
 
   return EMatchStatus.Finished;
+}
+
+function getCevCountryCode(
+  country: string | null | undefined,
+): string | undefined {
+  if (!country) return undefined;
+
+  return Object.entries(CEV_COUNTRIES).find(
+    ([, name]) => name === country,
+  )?.[0];
 }

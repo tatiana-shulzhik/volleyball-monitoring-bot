@@ -2,6 +2,10 @@ import { ICevChampionship } from '../interfaces/requests/championships.interface
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { ICevLeague } from '../interfaces/requests/leagues.interface';
 import { ICevMatch } from '../interfaces/requests/matches.interface';
+import {
+  ICevMatchLineupPlayer,
+  ICevMatchRosterPlayer,
+} from '../interfaces/requests/player-statistics.interface';
 import { ICevTeam } from '../interfaces/requests/teams.interface';
 import {
   ILegaVolleyFemminileCompetition,
@@ -130,18 +134,10 @@ export function readLegaVolleyFemminileMatches(
       country: 'ITA',
     });
 
-    const scores = [
-      ...table.matchAll(
-        /<th\b[^>]*class=["'][^"']*\bnum\b[^"']*["'][^>]*>([\s\S]*?)<\/th>/gi,
-      ),
-    ].map((match) => cleanText(match[1]));
+    // Счёт по сетам появляется уже во время матча и не означает его завершение.
     const status = /annullat|cancel/i.test(cleanText(table))
       ? EMatchStatus.Cancelled
-      : scores.length >= 2 &&
-          scores.slice(0, 2).every((score) => /^\d+$/.test(score)) &&
-          scores.slice(0, 2).some((score) => score !== '0')
-        ? EMatchStatus.Finished
-        : EMatchStatus.Scheduled;
+      : EMatchStatus.Scheduled;
     const externalId = sourceMatchId;
     matches.set(externalId, {
       externalId,
@@ -576,15 +572,108 @@ function isLegaVolleySummerTour(name: string): boolean {
 }
 
 function readMatchDate(html: string): Date | null {
-  const date = html.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
-  if (!date) return null;
-  const time = html.match(/\b(\d{1,2}):(\d{2})\b/);
-
-  return parseCevLocalDate(
-    `${date[1]}/${date[2]}/${date[3]} ` +
-      `${String(time?.[1] ?? 0).padStart(2, '0')}:${time?.[2] ?? '00'}`,
-    'Europe/Rome',
+  const cells = [...html.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map(
+    (match) => cleanText(match[1]),
   );
+  const date = cells.find((cell) => /^\d{2}\/\d{2}\/\d{4}$/.test(cell));
+  const time = cells.find((cell) => /^\d{2}:\d{2}$/.test(cell));
+  if (!date || !time) return null;
+
+  return parseCevLocalDate(`${date} ${time}`, 'Europe/Rome');
+}
+
+export function parseLegaVolleyFemminileMatchRoster(html: string): {
+  home: ICevMatchRosterPlayer[];
+  away: ICevMatchRosterPlayer[];
+} {
+  const section =
+    html.match(/page-template-page-mc-pre-roster[\s\S]*/i)?.[0] ?? html;
+  const teams = [
+    ...section.matchAll(
+      /<b\b[^>]*class=["'][^"']*\bnome-squadra\b[^"']*["'][^>]*>([\s\S]*?)<\/b>[\s\S]*?<table\b[^>]*class=["'][^"']*\btable-starting\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ].map((match) => readMatchRosterPlayers(match[2]));
+
+  return {
+    home: teams[0] ?? [],
+    away: teams[1] ?? [],
+  };
+}
+
+export function parseLegaVolleyFemminileLiveLineup(html: string): {
+  home: ICevMatchLineupPlayer[];
+  away: ICevMatchLineupPlayer[];
+} {
+  const tables = [
+    ...html.matchAll(
+      /<table\b[^>]*class=["'][^"']*\btabella-players-tiebreak\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ].map((match) => readLiveLineupPlayers(match[1]));
+
+  return {
+    home: tables[0] ?? [],
+    away: tables[1] ?? [],
+  };
+}
+
+function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
+  const players: ICevMatchRosterPlayer[] = [];
+
+  for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const shirtNumber = readNumber(
+      cleanText(
+        row[1].match(
+          /<th\b[^>]*scope=["']row["'][^>]*>([\s\S]*?)<\/th>/i,
+        )?.[1] ?? '',
+      ),
+    );
+    const cells = [
+      ...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
+    ].map((cell) => cleanText(cell[1]));
+    const playerName = cells.find((cell) => cell && !/^https?:\/\//i.test(cell));
+    const position = cells[cells.length - 1] || undefined;
+    if (shirtNumber === null || !playerName) continue;
+
+    players.push({
+      externalId: '',
+      playerName,
+      shirtNumber,
+      position:
+        position && position !== playerName ? position : undefined,
+    });
+  }
+
+  return players;
+}
+
+function readLiveLineupPlayers(table: string): ICevMatchLineupPlayer[] {
+  const players: ICevMatchLineupPlayer[] = [];
+
+  for (const row of table.matchAll(
+    /<tr\b[^>]*class=["'][^"']*\briga-(non-in-campo|in-campo)\b[^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi,
+  )) {
+    const playerName = cleanText(
+      row[2].match(
+        /<td\b[^>]*class=["'][^"']*\btabella-nome-cognome\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/i,
+      )?.[1] ?? '',
+    );
+    if (!playerName) continue;
+
+    const shirtNumber = readNumber(
+      cleanText(
+        row[2].match(
+          /<td\b[^>]*class=["'][^"']*\bnum-maglia\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/i,
+        )?.[1] ?? '',
+      ),
+    );
+    players.push({
+      playerName,
+      shirtNumber,
+      setMarks: [row[1].toLowerCase() === 'in-campo' ? '*' : '-'],
+    });
+  }
+
+  return players;
 }
 
 function readLinks(html: string): Array<{ href: string; label: string }> {

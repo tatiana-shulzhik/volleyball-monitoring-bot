@@ -67,6 +67,43 @@ export function addRosterPositions(
   }));
 }
 
+/** Подставляет externalId из состава команды, если в заявке его нет (Lega Volley Femminile). */
+export function resolveMatchRosterExternalIds(
+  roster: ICevMatchRosterPlayer[],
+  teamId: number,
+  leagueId: number,
+  context: IMonitoringContext,
+): ICevMatchRosterPlayer[] {
+  const relations = [...context.relationsByPlayerAndLeague.values()].filter(
+    (relation) =>
+      relation.team.id === teamId && relation.league.id === leagueId,
+  );
+
+  return roster.map((player) => {
+    if (player.externalId) return player;
+
+    const byShirtNumber =
+      player.shirtNumber === null
+        ? undefined
+        : relations.find(
+            (relation) => relation.shirtNumber === player.shirtNumber,
+          );
+    const byName = relations.find(
+      (relation) =>
+        normalizePlayerName(relation.player.fullName) ===
+        normalizePlayerName(player.playerName),
+    );
+    const relation = byShirtNumber ?? byName;
+    if (!relation) return player;
+
+    return {
+      ...player,
+      externalId: relation.player.externalId,
+      position: player.position ?? relation.position ?? undefined,
+    };
+  });
+}
+
 export function addRosterStatistics(
   roster: ICevMatchRosterPlayer[],
   statistics: ITeamPlayerStatistics[] | undefined,
@@ -113,8 +150,11 @@ export function getMonitoredRoster(
   const roster = monitored
     .filter(({ relation }) => relation.team.id === teamId)
     .map(({ subscription, relation, teamData }) => {
-      const player = teamData.find(
-        ({ externalId }) => externalId === subscription.player.externalId,
+      const player = findRosterPlayer(
+        teamData,
+        subscription.player.fullName,
+        subscription.player.externalId,
+        relation.shirtNumber,
       );
 
       return (
@@ -156,6 +196,32 @@ export function findLineupPlayer(
   playerName: string,
   shirtNumber: number | null,
 ): ICevMatchLineupPlayer | undefined {
+  if (shirtNumber !== null) {
+    const byShirtNumber = players.find(
+      (player) => player.shirtNumber === shirtNumber,
+    );
+    if (byShirtNumber) return byShirtNumber;
+  }
+
+  const normalizedName = normalizePlayerName(playerName);
+  return players.find(
+    (player) => normalizePlayerName(player.playerName) === normalizedName,
+  );
+}
+
+export function findRosterPlayer(
+  players: ICevMatchRosterPlayer[],
+  playerName: string,
+  externalId: string,
+  shirtNumber: number | null,
+): ICevMatchRosterPlayer | undefined {
+  if (externalId) {
+    const byExternalId = players.find(
+      (player) => player.externalId === externalId,
+    );
+    if (byExternalId) return byExternalId;
+  }
+
   if (shirtNumber !== null) {
     const byShirtNumber = players.find(
       (player) => player.shirtNumber === shirtNumber,

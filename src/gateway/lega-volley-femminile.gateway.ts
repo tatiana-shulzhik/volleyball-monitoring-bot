@@ -4,6 +4,12 @@ import {
   ILegaVolleyFemminileTeamRoster,
 } from '../interfaces/requests/lega-volley-femminile.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
+import { MatchEntity } from '../databases/entities/match.entity';
+import {
+  IFetchedMatchAttackStatistics,
+  IFetchedMatchLineup,
+  IFetchedMatchRoster,
+} from '../interfaces/requests/player-statistics.interface';
 import {
   LEGA_VOLLEY_FEMMINILE_BASE_URL,
   LEGA_VOLLEY_FEMMINILE_CATALOG_PATH,
@@ -22,6 +28,8 @@ import { mapSettledWithConcurrency } from '../shared/promise.utils';
 import {
   createSummerTourPlayerNamesBySurname,
   parseLegaVolleyFemminileCatalog,
+  parseLegaVolleyFemminileLiveLineup,
+  parseLegaVolleyFemminileMatchRoster,
   parseLegaVolleyFemminileMatchStatistics,
   parseLegaVolleyFemminileTeamRoster,
   parseLegaVolleyFemminileSummerTourRosters,
@@ -446,6 +454,81 @@ export class LegaVolleyFemminileGateway {
       fetched: [{ teams: teams.length ? teams : results.teams, matches }],
       range: readLegaVolleyFemminileDateRange(resultsHtml),
     };
+  }
+
+  async fetchMatchRosters(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchRoster>[]> {
+    const results = await mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const sourceMatchId = match.externalId?.match(/(\d+)$/)?.[1];
+        if (!sourceMatchId) {
+          throw new Error(
+            `Lega Volley Femminile match ${match.id} has no external ID`,
+          );
+        }
+        const html = await this.http.get(
+          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/roster/`,
+          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+        );
+        const roster = parseLegaVolleyFemminileMatchRoster(html);
+
+        return {
+          matchExternalId: match.externalId ?? sourceMatchId,
+          ...roster,
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match roster request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
+  }
+
+  async fetchLiveMatchData(matches: MatchEntity[]): Promise<
+    PromiseSettledResult<{
+      lineup: IFetchedMatchLineup;
+      attackStatistics: IFetchedMatchAttackStatistics;
+    }>[]
+  > {
+    return mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const sourceMatchId = match.externalId?.match(/(\d+)$/)?.[1];
+        if (!sourceMatchId) {
+          throw new Error(
+            `Lega Volley Femminile match ${match.id} has no external ID`,
+          );
+        }
+        const html = await this.http.get(
+          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`,
+          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+        );
+        const lineup = parseLegaVolleyFemminileLiveLineup(html);
+
+        return {
+          lineup: {
+            matchExternalId: match.externalId ?? sourceMatchId,
+            ...lineup,
+          },
+          attackStatistics: {
+            matchExternalId: match.externalId ?? sourceMatchId,
+            home: [],
+            away: [],
+          },
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
   }
 
   private mergeMatches(
