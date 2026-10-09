@@ -2,7 +2,10 @@ import { ICevChampionship } from '../interfaces/requests/championships.interface
 import { ICevCompetitionStage } from '../interfaces/requests/competition-stages.interface';
 import { ICevLeague } from '../interfaces/requests/leagues.interface';
 import { ICevMatch } from '../interfaces/requests/matches.interface';
-import { ICevMatchLineupPlayer } from '../interfaces/requests/player-statistics.interface';
+import {
+  ICevMatchLineupPlayer,
+  ICevMatchRosterPlayer,
+} from '../interfaces/requests/player-statistics.interface';
 import { ICevTeam } from '../interfaces/requests/teams.interface';
 import {
   ILegaVolleyFemminileCompetition,
@@ -579,6 +582,24 @@ function readMatchDate(html: string): Date | null {
   return parseCevLocalDate(`${date} ${time}`, 'Europe/Rome');
 }
 
+export function parseLegaVolleyFemminileMatchRoster(html: string): {
+  home: ICevMatchRosterPlayer[];
+  away: ICevMatchRosterPlayer[];
+} {
+  const section =
+    html.match(/page-template-page-mc-pre-roster[\s\S]*/i)?.[0] ?? html;
+  const teams = [
+    ...section.matchAll(
+      /<b\b[^>]*class=["'][^"']*\bnome-squadra\b[^"']*["'][^>]*>([\s\S]*?)<\/b>[\s\S]*?<table\b[^>]*class=["'][^"']*\btable-starting\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ].map((match) => readMatchRosterPlayers(match[2]));
+
+  return {
+    home: teams[0] ?? [],
+    away: teams[1] ?? [],
+  };
+}
+
 export function parseLegaVolleyFemminileLiveLineup(html: string): {
   home: ICevMatchLineupPlayer[];
   away: ICevMatchLineupPlayer[];
@@ -593,6 +614,36 @@ export function parseLegaVolleyFemminileLiveLineup(html: string): {
     home: tables[0] ?? [],
     away: tables[1] ?? [],
   };
+}
+
+function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
+  const players: ICevMatchRosterPlayer[] = [];
+
+  for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const shirtNumber = readNumber(
+      cleanText(
+        row[1].match(
+          /<th\b[^>]*scope=["']row["'][^>]*>([\s\S]*?)<\/th>/i,
+        )?.[1] ?? '',
+      ),
+    );
+    const cells = [
+      ...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
+    ].map((cell) => cleanText(cell[1]));
+    const playerName = cells.find((cell) => cell && !/^https?:\/\//i.test(cell));
+    const position = cells[cells.length - 1] || undefined;
+    if (shirtNumber === null || !playerName) continue;
+
+    players.push({
+      externalId: '',
+      playerName,
+      shirtNumber,
+      position:
+        position && position !== playerName ? position : undefined,
+    });
+  }
+
+  return players;
 }
 
 function readLiveLineupPlayers(table: string): ICevMatchLineupPlayer[] {

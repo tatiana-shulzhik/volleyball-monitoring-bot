@@ -30,6 +30,7 @@ import {
   addRosterPositions,
   addRosterStatistics,
   findLineupPlayer,
+  findRosterPlayer,
   formatLiveMonitoringMessage,
   formatFullMatchRosterMonitoringMessage,
   formatMatchRosterMonitoringMessage,
@@ -41,6 +42,7 @@ import {
   getPlayerMonitoringStateTtl,
   isActiveMark,
   isStarter,
+  resolveMatchRosterExternalIds,
 } from '../../shared/match-roster-monitoring.utils';
 import { MonitoringSubscriptionsService } from '../monitoring-subscriptions/monitoring-subscriptions.service';
 import { TelegramService } from '../telegram/telegram.service';
@@ -48,7 +50,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку и стартовый состав CEV, а также live-статус игроков CEV и Lega Volley Femminile. */
+/** Проверяет заявку CEV и Lega Volley Femminile, стартовый состав CEV, live CEV и Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -65,18 +67,41 @@ export class MatchRosterMonitoringService {
 
   async checkUpcomingMatchRosters(): Promise<number> {
     const now = new Date();
-    // Заявка проверяется каждые 30 минут в течение 36 часов до начала матча.
-    const matches = await this.matchesService.findCevMonitoredWithin(
-      now,
-      new Date(now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 3_600_000),
+    // Заявка проверяется каждые 10 минут в течение 36 часов до начала матча.
+    const windowEnd = new Date(
+      now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 3_600_000,
     );
-    const notifications = await this.processMatches(
-      matches,
-      now,
-      (items) => this.gateway.fetchMatchRosters(items),
-      (match, roster, context, checkedAt) =>
-        this.processRosterMatch({ match, roster, context, now: checkedAt }),
-    );
+    const handleRoster = (
+      match: MatchEntity,
+      roster: IProcessRosterMatchParams['roster'],
+      context: IMonitoringContext,
+      checkedAt: Date,
+    ) => this.processRosterMatch({ match, roster, context, now: checkedAt });
+    const [cevNotifications, femminileNotifications] = await Promise.all([
+      this.processMatches(
+        await this.matchesService.findMonitoredWithin(
+          ESourceCode.Cev,
+          now,
+          windowEnd,
+        ),
+        now,
+        (items) => this.gateway.fetchMatchRosters(items),
+        handleRoster,
+        ESourceCode.Cev,
+      ),
+      this.processMatches(
+        await this.matchesService.findMonitoredWithin(
+          ESourceCode.LegaVolleyFemminile,
+          now,
+          windowEnd,
+        ),
+        now,
+        (items) => this.femminileGateway.fetchMatchRosters(items),
+        handleRoster,
+        ESourceCode.LegaVolleyFemminile,
+      ),
+    ]);
+    const notifications = cevNotifications + femminileNotifications;
 
     if (notifications) {
       this.logger.log(
@@ -169,7 +194,22 @@ export class MatchRosterMonitoringService {
   private async processRosterMatch(
     data: IProcessRosterMatchParams,
   ): Promise<number> {
-    const { match, roster, context, now } = data;
+    const { match, context, now } = data;
+    const roster = {
+      ...data.roster,
+      home: resolveMatchRosterExternalIds(
+        data.roster.home,
+        match.homeTeam.id,
+        match.league.id,
+        context,
+      ),
+      away: resolveMatchRosterExternalIds(
+        data.roster.away,
+        match.awayTeam.id,
+        match.league.id,
+        context,
+      ),
+    };
     const changedPlayers: Array<{
       playerId: number;
       playerName: string;
@@ -187,11 +227,18 @@ export class MatchRosterMonitoringService {
       monitoredPlayers.map(({ subscription }) => subscription.playerId),
     );
 
-    for (const { subscription, teamData: teamRoster } of monitoredPlayers) {
+    for (const {
+      subscription,
+      relation,
+      teamData: teamRoster,
+    } of monitoredPlayers) {
       if (!teamRoster.length) continue;
 
-      const status = teamRoster.some(
-        ({ externalId }) => externalId === subscription.player.externalId,
+      const status = findRosterPlayer(
+        teamRoster,
+        subscription.player.fullName,
+        subscription.player.externalId,
+        relation.shirtNumber,
       )
         ? ERosterMonitoringStatus.Present
         : ERosterMonitoringStatus.Absent;
@@ -215,7 +262,7 @@ export class MatchRosterMonitoringService {
     );
     if (!acquired) {
       this.logger.debug(
-        `Duplicate roster notification skipped for CEV match ${match.externalId ?? match.id}`,
+        `Duplicate roster notification skipped for match ${match.externalId ?? match.id}`,
       );
       return 0;
     }
@@ -524,10 +571,17 @@ export class MatchRosterMonitoringService {
   private getMatchProtocolUrl(match: MatchEntity): string | undefined {
     if (!match.externalId) return undefined;
 
-    return match.league.stage.championship.source?.code ===
+    if (
+      match.league.stage.championship.source?.code ===
       ESourceCode.LegaVolleyFemminile
-      ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${match.externalId}/startingsix/`
-      : createMatchStatisticsUrl(match.externalId);
+    ) {
+      const sourceMatchId = match.externalId.match(/(\d+)$/)?.[1];
+      return sourceMatchId
+        ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`
+        : undefined;
+    }
+
+    return createMatchStatisticsUrl(match.externalId);
   }
 
   private async getContext(
