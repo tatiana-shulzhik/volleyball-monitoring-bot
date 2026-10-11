@@ -604,16 +604,45 @@ export function parseLegaVolleyFemminileLiveLineup(html: string): {
   home: ICevMatchLineupPlayer[];
   away: ICevMatchLineupPlayer[];
 } {
+  const courtPositions = readCourtPositions(html);
   const tables = [
     ...html.matchAll(
       /<table\b[^>]*class=["'][^"']*\btabella-players-tiebreak\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
     ),
-  ].map((match) => readLiveLineupPlayers(match[1]));
+  ].map((match, index) =>
+    readLiveLineupPlayers(
+      match[1],
+      index === 0 ? courtPositions.home : courtPositions.away,
+    ),
+  );
 
   return {
     home: tables[0] ?? [],
     away: tables[1] ?? [],
   };
+}
+
+/** Позиции 1–6 со схемы площадки (poscampoN + номер игрока). */
+function readCourtPositions(html: string): {
+  home: Map<number, string>;
+  away: Map<number, string>;
+} {
+  const home = new Map<number, string>();
+  const away = new Map<number, string>();
+
+  for (const match of html.matchAll(
+    /<div\b[^>]*class=["']([^"']*\batleta\b[^"']*)["'][^>]*>[\s\S]*?<div\b[^>]*class=["'][^"']*\bnumero\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+  )) {
+    const className = match[1];
+    const position = className.match(/\bposcampo([1-6])\b/i)?.[1];
+    const side = className.match(/\bposcampo(sx|dx)\b/i)?.[1]?.toLowerCase();
+    const shirtNumber = readNumber(cleanText(match[2]));
+    if (!position || !side || shirtNumber === null) continue;
+
+    (side === 'sx' ? home : away).set(shirtNumber, position);
+  }
+
+  return { home, away };
 }
 
 function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
@@ -646,7 +675,10 @@ function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
   return players;
 }
 
-function readLiveLineupPlayers(table: string): ICevMatchLineupPlayer[] {
+function readLiveLineupPlayers(
+  table: string,
+  courtByShirtNumber: Map<number, string>,
+): ICevMatchLineupPlayer[] {
   const players: ICevMatchLineupPlayer[] = [];
 
   for (const row of table.matchAll(
@@ -666,10 +698,13 @@ function readLiveLineupPlayers(table: string): ICevMatchLineupPlayer[] {
         )?.[1] ?? '',
       ),
     );
+    const courtPosition =
+      shirtNumber === null ? undefined : courtByShirtNumber.get(shirtNumber);
+    const onCourt = row[1].toLowerCase() === 'in-campo';
     players.push({
       playerName,
       shirtNumber,
-      setMarks: [row[1].toLowerCase() === 'in-campo' ? '*' : '-'],
+      setMarks: [courtPosition ?? (onCourt ? '*' : '-')],
     });
   }
 

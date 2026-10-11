@@ -544,9 +544,9 @@ function formatLivePlayerAttacks(
 }
 
 function formatLineupStatus(mark: string | undefined): string {
-  if (!isActiveMark(mark ?? '')) return '🪑';
+  if (!mark || !isActiveMark(mark)) return '-';
 
-  return mark === '*' ? '🟢 ⭐' : '🟢';
+  return escapeHtml(mark);
 }
 
 function normalizePlayerName(value: string): string {
