@@ -28,9 +28,10 @@ import { mapSettledWithConcurrency } from '../shared/promise.utils';
 import {
   createSummerTourPlayerNamesBySurname,
   parseLegaVolleyFemminileCatalog,
+  expandLiveLineupSetMarks,
   parseLegaVolleyFemminileLiveLineup,
+  parseLegaVolleyFemminileMatchAttackStatistics,
   parseLegaVolleyFemminileMatchRoster,
-  parseLegaVolleyFemminileMatchStats,
   parseLegaVolleyFemminileMatchStatistics,
   parseLegaVolleyFemminileTeamRoster,
   parseLegaVolleyFemminileSummerTourRosters,
@@ -547,21 +548,36 @@ export class LegaVolleyFemminileGateway {
             `Lega Volley Femminile match ${match.id} has no external ID`,
           );
         }
-        const html = await this.http.get(
-          this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
-          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
-        );
-        const lineup = parseLegaVolleyFemminileMatchStats(html);
+        const [statsHtml, lineupHtml] = await Promise.all([
+          this.http.get(
+            this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
+            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+          ),
+          this.http.get(
+            this.getMatchCenterPageUrl(sourceMatchId, 'startingsix'),
+            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+          ),
+        ]);
+        const attackStatistics =
+          parseLegaVolleyFemminileMatchAttackStatistics(statsHtml);
+        const lineup = parseLegaVolleyFemminileLiveLineup(lineupHtml);
 
         return {
           lineup: {
             matchExternalId: match.externalId ?? sourceMatchId,
-            ...lineup,
+            home: expandLiveLineupSetMarks(
+              lineup.home,
+              attackStatistics.setCount,
+            ),
+            away: expandLiveLineupSetMarks(
+              lineup.away,
+              attackStatistics.setCount,
+            ),
           },
           attackStatistics: {
             matchExternalId: match.externalId ?? sourceMatchId,
-            home: [],
-            away: [],
+            home: attackStatistics.home,
+            away: attackStatistics.away,
           },
         };
       },
