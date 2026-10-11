@@ -359,7 +359,7 @@ export function formatStartingLineupMessage(
   return formatMonitoringMessage(
     data.status === EStartingLineupMonitoringStatus.Starter
       ? '🟢 Игрок заявлен в стартовый состав'
-      : '🪑 Игрок на скамейке',
+      : 'Игрок не в стартовом составе',
     data,
     'Стартовый состав (за 10 минут до начала)',
   );
@@ -404,7 +404,7 @@ function formatStartingLineupTable(
         player.shirtNumber === null
           ? '—'
           : (positionsByShirtNumber.get(player.shirtNumber) ?? '—');
-      const status = formatLineupStatus(player.setMarks[0]);
+      const status = formatSetLineupMark(player.setMarks[0]);
 
       return (
         '<tr>' +
@@ -478,7 +478,7 @@ function formatLiveLineupTable(
       const statuses = Array.from(
         { length: currentSet },
         (_, index) =>
-          `<td align="center">${formatLineupStatus(player.setMarks[index])}</td>`,
+          `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
       );
       const position =
         player.shirtNumber === null
@@ -488,10 +488,10 @@ function formatLiveLineupTable(
       return (
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td>${escapeHtml(formatPlayerSurname(player.playerName))}</td>` +
+        statuses.join('') +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
         `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
-        statuses.join('') +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
@@ -500,9 +500,10 @@ function formatLiveLineupTable(
   return [
     `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Рейтинг (очки/сеты)</th>' +
-      '<th>Атака (успешные/попытки)</th>' +
+    '<tr><th>№</th><th>Игрок</th>' +
       setHeaders.join('') +
+      '<th>Рейтинг (очки/сеты)</th>' +
+      '<th>Атака (успешные/попытки)</th>' +
       '<th>Поз.</th></tr>',
     ...rows,
     '</table>',
@@ -543,10 +544,12 @@ function formatLivePlayerAttacks(
   ).toFixed(0)}%)`;
 }
 
-function formatLineupStatus(mark: string | undefined): string {
-  if (!mark || !isActiveMark(mark)) return '-';
+function formatSetLineupMark(mark: string | undefined): string {
+  return isActiveMark(mark ?? '') ? escapeHtml(mark!) : '—';
+}
 
-  return escapeHtml(mark);
+function formatPlayerSurname(playerName: string): string {
+  return playerName.trim().split(/\s+/)[0] || playerName;
 }
 
 function normalizePlayerName(value: string): string {
