@@ -585,7 +585,7 @@ export class MatchRosterMonitoringService {
     ) {
       const sourceMatchId = match.externalId.match(/(\d+)$/)?.[1];
       return sourceMatchId
-        ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`
+        ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/matchstats/`
         : undefined;
     }
 
