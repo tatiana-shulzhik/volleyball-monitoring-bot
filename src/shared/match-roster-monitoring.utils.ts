@@ -518,7 +518,7 @@ function formatLiveLineupTable(
       return (
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td>${escapeHtml(formatPlayerSurname(player.playerName))}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
         statuses.join('') +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
         `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
@@ -581,10 +581,6 @@ function formatLivePlayerAttacks(
 
 function formatSetLineupMark(mark: string | undefined): string {
   return isActiveMark(mark ?? '') ? escapeHtml(mark!) : '—';
-}
-
-function formatPlayerSurname(playerName: string): string {
-  return playerName.trim().split(/\s+/)[0] || playerName;
 }
 
 function normalizePlayerName(value: string): string {
