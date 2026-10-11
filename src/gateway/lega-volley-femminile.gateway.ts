@@ -30,6 +30,7 @@ import {
   parseLegaVolleyFemminileCatalog,
   parseLegaVolleyFemminileLiveLineup,
   parseLegaVolleyFemminileMatchRoster,
+  parseLegaVolleyFemminileMatchStats,
   parseLegaVolleyFemminileMatchStatistics,
   parseLegaVolleyFemminileTeamRoster,
   parseLegaVolleyFemminileSummerTourRosters,
@@ -469,7 +470,7 @@ export class LegaVolleyFemminileGateway {
           );
         }
         const html = await this.http.get(
-          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/roster/`,
+          this.getMatchCenterPageUrl(sourceMatchId, 'roster'),
           LEGA_VOLLEY_HTTP_TIMEOUT_MS,
         );
         const roster = parseLegaVolleyFemminileMatchRoster(html);
@@ -507,7 +508,7 @@ export class LegaVolleyFemminileGateway {
           );
         }
         const html = await this.http.get(
-          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`,
+          this.getMatchCenterPageUrl(sourceMatchId, 'startingsix'),
           LEGA_VOLLEY_HTTP_TIMEOUT_MS,
         );
 
@@ -547,10 +548,10 @@ export class LegaVolleyFemminileGateway {
           );
         }
         const html = await this.http.get(
-          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`,
+          this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
           LEGA_VOLLEY_HTTP_TIMEOUT_MS,
         );
-        const lineup = parseLegaVolleyFemminileLiveLineup(html);
+        const lineup = parseLegaVolleyFemminileMatchStats(html);
 
         return {
           lineup: {
@@ -566,6 +567,14 @@ export class LegaVolleyFemminileGateway {
       },
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
+  }
+
+  /** Полный HTML match-center; без ?no_cache_sa=1 сайт отдаёт AJAX-заглушку. */
+  private getMatchCenterPageUrl(
+    sourceMatchId: string,
+    page: 'roster' | 'startingsix' | 'matchstats',
+  ): string {
+    return `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/${page}/?no_cache_sa=1`;
   }
 
   private mergeMatches(

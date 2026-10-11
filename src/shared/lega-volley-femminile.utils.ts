@@ -622,6 +622,75 @@ export function parseLegaVolleyFemminileLiveLineup(html: string): {
   };
 }
 
+/**
+ * Разбирает страницу matchstats: по каждому игроку очки по сетам.
+ * Это даёт настоящие setMarks (как у CEV), а не только текущую расстановку,
+ * поэтому live-мониторинг корректно определяет сет и замены.
+ */
+export function parseLegaVolleyFemminileMatchStats(html: string): {
+  home: ICevMatchLineupPlayer[];
+  away: ICevMatchLineupPlayer[];
+} {
+  const setCount = readMatchStatsSetCount(html);
+  const tables = [
+    ...html.matchAll(
+      /<table\b[^>]*class=["'][^"']*\btabella-players-tiebreak\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ].map((match) => readMatchStatsPlayers(match[1], setCount));
+
+  return {
+    home: tables[0] ?? [],
+    away: tables[1] ?? [],
+  };
+}
+
+/** Число сыгранных сетов определяется по заголовкам «Set N» в таблице matchstats. */
+function readMatchStatsSetCount(html: string): number {
+  const header = html.match(
+    /<table\b[^>]*class=["'][^"']*\btable-atlete\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/i,
+  );
+  if (!header) return 1;
+
+  return Math.max(1, [...header[1].matchAll(/\bSet\s*\d+/gi)].length);
+}
+
+function readMatchStatsPlayers(
+  table: string,
+  setCount: number,
+): ICevMatchLineupPlayer[] {
+  const players: ICevMatchLineupPlayer[] = [];
+
+  for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const playerName = cleanText(
+      row[1].match(
+        /<td\b[^>]*class=["'][^"']*\btabella-nome-cognome\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/i,
+      )?.[1] ?? '',
+    );
+    if (!playerName) continue;
+
+    const shirtNumber = readNumber(
+      cleanText(
+        row[1].match(
+          /<td\b[^>]*class=["'][^"']*\bnum-maglia\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/i,
+        )?.[1] ?? '',
+      ),
+    );
+
+    // Числовые ячейки идут без класса: по одной на сет, затем атака и итог.
+    const statCells = [
+      ...row[1].matchAll(/<td\b(?![^>]*\bclass=)[^>]*>([\s\S]*?)<\/td>/gi),
+    ].map((cell) => cleanText(cell[1]));
+
+    players.push({
+      playerName,
+      shirtNumber,
+      setMarks: statCells.slice(0, setCount),
+    });
+  }
+
+  return players;
+}
+
 /** Позиции 1–6 со схемы площадки (poscampoN + номер игрока). */
 function readCourtPositions(html: string): {
   home: Map<number, string>;
