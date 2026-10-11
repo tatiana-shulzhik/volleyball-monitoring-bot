@@ -548,19 +548,14 @@ export class LegaVolleyFemminileGateway {
             `Lega Volley Femminile match ${match.id} has no external ID`,
           );
         }
-        const [statsHtml, lineupHtml] = await Promise.all([
-          this.http.get(
-            this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
-            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
-          ),
-          this.http.get(
-            this.getMatchCenterPageUrl(sourceMatchId, 'startingsix'),
-            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
-          ),
-        ]);
+        // Live: matchstats — in-campo → «*», статистика ATTACCHI/PUNTI.
+        const html = await this.http.get(
+          this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
+          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+        );
         const attackStatistics =
-          parseLegaVolleyFemminileMatchAttackStatistics(statsHtml);
-        const lineup = parseLegaVolleyFemminileLiveLineup(lineupHtml);
+          parseLegaVolleyFemminileMatchAttackStatistics(html);
+        const lineup = parseLegaVolleyFemminileLiveLineup(html);
 
         return {
           lineup: {
