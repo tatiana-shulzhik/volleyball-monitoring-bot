@@ -494,6 +494,43 @@ export class LegaVolleyFemminileGateway {
     return results;
   }
 
+  async fetchMatchLineups(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchLineup>[]> {
+    const results = await mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const sourceMatchId = match.externalId?.match(/(\d+)$/)?.[1];
+        if (!sourceMatchId) {
+          throw new Error(
+            `Lega Volley Femminile match ${match.id} has no external ID`,
+          );
+        }
+        const html = await this.http.get(
+          `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`,
+          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+        );
+
+        return {
+          matchExternalId: match.externalId ?? sourceMatchId,
+          ...parseLegaVolleyFemminileLiveLineup(html),
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match lineup request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
+  }
+
   async fetchLiveMatchData(matches: MatchEntity[]): Promise<
     PromiseSettledResult<{
       lineup: IFetchedMatchLineup;

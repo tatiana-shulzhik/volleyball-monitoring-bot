@@ -50,7 +50,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку CEV и Lega Volley Femminile, стартовый состав CEV, live CEV и Femminile. */
+/** Проверяет заявку и live для CEV и Lega Volley Femminile; стартовый состав — только Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -112,22 +112,32 @@ export class MatchRosterMonitoringService {
     return notifications;
   }
 
-  /** Проверяет стартовый состав каждую минуту в последние 10 минут до матча. */
+  /**
+   * Проверяет стартовый состав Lega Volley Femminile за 10 минут до матча.
+   * CEV не проверяем: стартовые составы появляются уже после начала матча.
+   */
   async checkStartingLineups(): Promise<number> {
     const now = new Date();
     // Матч проверяется с момента, когда до начала остаётся 10 минут, и до старта.
-    const matches = await this.matchesService.findCevMonitoredWithin(
-      now,
-      new Date(
-        now.getTime() + MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES * 60_000,
-      ),
+    const windowEnd = new Date(
+      now.getTime() + MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES * 60_000,
     );
     const notifications = await this.processMatches(
-      matches,
+      await this.matchesService.findMonitoredWithin(
+        ESourceCode.LegaVolleyFemminile,
+        now,
+        windowEnd,
+      ),
       now,
-      (items) => this.gateway.fetchMatchLineups(items),
-      (match, lineup, context, now) =>
-        this.processStartingLineupMatch({ match, lineup, context, now }),
+      (items) => this.femminileGateway.fetchMatchLineups(items),
+      (match, lineup, context, checkedAt) =>
+        this.processStartingLineupMatch({
+          match,
+          lineup,
+          context,
+          now: checkedAt,
+        }),
+      ESourceCode.LegaVolleyFemminile,
     );
 
     if (notifications) {
@@ -388,9 +398,7 @@ export class MatchRosterMonitoringService {
           match.league.id,
           context,
         ),
-        matchProtocolUrl: match.externalId
-          ? createMatchStatisticsUrl(match.externalId)
-          : undefined,
+        matchProtocolUrl: this.getMatchProtocolUrl(match),
       }),
     );
     if (!sent) return 0;
