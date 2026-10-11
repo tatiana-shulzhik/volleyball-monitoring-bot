@@ -623,13 +623,13 @@ export function parseLegaVolleyFemminileLiveLineup(html: string): {
   };
 }
 
-/** Live matchstats: очки/атаки + число начатых сетов. Позиции 1–6 — со startingsix. */
+/** Live matchstats: очки/атаки + число начатых сетов. */
 export function parseLegaVolleyFemminileMatchAttackStatistics(html: string): {
   home: ICevPlayerAttackStatistics[];
   away: ICevPlayerAttackStatistics[];
   setCount: number;
 } {
-  const setCount = readMatchStatsSetCount(html);
+  const setCount = readLiveSetCount(html);
   const tables = [
     ...html.matchAll(
       /<table\b[^>]*class=["'][^"']*\btabella-players-tiebreak\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
@@ -643,7 +643,7 @@ export function parseLegaVolleyFemminileMatchAttackStatistics(html: string): {
   };
 }
 
-/** Текущую позицию со startingsix кладёт в колонку текущего сета. */
+/** Текущую отметку (* / позиция) кладёт в колонку текущего сета. */
 export function expandLiveLineupSetMarks(
   players: ICevMatchLineupPlayer[],
   setCount: number,
@@ -658,13 +658,25 @@ export function expandLiveLineupSetMarks(
   });
 }
 
-function readMatchStatsSetCount(html: string): number {
+/** Число сетов: вкладки Set N на matchstats, иначе парциалы на табло. */
+function readLiveSetCount(html: string): number {
   const header = html.match(
     /<table\b[^>]*class=["'][^"']*\btable-atlete\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/i,
   );
-  if (!header) return 1;
+  if (header) {
+    const fromTabs = [...header[1].matchAll(/\bSet\s*\d+/gi)].length;
+    if (fromTabs > 0) return fromTabs;
+  }
 
-  return Math.max(1, [...header[1].matchAll(/\bSet\s*\d+/gi)].length);
+  const scoreBlock = html.match(
+    /<div\b[^>]*class=["'][^"']*\bpunto-b\b[^"']*\bcount\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+  );
+  if (scoreBlock) {
+    const partials = cleanText(scoreBlock[1]).match(/\d{1,2}-\d{1,2}/g);
+    if (partials?.length) return partials.length;
+  }
+
+  return 1;
 }
 
 function readMatchStatsAttackPlayers(
@@ -727,7 +739,8 @@ function readCourtPositions(html: string): {
     const shirtNumber = readNumber(cleanText(match[2]));
     if (!position || !side || shirtNumber === null) continue;
 
-    (side === 'sx' ? home : away).set(shirtNumber, position);
+    // На схеме Femminile: dx = хозяева, sx = гости.
+    (side === 'dx' ? home : away).set(shirtNumber, position);
   }
 
   return { home, away };
