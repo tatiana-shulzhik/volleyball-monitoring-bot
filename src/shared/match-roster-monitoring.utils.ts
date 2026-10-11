@@ -256,6 +256,36 @@ export function getCurrentSet(
   return currentSet || null;
 }
 
+/** Для Femminile дописывает прошлые позиции из Redis к текущему сету. */
+export function mergeLineupSetMarksHistory(
+  previous: ICevMatchLineupPlayer[] | undefined,
+  current: ICevMatchLineupPlayer[],
+  currentSet: number,
+): ICevMatchLineupPlayer[] {
+  const safeSetCount = Math.max(1, currentSet);
+  const previousByKey = new Map(
+    (previous ?? []).map((player) => [createLineupPlayerKey(player), player]),
+  );
+
+  return current.map((player) => {
+    const previousPlayer = previousByKey.get(createLineupPlayerKey(player));
+    const setMarks = Array.from({ length: safeSetCount }, (_, index) => {
+      if (index === safeSetCount - 1) {
+        return player.setMarks[index] ?? player.setMarks.at(-1) ?? '-';
+      }
+      const currentMark = player.setMarks[index] ?? '';
+      if (isActiveMark(currentMark)) return currentMark;
+      return previousPlayer?.setMarks[index] || currentMark || '-';
+    });
+
+    return { ...player, setMarks };
+  });
+}
+
+function createLineupPlayerKey(player: ICevMatchLineupPlayer): string {
+  return `${player.shirtNumber ?? ''}:${normalizePlayerName(player.playerName)}`;
+}
+
 export function formatMatchRosterMonitoringMessage(
   data: IMatchRosterMonitoringMessageData,
 ): string {
@@ -536,7 +566,12 @@ function formatLivePlayerRating(
 function formatLivePlayerAttacks(
   statistics: ICevPlayerAttackStatistics | undefined,
 ): string {
-  if (!statistics?.attempts) return '—';
+  if (!statistics) return '—';
+
+  // Femminile live отдаёт только результативные атаки, без попыток.
+  if (!statistics.attempts) {
+    return statistics.successful > 0 ? `${statistics.successful}/—` : '—';
+  }
 
   return `${statistics.successful}/${statistics.attempts} (${(
     (statistics.successful / statistics.attempts) *

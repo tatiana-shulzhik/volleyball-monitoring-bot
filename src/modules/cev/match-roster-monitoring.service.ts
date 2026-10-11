@@ -6,7 +6,10 @@ import { CevGateway } from '../../gateway/cev.gateway';
 import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
-import { IFetchedMatchAttackStatistics } from '../../interfaces/requests/player-statistics.interface';
+import {
+  ICevMatchLineupPlayer,
+  IFetchedMatchAttackStatistics,
+} from '../../interfaces/requests/player-statistics.interface';
 import {
   ILivePlayerMonitoringChange,
   IMonitoringContext,
@@ -42,6 +45,7 @@ import {
   getPlayerMonitoringStateTtl,
   isActiveMark,
   isStarter,
+  mergeLineupSetMarksHistory,
   resolveMatchRosterExternalIds,
 } from '../../shared/match-roster-monitoring.utils';
 import { MonitoringSubscriptionsService } from '../monitoring-subscriptions/monitoring-subscriptions.service';
@@ -416,9 +420,16 @@ export class MatchRosterMonitoringService {
       attackStatistics: IFetchedMatchAttackStatistics;
     },
   ): Promise<number> {
-    const { match, lineup, attackStatistics, context, now } = data;
-    const currentSet = getCurrentSet(lineup.home, lineup.away);
+    const { match, attackStatistics, context, now } = data;
+    const currentSet = getCurrentSet(data.lineup.home, data.lineup.away);
     if (!currentSet) return 0;
+
+    const isFemminile =
+      match.league.stage.championship.source?.code ===
+      ESourceCode.LegaVolleyFemminile;
+    const lineup = isFemminile
+      ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
+      : data.lineup;
 
     const changedPlayers: ILivePlayerMonitoringChange[] = [];
     const initialStates: ILivePlayerMonitoringChange[] = [];
@@ -631,6 +642,37 @@ export class MatchRosterMonitoringService {
         ),
       ),
     };
+  }
+
+  private async resolveLiveLineupHistory(
+    match: MatchEntity,
+    lineup: IProcessLineupMatchParams['lineup'],
+    currentSet: number,
+    now: Date,
+  ): Promise<IProcessLineupMatchParams['lineup']> {
+    const historyKey = `match-monitoring:${match.id}:lineup-set-marks`;
+    const previous = await this.cache.get<{
+      home: ICevMatchLineupPlayer[];
+      away: ICevMatchLineupPlayer[];
+    }>(historyKey);
+    const home = mergeLineupSetMarksHistory(
+      previous?.home,
+      lineup.home,
+      currentSet,
+    );
+    const away = mergeLineupSetMarksHistory(
+      previous?.away,
+      lineup.away,
+      currentSet,
+    );
+
+    await this.cache.set(
+      historyKey,
+      { home, away },
+      getPlayerMonitoringStateTtl(match, now),
+    );
+
+    return { ...lineup, home, away };
   }
 
   private async getStates(

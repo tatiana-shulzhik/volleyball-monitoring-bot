@@ -5,6 +5,7 @@ import { ICevMatch } from '../interfaces/requests/matches.interface';
 import {
   ICevMatchLineupPlayer,
   ICevMatchRosterPlayer,
+  ICevPlayerAttackStatistics,
 } from '../interfaces/requests/player-statistics.interface';
 import { ICevTeam } from '../interfaces/requests/teams.interface';
 import {
@@ -622,29 +623,41 @@ export function parseLegaVolleyFemminileLiveLineup(html: string): {
   };
 }
 
-/**
- * Разбирает страницу matchstats: по каждому игроку очки по сетам.
- * Это даёт настоящие setMarks (как у CEV), а не только текущую расстановку,
- * поэтому live-мониторинг корректно определяет сет и замены.
- */
-export function parseLegaVolleyFemminileMatchStats(html: string): {
-  home: ICevMatchLineupPlayer[];
-  away: ICevMatchLineupPlayer[];
+/** Live matchstats: очки/атаки + число начатых сетов. Позиции 1–6 — со startingsix. */
+export function parseLegaVolleyFemminileMatchAttackStatistics(html: string): {
+  home: ICevPlayerAttackStatistics[];
+  away: ICevPlayerAttackStatistics[];
+  setCount: number;
 } {
   const setCount = readMatchStatsSetCount(html);
   const tables = [
     ...html.matchAll(
       /<table\b[^>]*class=["'][^"']*\btabella-players-tiebreak\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi,
     ),
-  ].map((match) => readMatchStatsPlayers(match[1], setCount));
+  ].map((match) => readMatchStatsAttackPlayers(match[1], setCount));
 
   return {
     home: tables[0] ?? [],
     away: tables[1] ?? [],
+    setCount,
   };
 }
 
-/** Число сыгранных сетов определяется по заголовкам «Set N» в таблице matchstats. */
+/** Текущую позицию со startingsix кладёт в колонку текущего сета. */
+export function expandLiveLineupSetMarks(
+  players: ICevMatchLineupPlayer[],
+  setCount: number,
+): ICevMatchLineupPlayer[] {
+  const safeSetCount = Math.max(1, setCount);
+
+  return players.map((player) => {
+    const currentMark = player.setMarks[0] ?? '-';
+    const setMarks = Array.from({ length: safeSetCount }, () => '-');
+    setMarks[safeSetCount - 1] = currentMark;
+    return { ...player, setMarks };
+  });
+}
+
 function readMatchStatsSetCount(html: string): number {
   const header = html.match(
     /<table\b[^>]*class=["'][^"']*\btable-atlete\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/i,
@@ -654,11 +667,11 @@ function readMatchStatsSetCount(html: string): number {
   return Math.max(1, [...header[1].matchAll(/\bSet\s*\d+/gi)].length);
 }
 
-function readMatchStatsPlayers(
+function readMatchStatsAttackPlayers(
   table: string,
   setCount: number,
-): ICevMatchLineupPlayer[] {
-  const players: ICevMatchLineupPlayer[] = [];
+): ICevPlayerAttackStatistics[] {
+  const players: ICevPlayerAttackStatistics[] = [];
 
   for (const row of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const playerName = cleanText(
@@ -666,7 +679,7 @@ function readMatchStatsPlayers(
         /<td\b[^>]*class=["'][^"']*\btabella-nome-cognome\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/i,
       )?.[1] ?? '',
     );
-    if (!playerName) continue;
+    if (!playerName || playerName === 'NOME') continue;
 
     const shirtNumber = readNumber(
       cleanText(
@@ -676,15 +689,21 @@ function readMatchStatsPlayers(
       ),
     );
 
-    // Числовые ячейки идут без класса: по одной на сет, затем атака и итог.
+    // ATTACCHI, MURI, ACE, ERRORI, PUNTI — попыток атаки на live-странице нет.
     const statCells = [
       ...row[1].matchAll(/<td\b(?![^>]*\bclass=)[^>]*>([\s\S]*?)<\/td>/gi),
     ].map((cell) => cleanText(cell[1]));
+    const attacks = readNumber(statCells[0] ?? '') ?? 0;
+    const points = readNumber(statCells[4] ?? '') ?? 0;
+    if (!attacks && !points) continue;
 
     players.push({
       playerName,
       shirtNumber,
-      setMarks: statCells.slice(0, setCount),
+      attempts: 0,
+      successful: attacks,
+      points,
+      setsPlayed: setCount,
     });
   }
 
@@ -725,10 +744,12 @@ function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
         )?.[1] ?? '',
       ),
     );
-    const cells = [
-      ...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
-    ].map((cell) => cleanText(cell[1]));
-    const playerName = cells.find((cell) => cell && !/^https?:\/\//i.test(cell));
+    const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (cell) => cleanText(cell[1]),
+    );
+    const playerName = cells.find(
+      (cell) => cell && !/^https?:\/\//i.test(cell),
+    );
     const position = cells[cells.length - 1] || undefined;
     if (shirtNumber === null || !playerName) continue;
 
@@ -736,8 +757,7 @@ function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
       externalId: '',
       playerName,
       shirtNumber,
-      position:
-        position && position !== playerName ? position : undefined,
+      position: position && position !== playerName ? position : undefined,
     });
   }
 
