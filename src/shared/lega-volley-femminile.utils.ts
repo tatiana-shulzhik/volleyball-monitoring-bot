@@ -744,10 +744,12 @@ function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
         )?.[1] ?? '',
       ),
     );
-    const cells = [
-      ...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi),
-    ].map((cell) => cleanText(cell[1]));
-    const playerName = cells.find((cell) => cell && !/^https?:\/\//i.test(cell));
+    const cells = [...row[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (cell) => cleanText(cell[1]),
+    );
+    const playerName = cells.find(
+      (cell) => cell && !/^https?:\/\//i.test(cell),
+    );
     const position = cells[cells.length - 1] || undefined;
     if (shirtNumber === null || !playerName) continue;
 
@@ -755,8 +757,7 @@ function readMatchRosterPlayers(table: string): ICevMatchRosterPlayer[] {
       externalId: '',
       playerName,
       shirtNumber,
-      position:
-        position && position !== playerName ? position : undefined,
+      position: position && position !== playerName ? position : undefined,
     });
   }
 

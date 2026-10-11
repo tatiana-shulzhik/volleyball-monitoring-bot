@@ -428,12 +428,7 @@ export class MatchRosterMonitoringService {
       match.league.stage.championship.source?.code ===
       ESourceCode.LegaVolleyFemminile;
     const lineup = isFemminile
-      ? await this.resolveLiveLineupHistory(
-          match,
-          data.lineup,
-          currentSet,
-          now,
-        )
+      ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
       : data.lineup;
 
     const changedPlayers: ILivePlayerMonitoringChange[] = [];

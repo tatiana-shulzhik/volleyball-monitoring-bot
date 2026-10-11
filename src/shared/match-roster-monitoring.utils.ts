@@ -264,10 +264,7 @@ export function mergeLineupSetMarksHistory(
 ): ICevMatchLineupPlayer[] {
   const safeSetCount = Math.max(1, currentSet);
   const previousByKey = new Map(
-    (previous ?? []).map((player) => [
-      createLineupPlayerKey(player),
-      player,
-    ]),
+    (previous ?? []).map((player) => [createLineupPlayerKey(player), player]),
   );
 
   return current.map((player) => {
