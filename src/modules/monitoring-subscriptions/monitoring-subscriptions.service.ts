@@ -58,4 +58,19 @@ export class MonitoringSubscriptionsService {
       championshipId,
     );
   }
+
+  findTeamIdsWithSubscriptions(championshipId: number, stageId: number) {
+    return this.monitoringSubscriptionsRepository.findTeamIdsWithSubscriptions(
+      championshipId,
+      stageId,
+    );
+  }
+
+  removeByTeam(teamId: number, leagueId: number, championshipId: number) {
+    return this.monitoringSubscriptionsRepository.removeByTeam(
+      teamId,
+      leagueId,
+      championshipId,
+    );
+  }
 }

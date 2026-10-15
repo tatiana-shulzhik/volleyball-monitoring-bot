@@ -205,11 +205,14 @@ export async function showList(
   context: Context,
   menu: ListMenu,
 ): Promise<void> {
-  const buttons = menu.items.map(({ text, callbackData }) => [
+  const buttons = menu.items.map(({ text, callbackData, secondary }) => [
     Markup.button.callback(text, callbackData),
+    ...(secondary
+      ? [Markup.button.callback(secondary.text, secondary.callbackData)]
+      : []),
   ]);
 
-  await context.answerCbQuery();
+  await context.answerCbQuery(menu.answerText);
   await context.editMessageText(
     menu.items.length ? menu.message : menu.emptyMessage,
     Markup.inlineKeyboard([
