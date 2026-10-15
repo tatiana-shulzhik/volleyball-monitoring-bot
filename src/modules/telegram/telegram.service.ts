@@ -177,7 +177,7 @@ export class TelegramService
           ? Markup.inlineKeyboard([
               [
                 Markup.button.callback(
-                  'Заявка на матч',
+                  'Расклад на матч',
                   TELEGRAM_CALLBACKS.roster.all(details.matchId),
                 ),
               ],
@@ -552,7 +552,7 @@ export class TelegramService
       Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            showFullRoster ? 'Отслеживаемые игроки' : 'Заявка на матч',
+            showFullRoster ? 'Отслеживаемые игроки' : 'Расклад на матч',
             showFullRoster
               ? TELEGRAM_CALLBACKS.roster.watched(matchId)
               : TELEGRAM_CALLBACKS.roster.all(matchId),

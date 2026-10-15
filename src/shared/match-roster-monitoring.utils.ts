@@ -292,11 +292,33 @@ export function formatMatchRosterMonitoringMessage(
   const timeUntilMatch = data.scheduledAt
     ? formatTimeUntilMatch(data.scheduledAt, data.checkedAt)
     : 'время матча уточняется';
+  const absentHome = data.monitoredHome.filter(
+    (player) => player.isInRoster === false,
+  );
+  const absentAway = data.monitoredAway.filter(
+    (player) => player.isInRoster === false,
+  );
+  const hasAbsentees = absentHome.length > 0 || absentAway.length > 0;
 
   return [
     '<p><b>🏐 Заявка на матч</b></p>',
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     `<p>Проверка: за ${escapeHtml(timeUntilMatch)} до начала</p>`,
+    hasAbsentees
+      ? [
+          '<p><b>🔴 Отсутствуют из мониторинга</b></p>',
+          absentHome.length
+            ? formatMatchRosterTable(data.homeTeamName, absentHome, {
+                accent: 'absent',
+              })
+            : '',
+          absentAway.length
+            ? formatMatchRosterTable(data.awayTeamName, absentAway, {
+                accent: 'absent',
+              })
+            : '',
+        ].join('')
+      : '<p><b>🟢 Все отслеживаемые в заявке</b></p>',
     '<p><b>Отслеживаемые игроки</b></p>',
     data.monitoredHome.length
       ? formatMatchRosterTable(data.homeTeamName, data.monitoredHome)
@@ -313,16 +335,23 @@ export function formatFullMatchRosterMonitoringMessage(
   return [
     '<p><b>🏐 Заявка на матч</b></p>',
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
-    '<p><b>Заявка на матч</b></p>',
-    formatMatchRosterTable(data.homeTeamName, data.home),
-    formatMatchRosterTable(data.awayTeamName, data.away),
+    '<p><b>Расклад на матч</b></p>',
+    formatMatchRosterTable(data.homeTeamName, data.home, {
+      showStatus: false,
+    }),
+    formatMatchRosterTable(data.awayTeamName, data.away, {
+      showStatus: false,
+    }),
   ].join('');
 }
 
 function formatMatchRosterTable(
   teamName: string,
   roster: ICevMatchRosterPlayer[],
+  options?: { accent?: 'present' | 'absent'; showStatus?: boolean },
 ): string {
+  const accent = options?.accent ?? 'present';
+  const showStatus = options?.showStatus ?? true;
   const rows = [...roster]
     .sort(
       (left, right) =>
@@ -331,24 +360,41 @@ function formatMatchRosterTable(
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.playerName.localeCompare(right.playerName),
     )
-    .map(
-      (player) =>
-        '<tr>' +
-        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${player.isInRoster === false ? '🔴' : '🟢'}</td>` +
-        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
-        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
-        `<td align="center">${formatPlayerPosition(player.position)}</td>` +
-        '</tr>',
-    );
+    .map((player) => {
+      const cells = [
+        `<td align="center">${player.shirtNumber ?? '—'}</td>`,
+        `<td>${escapeHtml(player.playerName)}</td>`,
+      ];
+      if (showStatus) {
+        cells.push(
+          `<td align="center">${player.isInRoster === false ? '🔴' : '🟢'}</td>`,
+        );
+      }
+      cells.push(
+        `<td align="center">${formatRosterPlayerRating(player)}</td>`,
+        `<td align="center">${formatRosterPlayerAttacks(player)}</td>`,
+        `<td align="center">${formatPlayerPosition(player.position)}</td>`,
+      );
+
+      return `<tr>${cells.join('')}</tr>`;
+    });
+
+  const headerEmoji = accent === 'absent' ? '🔴' : '🟢';
+  const headers = [
+    '<th>№</th>',
+    '<th>Игрок</th>',
+    ...(showStatus ? ['<th>Статус</th>'] : []),
+    '<th>Рейтинг (очки/сеты)</th>',
+    '<th>Атака (успешные/попытки)</th>',
+    '<th>Поз.</th>',
+  ];
 
   return [
-    `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
+    `<p><b>${headerEmoji} ${escapeHtml(teamName)}</b></p>`,
     rows.length
       ? [
           '<table bordered striped>',
-          '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Рейтинг (очки/сеты)</th><th>Атака (успешные/попытки)</th><th>Поз.</th></tr>',
+          `<tr>${headers.join('')}</tr>`,
           ...rows,
           '</table>',
         ].join('')
