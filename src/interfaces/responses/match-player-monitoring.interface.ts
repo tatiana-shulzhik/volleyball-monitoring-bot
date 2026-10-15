@@ -1,5 +1,4 @@
 import {
-  ELivePlayerMonitoringStatus,
   ERosterMonitoringStatus,
   EStartingLineupMonitoringStatus,
 } from '../../shared/enums';
@@ -11,13 +10,6 @@ import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-lea
 export interface IPlayerMonitoringState {
   rosterStatus?: ERosterMonitoringStatus;
   startingStatus?: EStartingLineupMonitoringStatus;
-  liveStatus?: ELivePlayerMonitoringStatus;
-}
-
-export interface ILivePlayerMonitoringChange {
-  playerId: number;
-  status: ELivePlayerMonitoringStatus;
-  monitoring: IPlayerMonitoringState;
 }
 
 export interface IStartingLineupMonitoringChange {

@@ -35,8 +35,3 @@ export enum EStartingLineupMonitoringStatus {
   Starter = 'starter',
   Bench = 'bench',
 }
-
-export enum ELivePlayerMonitoringStatus {
-  Active = 'active',
-  Inactive = 'inactive',
-}

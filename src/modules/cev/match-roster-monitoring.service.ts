@@ -12,7 +12,7 @@ import {
   IFetchedMatchAttackStatistics,
 } from '../../interfaces/requests/player-statistics.interface';
 import {
-  ILivePlayerMonitoringChange,
+  IMonitoredPlayer,
   IMonitoringContext,
   IPlayerMonitoringState,
   IStartingLineupMonitoringChange,
@@ -25,7 +25,6 @@ import {
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
 } from '../../shared/consts/constants';
 import {
-  ELivePlayerMonitoringStatus,
   ERosterMonitoringStatus,
   ESourceCode,
   EStartingLineupMonitoringStatus,
@@ -471,7 +470,6 @@ export class MatchRosterMonitoringService {
       ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
       : data.lineup;
 
-    const stateUpdates: ILivePlayerMonitoringChange[] = [];
     const monitoredPlayers = getMonitoredPlayers(
       match,
       context,
@@ -480,36 +478,6 @@ export class MatchRosterMonitoringService {
     );
     if (!monitoredPlayers.length) return 0;
 
-    const statesByPlayerId = await this.getStates(
-      match,
-      monitoredPlayers.map(({ subscription }) => subscription.playerId),
-    );
-    for (const {
-      subscription,
-      relation,
-      teamData: teamLineup,
-    } of monitoredPlayers) {
-      const player = findLineupPlayer(
-        teamLineup,
-        subscription.player.fullName,
-        relation.shirtNumber,
-      );
-      const mark = player?.setMarks[currentSet - 1] ?? '';
-      const status = isActiveMark(mark)
-        ? ELivePlayerMonitoringStatus.Active
-        : ELivePlayerMonitoringStatus.Inactive;
-      const monitoring = statesByPlayerId.get(subscription.playerId) ?? {};
-      if (monitoring.liveStatus === status) continue;
-
-      monitoring.liveStatus = status;
-      stateUpdates.push({
-        playerId: subscription.playerId,
-        status,
-        monitoring,
-      });
-    }
-    await this.saveStates(match, stateUpdates, now);
-
     const lineupKey = `match-monitoring:${match.id}:live-lineup`;
     const lineupTtl = getPlayerMonitoringStateTtl(match, now);
     const previous = await this.cache.get<{
@@ -517,25 +485,47 @@ export class MatchRosterMonitoringService {
       home: ICevMatchLineupPlayer[];
       away: ICevMatchLineupPlayer[];
     }>(lineupKey);
-    const snapshot = { set: currentSet, home: lineup.home, away: lineup.away };
+    const snapshot = {
+      set: currentSet,
+      home: this.getMonitoredLineupPlayers(
+        monitoredPlayers,
+        match.homeTeam.id,
+        lineup.home,
+      ),
+      away: this.getMonitoredLineupPlayers(
+        monitoredPlayers,
+        match.awayTeam.id,
+        lineup.away,
+      ),
+    };
     if (!previous) {
       await this.cache.set(lineupKey, snapshot, lineupTtl);
       return 0;
     }
 
+    const previousHome = this.getMonitoredLineupPlayers(
+      monitoredPlayers,
+      match.homeTeam.id,
+      previous.home,
+    );
+    const previousAway = this.getMonitoredLineupPlayers(
+      monitoredPlayers,
+      match.awayTeam.id,
+      previous.away,
+    );
     const changes = [
       this.getLineupChanges(
         match.homeTeam.name,
-        previous.home,
+        previousHome,
         previous.set,
-        lineup.home,
+        snapshot.home,
         currentSet,
       ),
       this.getLineupChanges(
         match.awayTeam.name,
-        previous.away,
+        previousAway,
         previous.set,
-        lineup.away,
+        snapshot.away,
         currentSet,
       ),
     ].flatMap((group) => (group ? [group] : []));
@@ -546,7 +536,7 @@ export class MatchRosterMonitoringService {
 
     const notificationKey = this.getLiveNotificationKey(
       match,
-      lineup,
+      snapshot,
       currentSet,
     );
     const acquired = await this.cache.acquire(notificationKey, lineupTtl);
@@ -586,6 +576,22 @@ export class MatchRosterMonitoringService {
     await this.cache.set(lineupKey, snapshot, lineupTtl);
 
     return 1;
+  }
+
+  private getMonitoredLineupPlayers(
+    monitoredPlayers: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
+    teamId: number,
+    lineup: ICevMatchLineupPlayer[],
+  ): ICevMatchLineupPlayer[] {
+    return monitoredPlayers.flatMap(({ subscription, relation }) => {
+      if (relation.team.id !== teamId) return [];
+      const player = findLineupPlayer(
+        lineup,
+        subscription.player.fullName,
+        relation.shirtNumber,
+      );
+      return player ? [player] : [];
+    });
   }
 
   private getLineupChanges(
@@ -818,10 +824,10 @@ export class MatchRosterMonitoringService {
     return `match-monitoring:${match.id}:roster-notification:${digest}`;
   }
 
-  /** Ключ по составу на поле: кто Active в сете, без позиций/статистики. */
+  /** Ключ дедупа: Active только среди отслеживаемых. */
   private getLiveNotificationKey(
     match: MatchEntity,
-    lineup: IProcessLineupMatchParams['lineup'],
+    lineup: Pick<IProcessLineupMatchParams['lineup'], 'home' | 'away'>,
     currentSet: number,
   ): string {
     const signature = [lineup.home, lineup.away]
