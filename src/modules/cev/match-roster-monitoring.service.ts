@@ -269,6 +269,17 @@ export class MatchRosterMonitoringService {
 
     if (!changedPlayers.length) return 0;
 
+    const hasNewAbsentees = changedPlayers.some(
+      ({ status }) => status === ERosterMonitoringStatus.Absent,
+    );
+    if (!hasNewAbsentees) {
+      changedPlayers.forEach(({ status, monitoring }) => {
+        monitoring.rosterStatus = status;
+      });
+      await this.saveStates(match, changedPlayers, now);
+      return 0;
+    }
+
     const notificationKey = this.getRosterNotificationKey(match, roster);
     const acquired = await this.cache.acquire(
       notificationKey,
