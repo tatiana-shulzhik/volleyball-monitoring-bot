@@ -87,4 +87,58 @@ export class MonitoringSubscriptionsRepository {
     });
     return new Set(subscriptions.map(({ playerId }) => playerId));
   }
+
+  async findChampionshipIdsWithSubscriptions(
+    championshipIds: number[],
+  ): Promise<Set<number>> {
+    const subscriptions = await this.repository.find({
+      where: { championshipId: In(championshipIds) },
+      select: { playerId: true, championshipId: true },
+    });
+
+    return new Set(subscriptions.map(({ championshipId }) => championshipId));
+  }
+
+  async removeByChampionship(championshipId: number): Promise<number> {
+    const result = await this.repository.delete({ championshipId });
+    return result.affected ?? 0;
+  }
+
+  async findTeamIdsWithSubscriptions(
+    championshipId: number,
+    stageId: number,
+  ): Promise<Set<number>> {
+    const rows = await this.dataSource.query<{ teamId: number }[]>(
+      `SELECT DISTINCT ptl.team_id AS "teamId"
+       FROM monitoring_subscriptions ms
+       INNER JOIN player_team_leagues ptl ON ptl.player_id = ms.player_id
+       INNER JOIN leagues l ON l.id = ptl.league_id
+       WHERE ms.championship_id = $1
+         AND l.stage_id = $2`,
+      [championshipId, stageId],
+    );
+
+    return new Set(rows.map(({ teamId }) => teamId));
+  }
+
+  async removeByTeam(
+    teamId: number,
+    leagueId: number,
+    championshipId: number,
+  ): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .delete()
+      .where('"championship_id" = :championshipId', { championshipId })
+      .andWhere(
+        `"player_id" IN (
+          SELECT "player_id" FROM "player_team_leagues"
+          WHERE "team_id" = :teamId AND "league_id" = :leagueId
+        )`,
+        { teamId, leagueId },
+      )
+      .execute();
+
+    return result.affected ?? 0;
+  }
 }
