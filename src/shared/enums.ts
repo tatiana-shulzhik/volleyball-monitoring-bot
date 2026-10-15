@@ -5,7 +5,6 @@ export enum EMatchStatus {
 }
 
 export enum ECronExpression {
-  Every3Minutes = '*/3 * * * *',
   EveryHourAtMinute10 = '10 * * * *',
   Every3HoursAtMinute30 = '30 */3 * * *',
 }

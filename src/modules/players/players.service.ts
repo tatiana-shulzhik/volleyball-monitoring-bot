@@ -14,6 +14,7 @@ import {
 } from '../../interfaces/requests/players.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { ITeamStatistics } from '../../interfaces/responses/team-statistics.interface';
+import { TeamRosterPlayer } from '../../interfaces/responses/team-roster.interface';
 import { ILegaPlayer } from '../../interfaces/requests/lega-volley.interface';
 import { AGGREGATED_SEASONS_COUNT } from '../../shared/consts/constants';
 import {
@@ -67,20 +68,34 @@ export class PlayersService {
   async findTeamPlayers(
     teamId: number,
     leagueId: number,
-  ): Promise<Array<PlayersEntity & { shirtNumber: number | null }>> {
-    const relations = await this.relationsRepository.getWhere({
-      team: { id: teamId },
-      league: { id: leagueId },
-    });
+  ): Promise<{
+    teamName: string | null;
+    players: TeamRosterPlayer[];
+  }> {
+    const rows = await this.teamsRepository.findLeagueRosterRows(
+      teamId,
+      leagueId,
+    );
 
-    return relations
-      .map(({ player, shirtNumber }) => ({ ...player, shirtNumber }))
+    if (!rows.length) {
+      return { teamName: null, players: [] };
+    }
+
+    const players: TeamRosterPlayer[] = rows
+      .filter((row) => row.playerId !== null)
+      .map((row) => ({
+        id: row.playerId as number,
+        fullName: row.playerFullName as string,
+        shirtNumber: row.shirtNumber,
+      }))
       .sort(
         (left, right) =>
           (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
             (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
           left.fullName.localeCompare(right.fullName),
       );
+
+    return { teamName: rows[0].teamName, players };
   }
 
   async upsertCatalogPlayers(
