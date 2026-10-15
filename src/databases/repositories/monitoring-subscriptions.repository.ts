@@ -88,6 +88,22 @@ export class MonitoringSubscriptionsRepository {
     return new Set(subscriptions.map(({ playerId }) => playerId));
   }
 
+  async findChampionshipIdsWithSubscriptions(
+    championshipIds: number[],
+  ): Promise<Set<number>> {
+    const subscriptions = await this.repository.find({
+      where: { championshipId: In(championshipIds) },
+      select: { playerId: true, championshipId: true },
+    });
+
+    return new Set(subscriptions.map(({ championshipId }) => championshipId));
+  }
+
+  async removeByChampionship(championshipId: number): Promise<number> {
+    const result = await this.repository.delete({ championshipId });
+    return result.affected ?? 0;
+  }
+
   async findTeamIdsWithSubscriptions(
     championshipId: number,
     stageId: number,

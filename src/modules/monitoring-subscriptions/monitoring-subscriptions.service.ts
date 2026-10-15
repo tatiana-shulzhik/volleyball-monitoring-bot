@@ -59,6 +59,20 @@ export class MonitoringSubscriptionsService {
     );
   }
 
+  findChampionshipIdsWithSubscriptions(championshipIds: number[]) {
+    if (!championshipIds.length) return new Set<number>();
+
+    return this.monitoringSubscriptionsRepository.findChampionshipIdsWithSubscriptions(
+      championshipIds,
+    );
+  }
+
+  removeByChampionship(championshipId: number) {
+    return this.monitoringSubscriptionsRepository.removeByChampionship(
+      championshipId,
+    );
+  }
+
   findTeamIdsWithSubscriptions(championshipId: number, stageId: number) {
     return this.monitoringSubscriptionsRepository.findTeamIdsWithSubscriptions(
       championshipId,
