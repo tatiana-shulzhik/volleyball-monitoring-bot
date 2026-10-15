@@ -4,6 +4,7 @@ import { RedisCacheService } from '../../cache/redis-cache.service';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { CevGateway } from '../../gateway/cev.gateway';
 import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
+import { ILiveLineupChangeGroup } from '../../interfaces/requests/live-lineup-monitoring.interface';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
 import {
@@ -39,6 +40,7 @@ import {
   formatMatchRosterMonitoringMessage,
   formatStartingLineupMonitoringMessage,
   getCurrentSet,
+  getAbsentStartingLineupPlayers,
   getMonitoredPlayers,
   getMonitoredRoster,
   getPlayerMonitoringStateKey,
@@ -401,22 +403,45 @@ export class MatchRosterMonitoringService {
     }
     if (!changedPlayers.length) return 0;
 
+    const newBenchPlayerIds = changedPlayers
+      .filter(({ status }) => status === EStartingLineupMonitoringStatus.Bench)
+      .map(({ playerId }) => playerId);
+    if (!newBenchPlayerIds.length) {
+      changedPlayers.forEach(({ status, monitoring }) => {
+        monitoring.startingStatus = status;
+      });
+      await this.saveStates(match, changedPlayers, now);
+      return 0;
+    }
+
+    const homePositionsByShirtNumber = this.getPositionsByShirtNumber(
+      match.homeTeam.id,
+      match.league.id,
+      context,
+    );
+    const awayPositionsByShirtNumber = this.getPositionsByShirtNumber(
+      match.awayTeam.id,
+      match.league.id,
+      context,
+    );
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatStartingLineupMonitoringMessage({
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
         home: lineup.home,
         away: lineup.away,
-        homePositionsByShirtNumber: this.getPositionsByShirtNumber(
+        absentHome: getAbsentStartingLineupPlayers(
+          monitoredPlayers,
           match.homeTeam.id,
-          match.league.id,
-          context,
+          homePositionsByShirtNumber,
         ),
-        awayPositionsByShirtNumber: this.getPositionsByShirtNumber(
+        absentAway: getAbsentStartingLineupPlayers(
+          monitoredPlayers,
           match.awayTeam.id,
-          match.league.id,
-          context,
+          awayPositionsByShirtNumber,
         ),
+        homePositionsByShirtNumber,
+        awayPositionsByShirtNumber,
         matchProtocolUrl: this.getMatchProtocolUrl(match),
       }),
     );
@@ -499,21 +524,21 @@ export class MatchRosterMonitoringService {
     }
 
     const changes = [
-      ...this.getLineupChanges(
+      this.getLineupChanges(
         match.homeTeam.name,
         previous.home,
         previous.set,
         lineup.home,
         currentSet,
       ),
-      ...this.getLineupChanges(
+      this.getLineupChanges(
         match.awayTeam.name,
         previous.away,
         previous.set,
         lineup.away,
         currentSet,
       ),
-    ];
+    ].flatMap((group) => (group ? [group] : []));
     if (!changes.length) {
       await this.cache.set(lineupKey, snapshot, lineupTtl);
       return 0;
@@ -569,7 +594,7 @@ export class MatchRosterMonitoringService {
     previousSet: number,
     current: ICevMatchLineupPlayer[],
     currentSet: number,
-  ): string[] {
+  ): ILiveLineupChangeGroup | null {
     const key = (player: ICevMatchLineupPlayer) =>
       `${player.shirtNumber}:${player.playerName}`;
     const previousActive = previous.filter((player) =>
@@ -587,22 +612,25 @@ export class MatchRosterMonitoringService {
       (player) => !previousKeys.has(key(player)),
     );
 
-    return Array.from(
+    const items = Array.from(
       { length: Math.max(outgoing.length, incoming.length) },
       (_, index) => {
         const outPlayer = outgoing[index];
-      const inPlayer = incoming[index];
-      const format = (player: ICevMatchLineupPlayer) =>
-        `№${player.shirtNumber ?? '—'} ${player.playerName}`;
+        const inPlayer = incoming[index];
+        const format = (player: ICevMatchLineupPlayer) =>
+          `№${player.shirtNumber ?? '—'} ${player.playerName}`;
 
         if (outPlayer && inPlayer) {
-          return `${teamName}: ${format(outPlayer)} → ${format(inPlayer)}`;
+          return `${format(outPlayer)} → ${format(inPlayer)}`;
         }
         return outPlayer
-          ? `${teamName}: вне состава ${format(outPlayer)}`
-          : `${teamName}: в составе ${format(inPlayer!)}`;
+          ? `вне состава ${format(outPlayer)}`
+          : `в составе ${format(inPlayer)}`;
       },
     );
+    if (!items.length) return null;
+
+    return { teamName, items };
   }
 
   private getPositionsByShirtNumber(
