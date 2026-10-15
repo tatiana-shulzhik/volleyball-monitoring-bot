@@ -6,6 +6,7 @@ import {
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
 import { MatchEntity } from '../databases/entities/match.entity';
 import {
+  ICevMatchLineupPlayer,
   IFetchedMatchAttackStatistics,
   IFetchedMatchLineup,
   IFetchedMatchRoster,
@@ -548,14 +549,24 @@ export class LegaVolleyFemminileGateway {
             `Lega Volley Femminile match ${match.id} has no external ID`,
           );
         }
-        // Live: matchstats — in-campo → «*», статистика ATTACCHI/PUNTI.
-        const html = await this.http.get(
-          this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
-          LEGA_VOLLEY_HTTP_TIMEOUT_MS,
-        );
+        const [statisticsHtml, lineupHtml] = await Promise.all([
+          this.http.get(
+            this.getMatchCenterPageUrl(sourceMatchId, 'matchstats'),
+            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+          ),
+          this.http.get(
+            this.getMatchCenterPageUrl(sourceMatchId, 'startingsix'),
+            LEGA_VOLLEY_HTTP_TIMEOUT_MS,
+          ),
+        ]);
         const attackStatistics =
-          parseLegaVolleyFemminileMatchAttackStatistics(html);
-        const lineup = parseLegaVolleyFemminileLiveLineup(html);
+          parseLegaVolleyFemminileMatchAttackStatistics(statisticsHtml);
+        const live = parseLegaVolleyFemminileLiveLineup(statisticsHtml);
+        const court = parseLegaVolleyFemminileLiveLineup(lineupHtml);
+        const lineup = {
+          home: this.addLiveCourtPositions(live.home, court.home),
+          away: this.addLiveCourtPositions(live.away, court.away),
+        };
 
         return {
           lineup: {
@@ -578,6 +589,28 @@ export class LegaVolleyFemminileGateway {
       },
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
+  }
+
+  private addLiveCourtPositions(
+    live: ICevMatchLineupPlayer[],
+    court: ICevMatchLineupPlayer[],
+  ): ICevMatchLineupPlayer[] {
+    const positions = new Map(
+      court.flatMap((player) =>
+        /^[1-6]$/.test(player.setMarks[0] ?? '')
+          ? [[player.shirtNumber, player.setMarks[0]] as const]
+          : [],
+      ),
+    );
+
+    return live.map((player) => ({
+      ...player,
+      setMarks: [
+        player.setMarks[0] === '-'
+          ? '-'
+          : (positions.get(player.shirtNumber) ?? '*'),
+      ],
+    }));
   }
 
   /** Полный HTML match-center; без ?no_cache_sa=1 сайт отдаёт AJAX-заглушку. */
