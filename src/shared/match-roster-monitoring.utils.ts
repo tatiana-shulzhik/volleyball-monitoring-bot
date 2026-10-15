@@ -580,7 +580,15 @@ export function formatLiveMonitoringMessage(
     `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     data.changes?.length
-      ? `<p><b>🔁 Изменения:</b><br>${data.changes.map(escapeHtml).join('<br>')}</p>`
+      ? [
+          '<p><b>🔁 Изменения:</b></p>',
+          ...data.changes.map(
+            (group) =>
+              `<p><b>${escapeHtml(group.teamName)}</b><br>` +
+              group.items.map(escapeHtml).join('<br>') +
+              '</p>',
+          ),
+        ].join('')
       : '',
     formatLiveLineupTable(
       data.homeTeamName,
