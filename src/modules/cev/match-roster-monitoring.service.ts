@@ -485,21 +485,48 @@ export class MatchRosterMonitoringService {
     }
     await this.saveStates(match, stateUpdates, now);
 
-    // Уведомление только при смене состава на поле (кто в игре), не при
-    // ротации позиций, обновлении рейтинга или атак.
+    const lineupKey = `match-monitoring:${match.id}:live-lineup`;
+    const lineupTtl = getPlayerMonitoringStateTtl(match, now);
+    const previous = await this.cache.get<{
+      set: number;
+      home: ICevMatchLineupPlayer[];
+      away: ICevMatchLineupPlayer[];
+    }>(lineupKey);
+    const snapshot = { set: currentSet, home: lineup.home, away: lineup.away };
+    if (!previous) {
+      await this.cache.set(lineupKey, snapshot, lineupTtl);
+      return 0;
+    }
+
+    const changes = [
+      ...this.getLineupChanges(
+        match.homeTeam.name,
+        previous.home,
+        previous.set,
+        lineup.home,
+        currentSet,
+      ),
+      ...this.getLineupChanges(
+        match.awayTeam.name,
+        previous.away,
+        previous.set,
+        lineup.away,
+        currentSet,
+      ),
+    ];
+    if (!changes.length) {
+      await this.cache.set(lineupKey, snapshot, lineupTtl);
+      return 0;
+    }
+
     const notificationKey = this.getLiveNotificationKey(
       match,
       lineup,
       currentSet,
     );
-    const acquired = await this.cache.acquire(
-      notificationKey,
-      getPlayerMonitoringStateTtl(match, now),
-    );
+    const acquired = await this.cache.acquire(notificationKey, lineupTtl);
     if (!acquired) {
-      this.logger.debug(
-        `Duplicate live notification skipped for match ${match.externalId ?? match.id}`,
-      );
+      await this.cache.set(lineupKey, snapshot, lineupTtl);
       return 0;
     }
 
@@ -521,6 +548,7 @@ export class MatchRosterMonitoringService {
           match.league.id,
           context,
         ),
+        changes,
         currentSet,
         matchProtocolUrl: this.getMatchProtocolUrl(match),
       }),
@@ -530,7 +558,51 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
+    await this.cache.set(lineupKey, snapshot, lineupTtl);
+
     return 1;
+  }
+
+  private getLineupChanges(
+    teamName: string,
+    previous: ICevMatchLineupPlayer[],
+    previousSet: number,
+    current: ICevMatchLineupPlayer[],
+    currentSet: number,
+  ): string[] {
+    const key = (player: ICevMatchLineupPlayer) =>
+      `${player.shirtNumber}:${player.playerName}`;
+    const previousActive = previous.filter((player) =>
+      isActiveMark(player.setMarks[previousSet - 1] ?? ''),
+    );
+    const currentActive = current.filter((player) =>
+      isActiveMark(player.setMarks[currentSet - 1] ?? ''),
+    );
+    const previousKeys = new Set(previousActive.map(key));
+    const currentKeys = new Set(currentActive.map(key));
+    const outgoing = previousActive.filter(
+      (player) => !currentKeys.has(key(player)),
+    );
+    const incoming = currentActive.filter(
+      (player) => !previousKeys.has(key(player)),
+    );
+
+    return Array.from(
+      { length: Math.max(outgoing.length, incoming.length) },
+      (_, index) => {
+        const outPlayer = outgoing[index];
+      const inPlayer = incoming[index];
+      const format = (player: ICevMatchLineupPlayer) =>
+        `№${player.shirtNumber ?? '—'} ${player.playerName}`;
+
+        if (outPlayer && inPlayer) {
+          return `${teamName}: ${format(outPlayer)} → ${format(inPlayer)}`;
+        }
+        return outPlayer
+          ? `${teamName}: вне состава ${format(outPlayer)}`
+          : `${teamName}: в составе ${format(inPlayer!)}`;
+      },
+    );
   }
 
   private getPositionsByShirtNumber(

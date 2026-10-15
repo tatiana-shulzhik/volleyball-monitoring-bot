@@ -12,6 +12,7 @@ export interface ILiveLineupMonitoringMessageData {
   awayAttackStatistics?: ICevPlayerAttackStatistics[];
   homePositionsByShirtNumber: Map<number, string>;
   awayPositionsByShirtNumber: Map<number, string>;
+  changes?: string[];
   currentSet: number;
   matchProtocolUrl?: string;
 }
