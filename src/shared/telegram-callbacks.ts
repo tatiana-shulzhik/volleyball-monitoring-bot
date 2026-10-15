@@ -28,6 +28,8 @@ export const TELEGRAM_CALLBACKS = {
     retroStatistics: 'menu:retro-statistics',
     monitoring: 'menu:monitoring',
     currentMonitoring: 'menu:current-monitoring',
+    currentMonitoringPage: (page: number) =>
+      page > 0 ? `menu:current-monitoring:${page}` : 'menu:current-monitoring',
     live: 'menu:live',
     toggleLiveMatchesNotification: (source: ESourceCode) =>
       `menu:live:notification:${source}`,
@@ -76,8 +78,8 @@ export const TELEGRAM_CALLBACKS = {
       `statistics:team-expanded:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}:${page}`,
   },
   monitoring: {
-    removePlayer: (playerId: number, championshipId: number) =>
-      `monitoring:remove-player:${playerId}:${championshipId}`,
+    removePlayer: (playerId: number, championshipId: number, page = 0) =>
+      `monitoring:remove-player:${playerId}:${championshipId}:${page}`,
     removeAll: (sourceCode: ESourceCode) =>
       `monitoring:remove-all:${sourceCode}`,
     competitionType: (competitionType: ECompetitionType) =>
@@ -194,7 +196,9 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
     ),
   },
   monitoring: {
-    removePlayer: new RegExp('^monitoring:remove-player:(\\d+):(\\d+)$'),
+    removePlayer: new RegExp(
+      '^monitoring:remove-player:(\\d+):(\\d+)(?::(\\d+))?$',
+    ),
     removeAll: new RegExp(
       `^monitoring:remove-all:(${Object.values(ESourceCode).join('|')})$`,
     ),
@@ -238,7 +242,9 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
       `^retro-statistics:team-expanded:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}(?::(\\d+))?$`,
     ),
   },
-  development: /^menu:(?!back|statistics|retro-statistics)/,
+  currentMonitoring: /^menu:current-monitoring(?::(\d+))?$/,
+  development:
+    /^menu:(?!back$|statistics|retro-statistics|current-monitoring|monitoring$|live$|source)/,
   source: new RegExp(`^menu:source:(${Object.values(ESourceCode).join('|')})$`),
   liveMatchesNotification: new RegExp(
     `^menu:live:notification:(${Object.values(ESourceCode).join('|')})$`,

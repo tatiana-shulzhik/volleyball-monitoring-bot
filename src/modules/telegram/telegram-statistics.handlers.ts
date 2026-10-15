@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { RedisCacheService } from '../../cache/redis-cache.service';
-import { TEAM_STATISTICS_CACHE_TTL_SECONDS } from '../../shared/consts/constants';
+import {
+  CURRENT_MONITORING_PAGE_SIZE,
+  TEAM_STATISTICS_CACHE_TTL_SECONDS,
+} from '../../shared/consts/constants';
 import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import {
   formatTeamStatistics,
@@ -299,13 +302,17 @@ export class TelegramStatisticsHandlers {
   }
 
   private registerCurrentMonitoring(bot: Telegraf): void {
-    bot.action(TELEGRAM_CALLBACKS.menu.currentMonitoring, async (context) => {
-      await context.answerCbQuery();
-      await this.renderCurrentMonitoring(
-        context,
-        this.getSource(context.chat?.id),
-      );
-    });
+    bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.currentMonitoring,
+      async (context) => {
+        await context.answerCbQuery();
+        await this.renderCurrentMonitoring(
+          context,
+          this.getSource(context.chat?.id),
+          Number(context.match[1] ?? 0),
+        );
+      },
+    );
 
     bot.action(
       TELEGRAM_CALLBACK_PATTERNS.monitoring.removePlayer,
@@ -318,6 +325,7 @@ export class TelegramStatisticsHandlers {
         await this.renderCurrentMonitoring(
           context,
           this.getSource(context.chat?.id),
+          Number(context.match[3] ?? 0),
         );
       },
     );
@@ -794,13 +802,46 @@ export class TelegramStatisticsHandlers {
   private async renderCurrentMonitoring(
     context: Context,
     sourceCode: ESourceCode,
+    requestedPage = 0,
   ): Promise<void> {
     const subscriptions =
       await this.monitoringSubscriptionsService.findAllForCurrentMonitoring(
         sourceCode,
       );
+    const pageCount = Math.max(
+      1,
+      Math.ceil(subscriptions.length / CURRENT_MONITORING_PAGE_SIZE),
+    );
+    const page = Math.min(Math.max(requestedPage, 0), pageCount - 1);
+    const pageSubscriptions = subscriptions.slice(
+      page * CURRENT_MONITORING_PAGE_SIZE,
+      (page + 1) * CURRENT_MONITORING_PAGE_SIZE,
+    );
+    const paginationButtons =
+      subscriptions.length > CURRENT_MONITORING_PAGE_SIZE
+        ? [
+            [
+              ...(page > 0
+                ? [
+                    Markup.button.callback(
+                      `⬅️ ${page}/${pageCount}`,
+                      TELEGRAM_CALLBACKS.menu.currentMonitoringPage(page - 1),
+                    ),
+                  ]
+                : []),
+              ...(page < pageCount - 1
+                ? [
+                    Markup.button.callback(
+                      `${page + 2}/${pageCount} ➡️`,
+                      TELEGRAM_CALLBACKS.menu.currentMonitoringPage(page + 1),
+                    ),
+                  ]
+                : []),
+            ],
+          ]
+        : [];
     const keyboard = Markup.inlineKeyboard([
-      ...subscriptions.map(
+      ...pageSubscriptions.map(
         ({
           playerId,
           playerName,
@@ -819,10 +860,12 @@ export class TelegramStatisticsHandlers {
             TELEGRAM_CALLBACKS.monitoring.removePlayer(
               playerId,
               championshipId,
+              page,
             ),
           ),
         ],
       ),
+      ...paginationButtons,
       ...(subscriptions.length
         ? [
             [
@@ -841,7 +884,9 @@ export class TelegramStatisticsHandlers {
 
     await context.editMessageText(
       subscriptions.length
-        ? `${SOURCE_BUTTONS[sourceCode]}\n\nТекущий мониторинг. Нажмите на игрока, чтобы удалить его.`
+        ? `${SOURCE_BUTTONS[sourceCode]}\n\nТекущий мониторинг` +
+            (pageCount > 1 ? ` (${page + 1}/${pageCount})` : '') +
+            `. Нажмите на игрока, чтобы удалить его.`
         : `${SOURCE_BUTTONS[sourceCode]}\n\nВ мониторинге пока нет игроков.`,
       keyboard,
     );
