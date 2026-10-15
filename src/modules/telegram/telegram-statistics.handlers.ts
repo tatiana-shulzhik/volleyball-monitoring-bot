@@ -902,7 +902,7 @@ export class TelegramStatisticsHandlers {
       competitionType: ECompetitionType;
     },
   ): Promise<void> {
-    const players = await this.playersService.findTeamPlayers(
+    const { teamName, players } = await this.playersService.findTeamPlayers(
       options.teamId,
       options.leagueId,
     );
@@ -938,10 +938,11 @@ export class TelegramStatisticsHandlers {
       ],
     ]);
 
+    const title = `🏐 ${teamName ?? 'Команда'}`;
     await context.editMessageText(
       players.length
-        ? 'Выберите игрока для добавления или удаления из мониторинга:'
-        : TELEGRAM_MESSAGES.teams.statisticsEmpty,
+        ? `${title}\n\nВыберите игрока для добавления или удаления из мониторинга:`
+        : `${title}\n\n${TELEGRAM_MESSAGES.teams.statisticsEmpty}`,
       keyboard,
     );
   }

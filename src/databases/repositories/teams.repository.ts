@@ -10,6 +10,7 @@ import { TeamEntity } from '../entities/team.entity';
 import { SourcesEntity } from '../entities/sources.entity';
 import { ESourceCode } from '../../shared/enums';
 import { splitIntoBatches } from '../../shared/array.utils';
+import { TeamRosterRow } from '../../interfaces/responses/team-roster.interface';
 
 @Injectable()
 export class TeamsRepository {
@@ -34,6 +35,31 @@ export class TeamsRepository {
     const repository = manager?.getRepository(TeamEntity) ?? this.repository;
 
     return repository.find({ where });
+  }
+
+  /**
+   * Возвращает строки состава команды в указанной лиге одним SQL-запросом.
+   * LEFT JOIN гарантирует, что команда вернётся даже без игроков.
+   */
+  findLeagueRosterRows(
+    teamId: number,
+    leagueId: number,
+    manager?: EntityManager,
+  ): Promise<TeamRosterRow[]> {
+    return (manager ?? this.dataSource).query(
+      `SELECT
+         team.name        AS "teamName",
+         player.id        AS "playerId",
+         player.full_name AS "playerFullName",
+         relation.shirt_number AS "shirtNumber"
+       FROM "teams" AS team
+       LEFT JOIN "player_team_leagues" AS relation
+         ON relation.team_id = team.id AND relation.league_id = $2
+       LEFT JOIN "players" AS player
+         ON player.id = relation.player_id
+       WHERE team.id = $1`,
+      [teamId, leagueId],
+    );
   }
 
   async insertMany(teams: Partial<TeamEntity>[], manager?: EntityManager) {

@@ -81,7 +81,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     }, false);
   }
 
-  @Cron(ECronExpression.Every3Minutes, {
+  @Cron(CronExpression.EVERY_10_MINUTES, {
     name: 'upcoming-match-roster-monitoring',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
