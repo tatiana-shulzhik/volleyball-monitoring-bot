@@ -38,6 +38,9 @@ export const AGGREGATED_SEASONS_COUNT = PREVIOUS_YEARS_COUNT + 1;
 export const TEAM_STATISTICS_CACHE_TTL_SECONDS = 10 * 60;
 export const ROSTER_NOTIFICATION_TTL_SECONDS = 48 * 60 * 60;
 
+/** Игроков на странице «Текущий мониторинг» (лимит Telegram по размеру reply_markup). */
+export const CURRENT_MONITORING_PAGE_SIZE = 20;
+
 export const WRITE_BATCH_SIZE = 5000;
 
 /** Матч попадает в мониторинг за 36 часов до планового начала. */
