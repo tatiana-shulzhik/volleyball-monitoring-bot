@@ -442,14 +442,15 @@ export class MatchRosterMonitoringService {
       ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
       : data.lineup;
 
-    const changedPlayers: ILivePlayerMonitoringChange[] = [];
-    const initialStates: ILivePlayerMonitoringChange[] = [];
+    const stateUpdates: ILivePlayerMonitoringChange[] = [];
     const monitoredPlayers = getMonitoredPlayers(
       match,
       context,
       lineup.home,
       lineup.away,
     );
+    if (!monitoredPlayers.length) return 0;
+
     const statesByPlayerId = await this.getStates(
       match,
       monitoredPlayers.map(({ subscription }) => subscription.playerId),
@@ -469,36 +470,19 @@ export class MatchRosterMonitoringService {
         ? ELivePlayerMonitoringStatus.Active
         : ELivePlayerMonitoringStatus.Inactive;
       const monitoring = statesByPlayerId.get(subscription.playerId) ?? {};
-
-      // Первый live-снимок задаёт исходное состояние и не считается заменой.
-      if (!monitoring.liveStatus) {
-        if (status === ELivePlayerMonitoringStatus.Active) {
-          changedPlayers.push({
-            playerId: subscription.playerId,
-            status,
-            monitoring,
-          });
-        } else {
-          monitoring.liveStatus = status;
-          initialStates.push({
-            playerId: subscription.playerId,
-            status,
-            monitoring,
-          });
-        }
-        continue;
-      }
       if (monitoring.liveStatus === status) continue;
 
-      changedPlayers.push({
+      monitoring.liveStatus = status;
+      stateUpdates.push({
         playerId: subscription.playerId,
         status,
         monitoring,
       });
     }
-    await this.saveStates(match, initialStates, now);
-    if (!changedPlayers.length) return 0;
+    await this.saveStates(match, stateUpdates, now);
 
+    // Уведомление только при смене состава на поле (кто в игре), не при
+    // ротации позиций, обновлении рейтинга или атак.
     const notificationKey = this.getLiveNotificationKey(
       match,
       lineup,
@@ -541,11 +525,6 @@ export class MatchRosterMonitoringService {
       await this.cache.delete(notificationKey);
       return 0;
     }
-
-    changedPlayers.forEach(({ status, monitoring }) => {
-      monitoring.liveStatus = status;
-    });
-    await this.saveStates(match, changedPlayers, now);
 
     return 1;
   }
@@ -729,6 +708,7 @@ export class MatchRosterMonitoringService {
     return `match-monitoring:${match.id}:roster-notification:${digest}`;
   }
 
+  /** Ключ по составу на поле: кто Active в сете, без позиций/статистики. */
   private getLiveNotificationKey(
     match: MatchEntity,
     lineup: IProcessLineupMatchParams['lineup'],
@@ -737,14 +717,17 @@ export class MatchRosterMonitoringService {
     const signature = [lineup.home, lineup.away]
       .map((team) =>
         [...team]
+          .filter((player) =>
+            isActiveMark(player.setMarks[currentSet - 1] ?? ''),
+          )
           .sort(
             (left, right) =>
               (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
               left.playerName.localeCompare(right.playerName),
           )
           .map(
-            ({ playerName, shirtNumber, setMarks }) =>
-              `${playerName}:${shirtNumber ?? ''}:${setMarks[currentSet - 1] ?? ''}`,
+            ({ playerName, shirtNumber }) =>
+              `${playerName}:${shirtNumber ?? ''}`,
           )
           .join(','),
       )
