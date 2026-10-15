@@ -39,6 +39,7 @@ import {
   formatMatchRosterMonitoringMessage,
   formatStartingLineupMonitoringMessage,
   getCurrentSet,
+  getAbsentStartingLineupPlayers,
   getMonitoredPlayers,
   getMonitoredRoster,
   getPlayerMonitoringStateKey,
@@ -401,22 +402,45 @@ export class MatchRosterMonitoringService {
     }
     if (!changedPlayers.length) return 0;
 
+    const newBenchPlayerIds = changedPlayers
+      .filter(({ status }) => status === EStartingLineupMonitoringStatus.Bench)
+      .map(({ playerId }) => playerId);
+    if (!newBenchPlayerIds.length) {
+      changedPlayers.forEach(({ status, monitoring }) => {
+        monitoring.startingStatus = status;
+      });
+      await this.saveStates(match, changedPlayers, now);
+      return 0;
+    }
+
+    const homePositionsByShirtNumber = this.getPositionsByShirtNumber(
+      match.homeTeam.id,
+      match.league.id,
+      context,
+    );
+    const awayPositionsByShirtNumber = this.getPositionsByShirtNumber(
+      match.awayTeam.id,
+      match.league.id,
+      context,
+    );
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatStartingLineupMonitoringMessage({
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
         home: lineup.home,
         away: lineup.away,
-        homePositionsByShirtNumber: this.getPositionsByShirtNumber(
+        absentHome: getAbsentStartingLineupPlayers(
+          monitoredPlayers,
           match.homeTeam.id,
-          match.league.id,
-          context,
+          homePositionsByShirtNumber,
         ),
-        awayPositionsByShirtNumber: this.getPositionsByShirtNumber(
+        absentAway: getAbsentStartingLineupPlayers(
+          monitoredPlayers,
           match.awayTeam.id,
-          match.league.id,
-          context,
+          awayPositionsByShirtNumber,
         ),
+        homePositionsByShirtNumber,
+        awayPositionsByShirtNumber,
         matchProtocolUrl: this.getMatchProtocolUrl(match),
       }),
     );
@@ -591,16 +615,16 @@ export class MatchRosterMonitoringService {
       { length: Math.max(outgoing.length, incoming.length) },
       (_, index) => {
         const outPlayer = outgoing[index];
-      const inPlayer = incoming[index];
-      const format = (player: ICevMatchLineupPlayer) =>
-        `№${player.shirtNumber ?? '—'} ${player.playerName}`;
+        const inPlayer = incoming[index];
+        const format = (player: ICevMatchLineupPlayer) =>
+          `№${player.shirtNumber ?? '—'} ${player.playerName}`;
 
         if (outPlayer && inPlayer) {
           return `${teamName}: ${format(outPlayer)} → ${format(inPlayer)}`;
         }
         return outPlayer
           ? `${teamName}: вне состава ${format(outPlayer)}`
-          : `${teamName}: в составе ${format(inPlayer!)}`;
+          : `${teamName}: в составе ${format(inPlayer)}`;
       },
     );
   }

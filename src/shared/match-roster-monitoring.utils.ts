@@ -11,7 +11,10 @@ import {
 } from '../interfaces/requests/player-statistics.interface';
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
 import { ILiveLineupMonitoringMessageData } from '../interfaces/requests/live-lineup-monitoring.interface';
-import { IStartingLineupMonitoringMessageData } from '../interfaces/requests/starting-lineup-monitoring.interface';
+import {
+  IAbsentStartingLineupPlayer,
+  IStartingLineupMonitoringMessageData,
+} from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
 import {
@@ -169,6 +172,39 @@ export function getMonitoredRoster(
     });
 
   return addRosterStatistics(roster, statistics);
+}
+
+export function getAbsentStartingLineupPlayers(
+  monitored: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
+  teamId: number,
+  positionsByShirtNumber: Map<number, string>,
+): IAbsentStartingLineupPlayer[] {
+  return monitored.flatMap(({ subscription, relation, teamData }) => {
+    if (relation.team.id !== teamId) return [];
+
+    const player = findLineupPlayer(
+      teamData,
+      subscription.player.fullName,
+      relation.shirtNumber,
+    );
+    if (player && isStarter(player.setMarks[0])) return [];
+
+    const shirtNumber = player?.shirtNumber ?? relation.shirtNumber;
+    const position =
+      (shirtNumber === null
+        ? undefined
+        : positionsByShirtNumber.get(shirtNumber)) ??
+      relation.position ??
+      undefined;
+
+    return [
+      {
+        playerName: player?.playerName ?? subscription.player.fullName,
+        shirtNumber,
+        position,
+      },
+    ];
+  });
 }
 
 /** Формирует ключ Redis для состояния игрока в матче. */
@@ -447,6 +483,13 @@ export function formatStartingLineupMonitoringMessage(
   return [
     '<p><b>🏐 Стартовый состав</b></p>',
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
+    '<p><b>🔴 Отсутствуют из стартового состава</b></p>',
+    data.absentHome.length
+      ? formatAbsentStartingLineupTable(data.homeTeamName, data.absentHome)
+      : '',
+    data.absentAway.length
+      ? formatAbsentStartingLineupTable(data.awayTeamName, data.absentAway)
+      : '',
     formatStartingLineupTable(
       data.homeTeamName,
       data.home,
@@ -460,6 +503,35 @@ export function formatStartingLineupMonitoringMessage(
     data.matchProtocolUrl
       ? `<p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
       : '',
+  ].join('');
+}
+
+function formatAbsentStartingLineupTable(
+  teamName: string,
+  lineup: IAbsentStartingLineupPlayer[],
+): string {
+  const rows = [...lineup]
+    .sort(
+      (left, right) =>
+        (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
+        left.playerName.localeCompare(right.playerName),
+    )
+    .map(
+      (player) =>
+        '<tr>' +
+        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td align="center">${formatPlayerPosition(player.position)}</td>` +
+        '</tr>',
+    );
+
+  return [
+    `<p><b>🔴 ${escapeHtml(teamName)}</b></p>`,
+    '<table bordered striped>',
+    '<tr><th>№</th><th>Игрок</th><th>Поз.</th></tr>',
+    ...rows,
+    '</table>',
   ].join('');
 }
 
