@@ -269,10 +269,10 @@ export class MatchRosterMonitoringService {
 
     if (!changedPlayers.length) return 0;
 
-    const hasNewAbsentees = changedPlayers.some(
-      ({ status }) => status === ERosterMonitoringStatus.Absent,
-    );
-    if (!hasNewAbsentees) {
+    const newAbsenteePlayerIds = changedPlayers
+      .filter(({ status }) => status === ERosterMonitoringStatus.Absent)
+      .map(({ playerId }) => playerId);
+    if (!newAbsenteePlayerIds.length) {
       changedPlayers.forEach(({ status, monitoring }) => {
         monitoring.rosterStatus = status;
       });
@@ -280,7 +280,11 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const notificationKey = this.getRosterNotificationKey(match, roster);
+    const notificationKey = this.getRosterNotificationKey(
+      match,
+      roster,
+      newAbsenteePlayerIds,
+    );
     const acquired = await this.cache.acquire(
       notificationKey,
       getPlayerMonitoringStateTtl(match, now),
@@ -686,8 +690,9 @@ export class MatchRosterMonitoringService {
   private getRosterNotificationKey(
     match: MatchEntity,
     roster: IProcessRosterMatchParams['roster'],
+    newAbsenteePlayerIds: number[],
   ): string {
-    const signature = [roster.home, roster.away]
+    const rosterSignature = [roster.home, roster.away]
       .map((team) =>
         [...team]
           .sort(
@@ -703,7 +708,12 @@ export class MatchRosterMonitoringService {
           .join(','),
       )
       .join('|');
-    const digest = createHash('sha256').update(signature).digest('hex');
+    const absenteesSignature = [...newAbsenteePlayerIds]
+      .sort((left, right) => left - right)
+      .join(',');
+    const digest = createHash('sha256')
+      .update(`${rosterSignature}|absentees:${absenteesSignature}`)
+      .digest('hex');
 
     return `match-monitoring:${match.id}:roster-notification:${digest}`;
   }
