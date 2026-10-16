@@ -205,11 +205,8 @@ export async function showList(
   context: Context,
   menu: ListMenu,
 ): Promise<void> {
-  const buttons = menu.items.map(({ text, callbackData, secondary }) => [
+  const buttons = menu.items.map(({ text, callbackData }) => [
     Markup.button.callback(text, callbackData),
-    ...(secondary
-      ? [Markup.button.callback(secondary.text, secondary.callbackData)]
-      : []),
   ]);
 
   await context.answerCbQuery(menu.answerText);

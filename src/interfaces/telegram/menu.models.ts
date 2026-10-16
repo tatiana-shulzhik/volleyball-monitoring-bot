@@ -1,7 +1,6 @@
 export interface MenuItem {
   text: string;
   callbackData: string;
-  secondary?: MenuItem;
 }
 
 export interface ListMenu {
