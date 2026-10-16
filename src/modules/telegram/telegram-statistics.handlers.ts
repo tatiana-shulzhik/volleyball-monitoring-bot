@@ -221,8 +221,9 @@ export class TelegramStatisticsHandlers {
             championshipId,
           );
 
-        await this.showMonitoringChampionships(
+        await this.showMonitoringStages(
           context,
+          championshipId,
           competitionType,
           removed
             ? `Очищено игроков: ${removed}`
@@ -234,29 +235,11 @@ export class TelegramStatisticsHandlers {
     bot.action(
       TELEGRAM_CALLBACK_PATTERNS.monitoring.championship,
       async (context) => {
-        const championshipId = Number(context.match[1]);
-        const competitionType = parseCompetitionType(context.match[2]);
-        const stages = await this.telegramService.findStages(
-          championshipId,
-          competitionType,
-          this.getSource(context.chat?.id),
+        await this.showMonitoringStages(
+          context,
+          Number(context.match[1]),
+          parseCompetitionType(context.match[2]),
         );
-
-        await showList(context, {
-          items: stages.map(({ id, name }) => ({
-            text: name,
-            callbackData: TELEGRAM_CALLBACKS.monitoring.stage(
-              id,
-              championshipId,
-              competitionType,
-            ),
-          })),
-          message: TELEGRAM_MESSAGES.stages.select,
-          emptyMessage: TELEGRAM_MESSAGES.stages.empty,
-          backText: '⬅️ К чемпионатам',
-          backCallbackData:
-            TELEGRAM_CALLBACKS.monitoring.season(competitionType),
-        });
       },
     );
 
@@ -284,24 +267,24 @@ export class TelegramStatisticsHandlers {
     bot.action(
       TELEGRAM_CALLBACK_PATTERNS.monitoring.clearTeam,
       async (context) => {
-        const teamId = Number(context.match[1]);
-        const leagueId = Number(context.match[2]);
-        const stageId = Number(context.match[3]);
-        const championshipId = Number(context.match[4]);
-        const competitionType = parseCompetitionType(context.match[5]);
+        const options = {
+          teamId: Number(context.match[1]),
+          leagueId: Number(context.match[2]),
+          stageId: Number(context.match[3]),
+          championshipId: Number(context.match[4]),
+          competitionType: parseCompetitionType(context.match[5]),
+        };
         const removed = await this.monitoringSubscriptionsService.removeByTeam(
-          teamId,
-          leagueId,
-          championshipId,
+          options.teamId,
+          options.leagueId,
+          options.championshipId,
         );
-
-        await this.showMonitoringTeams(
-          context,
-          { stageId, championshipId, competitionType },
+        await context.answerCbQuery(
           removed
             ? `Очищено игроков: ${removed}`
             : 'У команды нет выбранных игроков',
         );
+        await this.renderMonitoringPlayers(context, options);
       },
     );
 
@@ -798,28 +781,64 @@ export class TelegramStatisticsHandlers {
 
     await showList(context, {
       items: championships.map(({ id, name }) => ({
-        text: formatChampionshipButton(name),
+        text: `${championshipsWithSubscriptions.has(id) ? '✅ ' : ''}${formatChampionshipButton(name)}`,
         callbackData: TELEGRAM_CALLBACKS.monitoring.championship(
           id,
           competitionType,
         ),
-        ...(championshipsWithSubscriptions.has(id)
-          ? {
-              secondary: {
-                text: '🗑',
-                callbackData: TELEGRAM_CALLBACKS.monitoring.clearChampionship(
-                  id,
-                  competitionType,
-                ),
-              },
-            }
-          : {}),
       })),
       message: TELEGRAM_MESSAGES.championships.select,
       emptyMessage: TELEGRAM_MESSAGES.championships.empty,
       backText: '⬅️ К сезонам',
       backCallbackData:
         TELEGRAM_CALLBACKS.monitoring.competitionType(competitionType),
+      answerText,
+    });
+  }
+
+  private async showMonitoringStages(
+    context: Context,
+    championshipId: number,
+    competitionType: ECompetitionType,
+    answerText?: string,
+  ): Promise<void> {
+    const stages = await this.telegramService.findStages(
+      championshipId,
+      competitionType,
+      this.getSource(context.chat?.id),
+    );
+    const hasSubscriptions = (
+      await this.monitoringSubscriptionsService.findChampionshipIdsWithSubscriptions(
+        [championshipId],
+      )
+    ).has(championshipId);
+
+    await showList(context, {
+      items: [
+        ...(hasSubscriptions
+          ? [
+              {
+                text: '🗑 Очистить выбранных',
+                callbackData: TELEGRAM_CALLBACKS.monitoring.clearChampionship(
+                  championshipId,
+                  competitionType,
+                ),
+              },
+            ]
+          : []),
+        ...stages.map(({ id, name }) => ({
+          text: name,
+          callbackData: TELEGRAM_CALLBACKS.monitoring.stage(
+            id,
+            championshipId,
+            competitionType,
+          ),
+        })),
+      ],
+      message: TELEGRAM_MESSAGES.stages.select,
+      emptyMessage: TELEGRAM_MESSAGES.stages.empty,
+      backText: '⬅️ К чемпионатам',
+      backCallbackData: TELEGRAM_CALLBACKS.monitoring.season(competitionType),
       answerText,
     });
   }
@@ -842,7 +861,7 @@ export class TelegramStatisticsHandlers {
 
     await showList(context, {
       items: teams.map(({ team, leagueId }) => ({
-        text: team.name,
+        text: `${teamsWithSubscriptions.has(team.id) ? '✅ ' : ''}${team.name}`,
         callbackData: TELEGRAM_CALLBACKS.monitoring.team(
           team.id,
           leagueId,
@@ -850,20 +869,6 @@ export class TelegramStatisticsHandlers {
           options.championshipId,
           options.competitionType,
         ),
-        ...(teamsWithSubscriptions.has(team.id)
-          ? {
-              secondary: {
-                text: '🗑',
-                callbackData: TELEGRAM_CALLBACKS.monitoring.clearTeam(
-                  team.id,
-                  leagueId,
-                  options.stageId,
-                  options.championshipId,
-                  options.competitionType,
-                ),
-              },
-            }
-          : {}),
       })),
       message: TELEGRAM_MESSAGES.teams.select,
       emptyMessage: TELEGRAM_MESSAGES.teams.empty,
@@ -1016,6 +1021,22 @@ export class TelegramStatisticsHandlers {
           ),
         ),
       ]),
+      ...(monitoredPlayerIds.size
+        ? [
+            [
+              Markup.button.callback(
+                '🗑 Очистить выбранных',
+                TELEGRAM_CALLBACKS.monitoring.clearTeam(
+                  options.teamId,
+                  options.leagueId,
+                  options.stageId,
+                  options.championshipId,
+                  options.competitionType,
+                ),
+              ),
+            ],
+          ]
+        : []),
       [
         Markup.button.callback(
           TELEGRAM_MESSAGES.teams.back,
