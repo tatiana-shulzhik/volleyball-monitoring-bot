@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { MatchEntity } from '../databases/entities/match.entity';
 import { ICevChampionship } from '../interfaces/requests/championships.interface';
 import {
   FetchedCompetitionStages,
@@ -18,21 +19,27 @@ import {
   ILegaPendingMatchKeys,
 } from '../interfaces/requests/lega-volley.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
+import { IFetchedMatchRoster } from '../interfaces/requests/player-statistics.interface';
 import {
+  createLegaVolleyPregaraRosterUrl,
   LEGA_VOLLEY_HTTP_CONCURRENCY,
   LEGA_VOLLEY_HTTP_TIMEOUT_MS,
   LEGA_VOLLEY_BASE_URL,
+  LEGA_VOLLEY_PREGARA_SERIES,
 } from '../shared/consts/constants';
 import {
   normalizeLegaSeasonName,
   createLegaMatchLookupKey,
+  createLegaPregaraMatchKey,
   parseLegaPostGaraDate,
+  parseLegaPregaraMatchRoster,
   parseLegaTeamPage,
   parseLegaMatchStatistics,
   parseLegaSeason,
   readLegaMatches,
   readLegaMatchReferences,
   readLegaOptions,
+  readLegaPregaraMatchIds,
   readLegaTeams,
   readLegaDateRange,
 } from '../shared/lega-volley.utils';
@@ -299,6 +306,46 @@ export class LegaVolleyGateway {
       );
       return [];
     });
+  }
+
+  async fetchMatchRosters(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchRoster>[]> {
+    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    const results = await mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const sourceMatchId = this.resolvePregaraMatchId(match, matchIdsByKey);
+        if (!sourceMatchId) {
+          throw new Error(
+            `Lega Volley match ${match.id} has no Pre Gara match ID ` +
+              `(${match.homeTeam.name} — ${match.awayTeam.name})`,
+          );
+        }
+
+        const html = await this.get(
+          createLegaVolleyPregaraRosterUrl(sourceMatchId),
+        );
+        const roster = parseLegaPregaraMatchRoster(html);
+
+        return {
+          matchExternalId: match.externalId ?? sourceMatchId,
+          ...roster,
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match roster request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
   }
 
   async fetchMatchStatisticsByIds(
@@ -853,6 +900,50 @@ export class LegaVolleyGateway {
     }
 
     return results.every((result) => result.status === 'fulfilled');
+  }
+
+  private async fetchPregaraMatchIdsByTeamKey(): Promise<Map<string, string>> {
+    const pages = await mapSettledWithConcurrency({
+      items: [...LEGA_VOLLEY_PREGARA_SERIES],
+      mapper: (serie) =>
+        this.get(
+          `${LEGA_VOLLEY_BASE_URL}/pregara/?serie=${encodeURIComponent(serie)}`,
+        ),
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+    const matchIdsByKey = new Map<string, string>();
+
+    pages.forEach((result, index) => {
+      if (result.status !== 'fulfilled') {
+        this.logger.warn(
+          `Pre Gara index request failed for ${LEGA_VOLLEY_PREGARA_SERIES[index]}: ` +
+            getErrorMessage(result.reason),
+        );
+        return;
+      }
+
+      for (const match of readLegaPregaraMatchIds(result.value)) {
+        matchIdsByKey.set(
+          createLegaPregaraMatchKey(match.homeTeamName, match.awayTeamName),
+          match.sourceMatchId,
+        );
+      }
+    });
+
+    return matchIdsByKey;
+  }
+
+  private resolvePregaraMatchId(
+    match: MatchEntity,
+    matchIdsByKey: Map<string, string>,
+  ): string | undefined {
+    if (match.externalId && /^\d+$/.test(match.externalId)) {
+      return match.externalId;
+    }
+
+    return matchIdsByKey.get(
+      createLegaPregaraMatchKey(match.homeTeam.name, match.awayTeam.name),
+    );
   }
 
   private fetchSchedule(year: number): Promise<string> {

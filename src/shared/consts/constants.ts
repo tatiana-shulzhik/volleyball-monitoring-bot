@@ -1,3 +1,5 @@
+import { ESourceCode } from '../enums';
+
 export const CEV_BASE_URL = 'https://www-old.cev.eu';
 export const LEGA_VOLLEY_BASE_URL = 'https://www.legavolley.it';
 export const LEGA_VOLLEY_FEMMINILE_BASE_URL =
@@ -28,9 +30,43 @@ export const CEV_HTTP_CONCURRENCY = 40;
 
 export const CEV_HTML_CACHE_MAX_ENTRIES = 100;
 
-export const LEGA_VOLLEY_HTTP_CONCURRENCY = 50;
+export const LEGA_VOLLEY_HTTP_CONCURRENCY = 20;
 
 export const LEGA_VOLLEY_HTTP_TIMEOUT_MS = 15_000;
+
+/** Серии Pre Gara для индекса Foglio Gara (match_id по командам). */
+export const LEGA_VOLLEY_PREGARA_SERIES = [
+  'SL',
+  'A2',
+  'A3bianco',
+  'A3blu',
+] as const;
+
+/** Коды амплуа в Foglio Gara → полные названия как на страницах команд. */
+export const LEGA_VOLLEY_PREGARA_POSITION_CODES: Readonly<
+  Record<string, string>
+> = {
+  S: 'Schiacciatore',
+  P: 'Palleggiatore',
+  C: 'Centrale',
+  O: 'Opposto',
+  L: 'Libero',
+};
+
+/** Название амплуа (как в источнике, lower) → короткий ярлык в Telegram. */
+export const PLAYER_POSITION_SHORT_LABELS: Readonly<Record<string, string>> = {
+  'outside spiker': 'WS',
+  schiacciatore: 'WS',
+  schiacciatrice: 'WS',
+  opposite: 'O',
+  opposto: 'O',
+  'middle blocker': 'MB',
+  centrale: 'MB',
+  setter: 'S',
+  palleggiatore: 'S',
+  palleggiatrice: 'S',
+  libero: 'L',
+};
 
 export const PREVIOUS_YEARS_COUNT = 3;
 export const AGGREGATED_SEASONS_COUNT = PREVIOUS_YEARS_COUNT + 1;
@@ -156,4 +192,53 @@ export function createMatchPageUrl(
     `${CEV_BASE_URL}/Competition-Area/MatchPage.aspx` +
     `?mID=${matchExternalId}&ID=${seasonExternalId}&CID=${leagueExternalId}`
   );
+}
+
+export function createLegaVolleyPregaraRosterUrl(
+  sourceMatchId: string,
+): string {
+  return (
+    `${LEGA_VOLLEY_BASE_URL}/pregara-roster` +
+    `?match_id=${encodeURIComponent(sourceMatchId)}`
+  );
+}
+
+export function createLegaVolleyScheduleUrl(
+  year: number | string,
+  leagueExternalId: number,
+): string {
+  return (
+    `${LEGA_VOLLEY_BASE_URL}/schedule` +
+    `?stagione=${encodeURIComponent(String(year))}` +
+    `&campionato=${encodeURIComponent(String(leagueExternalId))}` +
+    `&fase=&AllMatches=true`
+  );
+}
+
+export function createLegaVolleyFemminileMatchStatsUrl(
+  sourceMatchId: string,
+): string {
+  return `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/matchstats/`;
+}
+
+export function createMatchProtocolUrl(
+  sourceCode: ESourceCode | undefined,
+  matchExternalId: string | null | undefined,
+): string | undefined {
+  if (!matchExternalId) return undefined;
+
+  if (sourceCode === ESourceCode.LegaVolleyFemminile) {
+    const sourceMatchId = matchExternalId.match(/(\d+)$/)?.[1];
+    return sourceMatchId
+      ? createLegaVolleyFemminileMatchStatsUrl(sourceMatchId)
+      : undefined;
+  }
+
+  if (sourceCode === ESourceCode.LegaVolley) {
+    return /^\d+$/.test(matchExternalId)
+      ? createLegaVolleyPregaraRosterUrl(matchExternalId)
+      : undefined;
+  }
+
+  return createMatchStatisticsUrl(matchExternalId);
 }

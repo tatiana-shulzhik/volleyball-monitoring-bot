@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { CevGateway } from '../../gateway/cev.gateway';
+import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
 import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
-import { ILiveLineupChangeGroup } from '../../interfaces/requests/live-lineup-monitoring.interface';
 import { IProcessLineupMatchParams } from '../../interfaces/requests/process-lineup-match-params.interface';
 import { IProcessRosterMatchParams } from '../../interfaces/requests/process-roster-match-params.interface';
 import {
@@ -12,14 +11,12 @@ import {
   IFetchedMatchAttackStatistics,
 } from '../../interfaces/requests/player-statistics.interface';
 import {
-  IMonitoredPlayer,
   IMonitoringContext,
   IPlayerMonitoringState,
   IStartingLineupMonitoringChange,
 } from '../../interfaces/responses/match-player-monitoring.interface';
 import {
-  createMatchStatisticsUrl,
-  LEGA_VOLLEY_FEMMINILE_BASE_URL,
+  createMatchProtocolUrl,
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
@@ -40,10 +37,15 @@ import {
   formatStartingLineupMonitoringMessage,
   getCurrentSet,
   getAbsentStartingLineupPlayers,
+  getLineupChanges,
+  getLiveNotificationKey,
+  getMonitoredLineupPlayers,
   getMonitoredPlayers,
   getMonitoredRoster,
   getPlayerMonitoringStateKey,
   getPlayerMonitoringStateTtl,
+  getPositionsByShirtNumber,
+  getRosterNotificationKey,
   isActiveMark,
   isStarter,
   mergeLineupSetMarksHistory,
@@ -55,7 +57,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку и live для CEV и Lega Volley Femminile; стартовый состав — только Femminile. */
+/** Проверяет заявку для CEV / Lega Volley / Femminile; live — CEV+Femminile; старт — только Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -65,6 +67,7 @@ export class MatchRosterMonitoringService {
     private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
     private readonly playersService: PlayersService,
     private readonly gateway: CevGateway,
+    private readonly legaVolleyGateway: LegaVolleyGateway,
     private readonly femminileGateway: LegaVolleyFemminileGateway,
     private readonly telegramService: TelegramService,
     private readonly cache: RedisCacheService,
@@ -82,31 +85,44 @@ export class MatchRosterMonitoringService {
       context: IMonitoringContext,
       checkedAt: Date,
     ) => this.processRosterMatch({ match, roster, context, now: checkedAt });
-    const [cevNotifications, femminileNotifications] = await Promise.all([
-      this.processMatches(
-        await this.matchesService.findMonitoredWithin(
+    const [cevNotifications, legaVolleyNotifications, femminileNotifications] =
+      await Promise.all([
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.Cev,
+            now,
+            windowEnd,
+          ),
+          now,
+          (items) => this.gateway.fetchMatchRosters(items),
+          handleRoster,
           ESourceCode.Cev,
-          now,
-          windowEnd,
         ),
-        now,
-        (items) => this.gateway.fetchMatchRosters(items),
-        handleRoster,
-        ESourceCode.Cev,
-      ),
-      this.processMatches(
-        await this.matchesService.findMonitoredWithin(
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.LegaVolley,
+            now,
+            windowEnd,
+          ),
+          now,
+          (items) => this.legaVolleyGateway.fetchMatchRosters(items),
+          handleRoster,
+          ESourceCode.LegaVolley,
+        ),
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.LegaVolleyFemminile,
+            now,
+            windowEnd,
+          ),
+          now,
+          (items) => this.femminileGateway.fetchMatchRosters(items),
+          handleRoster,
           ESourceCode.LegaVolleyFemminile,
-          now,
-          windowEnd,
         ),
-        now,
-        (items) => this.femminileGateway.fetchMatchRosters(items),
-        handleRoster,
-        ESourceCode.LegaVolleyFemminile,
-      ),
-    ]);
-    const notifications = cevNotifications + femminileNotifications;
+      ]);
+    const notifications =
+      cevNotifications + legaVolleyNotifications + femminileNotifications;
 
     if (notifications) {
       this.logger.log(
@@ -281,7 +297,7 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const notificationKey = this.getRosterNotificationKey(
+    const notificationKey = getRosterNotificationKey(
       match,
       roster,
       newAbsenteePlayerIds,
@@ -413,12 +429,12 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const homePositionsByShirtNumber = this.getPositionsByShirtNumber(
+    const homePositionsByShirtNumber = getPositionsByShirtNumber(
       match.homeTeam.id,
       match.league.id,
       context,
     );
-    const awayPositionsByShirtNumber = this.getPositionsByShirtNumber(
+    const awayPositionsByShirtNumber = getPositionsByShirtNumber(
       match.awayTeam.id,
       match.league.id,
       context,
@@ -441,7 +457,10 @@ export class MatchRosterMonitoringService {
         ),
         homePositionsByShirtNumber,
         awayPositionsByShirtNumber,
-        matchProtocolUrl: this.getMatchProtocolUrl(match),
+        matchProtocolUrl: createMatchProtocolUrl(
+          match.league.stage.championship.source?.code,
+          match.externalId,
+        ),
       }),
     );
     if (!sent) return 0;
@@ -487,12 +506,12 @@ export class MatchRosterMonitoringService {
     }>(lineupKey);
     const snapshot = {
       set: currentSet,
-      home: this.getMonitoredLineupPlayers(
+      home: getMonitoredLineupPlayers(
         monitoredPlayers,
         match.homeTeam.id,
         lineup.home,
       ),
-      away: this.getMonitoredLineupPlayers(
+      away: getMonitoredLineupPlayers(
         monitoredPlayers,
         match.awayTeam.id,
         lineup.away,
@@ -503,25 +522,25 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const previousHome = this.getMonitoredLineupPlayers(
+    const previousHome = getMonitoredLineupPlayers(
       monitoredPlayers,
       match.homeTeam.id,
       previous.home,
     );
-    const previousAway = this.getMonitoredLineupPlayers(
+    const previousAway = getMonitoredLineupPlayers(
       monitoredPlayers,
       match.awayTeam.id,
       previous.away,
     );
     const changes = [
-      this.getLineupChanges(
+      getLineupChanges(
         match.homeTeam.name,
         previousHome,
         previous.set,
         snapshot.home,
         currentSet,
       ),
-      this.getLineupChanges(
+      getLineupChanges(
         match.awayTeam.name,
         previousAway,
         previous.set,
@@ -534,11 +553,7 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const notificationKey = this.getLiveNotificationKey(
-      match,
-      snapshot,
-      currentSet,
-    );
+    const notificationKey = getLiveNotificationKey(match, snapshot, currentSet);
     const acquired = await this.cache.acquire(notificationKey, lineupTtl);
     if (!acquired) {
       await this.cache.set(lineupKey, snapshot, lineupTtl);
@@ -553,19 +568,22 @@ export class MatchRosterMonitoringService {
         away: lineup.away,
         homeAttackStatistics: attackStatistics.home,
         awayAttackStatistics: attackStatistics.away,
-        homePositionsByShirtNumber: this.getPositionsByShirtNumber(
+        homePositionsByShirtNumber: getPositionsByShirtNumber(
           match.homeTeam.id,
           match.league.id,
           context,
         ),
-        awayPositionsByShirtNumber: this.getPositionsByShirtNumber(
+        awayPositionsByShirtNumber: getPositionsByShirtNumber(
           match.awayTeam.id,
           match.league.id,
           context,
         ),
         changes,
         currentSet,
-        matchProtocolUrl: this.getMatchProtocolUrl(match),
+        matchProtocolUrl: createMatchProtocolUrl(
+          match.league.stage.championship.source?.code,
+          match.externalId,
+        ),
       }),
     );
     if (!sent) {
@@ -576,84 +594,6 @@ export class MatchRosterMonitoringService {
     await this.cache.set(lineupKey, snapshot, lineupTtl);
 
     return 1;
-  }
-
-  private getMonitoredLineupPlayers(
-    monitoredPlayers: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
-    teamId: number,
-    lineup: ICevMatchLineupPlayer[],
-  ): ICevMatchLineupPlayer[] {
-    return monitoredPlayers.flatMap(({ subscription, relation }) => {
-      if (relation.team.id !== teamId) return [];
-      const player = findLineupPlayer(
-        lineup,
-        subscription.player.fullName,
-        relation.shirtNumber,
-      );
-      return player ? [player] : [];
-    });
-  }
-
-  private getLineupChanges(
-    teamName: string,
-    previous: ICevMatchLineupPlayer[],
-    previousSet: number,
-    current: ICevMatchLineupPlayer[],
-    currentSet: number,
-  ): ILiveLineupChangeGroup | null {
-    const key = (player: ICevMatchLineupPlayer) =>
-      `${player.shirtNumber}:${player.playerName}`;
-    const previousActive = previous.filter((player) =>
-      isActiveMark(player.setMarks[previousSet - 1] ?? ''),
-    );
-    const currentActive = current.filter((player) =>
-      isActiveMark(player.setMarks[currentSet - 1] ?? ''),
-    );
-    const previousKeys = new Set(previousActive.map(key));
-    const currentKeys = new Set(currentActive.map(key));
-    const outgoing = previousActive.filter(
-      (player) => !currentKeys.has(key(player)),
-    );
-    const incoming = currentActive.filter(
-      (player) => !previousKeys.has(key(player)),
-    );
-
-    const items = Array.from(
-      { length: Math.max(outgoing.length, incoming.length) },
-      (_, index) => {
-        const outPlayer = outgoing[index];
-        const inPlayer = incoming[index];
-        const format = (player: ICevMatchLineupPlayer) =>
-          `№${player.shirtNumber ?? '—'} ${player.playerName}`;
-
-        if (outPlayer && inPlayer) {
-          return `${format(outPlayer)} → ${format(inPlayer)}`;
-        }
-        return outPlayer
-          ? `вне состава ${format(outPlayer)}`
-          : `в составе ${format(inPlayer)}`;
-      },
-    );
-    if (!items.length) return null;
-
-    return { teamName, items };
-  }
-
-  private getPositionsByShirtNumber(
-    teamId: number,
-    leagueId: number,
-    context: IMonitoringContext,
-  ): Map<number, string> {
-    return new Map(
-      [...context.relationsByPlayerAndLeague.values()].flatMap((relation) =>
-        relation.team.id === teamId &&
-        relation.league.id === leagueId &&
-        relation.shirtNumber !== null &&
-        relation.position
-          ? [[relation.shirtNumber, relation.position] as const]
-          : [],
-      ),
-    );
   }
 
   private async processMatches<T>(
@@ -685,22 +625,6 @@ export class MatchRosterMonitoringService {
       );
     }
     return notifications;
-  }
-
-  private getMatchProtocolUrl(match: MatchEntity): string | undefined {
-    if (!match.externalId) return undefined;
-
-    if (
-      match.league.stage.championship.source?.code ===
-      ESourceCode.LegaVolleyFemminile
-    ) {
-      const sourceMatchId = match.externalId.match(/(\d+)$/)?.[1];
-      return sourceMatchId
-        ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/matchstats/`
-        : undefined;
-    }
-
-    return createMatchStatisticsUrl(match.externalId);
   }
 
   private async getContext(
@@ -791,66 +715,6 @@ export class MatchRosterMonitoringService {
         return state ? [[playerId, state] as const] : [];
       }),
     );
-  }
-
-  private getRosterNotificationKey(
-    match: MatchEntity,
-    roster: IProcessRosterMatchParams['roster'],
-    newAbsenteePlayerIds: number[],
-  ): string {
-    const rosterSignature = [roster.home, roster.away]
-      .map((team) =>
-        [...team]
-          .sort(
-            (left, right) =>
-              left.externalId.localeCompare(right.externalId) ||
-              (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
-              (left.position ?? '').localeCompare(right.position ?? ''),
-          )
-          .map(
-            ({ externalId, shirtNumber, position }) =>
-              `${externalId}:${shirtNumber ?? ''}:${position ?? ''}`,
-          )
-          .join(','),
-      )
-      .join('|');
-    const absenteesSignature = [...newAbsenteePlayerIds]
-      .sort((left, right) => left - right)
-      .join(',');
-    const digest = createHash('sha256')
-      .update(`${rosterSignature}|absentees:${absenteesSignature}`)
-      .digest('hex');
-
-    return `match-monitoring:${match.id}:roster-notification:${digest}`;
-  }
-
-  /** Ключ дедупа: Active только среди отслеживаемых. */
-  private getLiveNotificationKey(
-    match: MatchEntity,
-    lineup: Pick<IProcessLineupMatchParams['lineup'], 'home' | 'away'>,
-    currentSet: number,
-  ): string {
-    const signature = [lineup.home, lineup.away]
-      .map((team) =>
-        [...team]
-          .filter((player) =>
-            isActiveMark(player.setMarks[currentSet - 1] ?? ''),
-          )
-          .sort(
-            (left, right) =>
-              (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
-              left.playerName.localeCompare(right.playerName),
-          )
-          .map(
-            ({ playerName, shirtNumber }) =>
-              `${playerName}:${shirtNumber ?? ''}`,
-          )
-          .join(','),
-      )
-      .join('|');
-    const digest = createHash('sha256').update(signature).digest('hex');
-
-    return `match-monitoring:${match.id}:live-notification:${currentSet}:${digest}`;
   }
 
   private saveStates(

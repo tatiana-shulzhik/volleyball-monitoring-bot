@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { MatchEntity } from '../databases/entities/match.entity';
 import {
   IMonitoredPlayer,
@@ -8,9 +9,14 @@ import {
   ICevMatchLineupPlayer,
   ICevPlayerAttackStatistics,
   ICevMatchRosterPlayer,
+  IFetchedMatchLineup,
+  IFetchedMatchRoster,
 } from '../interfaces/requests/player-statistics.interface';
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
-import { ILiveLineupMonitoringMessageData } from '../interfaces/requests/live-lineup-monitoring.interface';
+import {
+  ILiveLineupChangeGroup,
+  ILiveLineupMonitoringMessageData,
+} from '../interfaces/requests/live-lineup-monitoring.interface';
 import {
   IAbsentStartingLineupPlayer,
   IStartingLineupMonitoringMessageData,
@@ -225,6 +231,141 @@ export function getPlayerMonitoringStateTtl(
     LIVE_MONITORING_MAX_MATCH_AGE_HOURS * 3_600_000;
 
   return Math.max(1, Math.ceil((expiresAt - now.getTime()) / 1_000));
+}
+
+export function getMonitoredLineupPlayers(
+  monitoredPlayers: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
+  teamId: number,
+  lineup: ICevMatchLineupPlayer[],
+): ICevMatchLineupPlayer[] {
+  return monitoredPlayers.flatMap(({ subscription, relation }) => {
+    if (relation.team.id !== teamId) return [];
+    const player = findLineupPlayer(
+      lineup,
+      subscription.player.fullName,
+      relation.shirtNumber,
+    );
+    return player ? [player] : [];
+  });
+}
+
+export function getLineupChanges(
+  teamName: string,
+  previous: ICevMatchLineupPlayer[],
+  previousSet: number,
+  current: ICevMatchLineupPlayer[],
+  currentSet: number,
+): ILiveLineupChangeGroup | null {
+  const key = (player: ICevMatchLineupPlayer) =>
+    `${player.shirtNumber}:${player.playerName}`;
+  const previousActive = previous.filter((player) =>
+    isActiveMark(player.setMarks[previousSet - 1] ?? ''),
+  );
+  const currentActive = current.filter((player) =>
+    isActiveMark(player.setMarks[currentSet - 1] ?? ''),
+  );
+  const previousKeys = new Set(previousActive.map(key));
+  const currentKeys = new Set(currentActive.map(key));
+  const outgoing = previousActive.filter(
+    (player) => !currentKeys.has(key(player)),
+  );
+  const incoming = currentActive.filter(
+    (player) => !previousKeys.has(key(player)),
+  );
+
+  const items = Array.from(
+    { length: Math.max(outgoing.length, incoming.length) },
+    (_, index) => {
+      const outPlayer = outgoing[index];
+      const inPlayer = incoming[index];
+      const format = (player: ICevMatchLineupPlayer) =>
+        `№${player.shirtNumber ?? '—'} ${player.playerName}`;
+
+      if (outPlayer && inPlayer) {
+        return `${format(outPlayer)} → ${format(inPlayer)}`;
+      }
+      return outPlayer
+        ? `вне состава ${format(outPlayer)}`
+        : `в составе ${format(inPlayer)}`;
+    },
+  );
+  if (!items.length) return null;
+
+  return { teamName, items };
+}
+
+export function getPositionsByShirtNumber(
+  teamId: number,
+  leagueId: number,
+  context: IMonitoringContext,
+): Map<number, string> {
+  return new Map(
+    [...context.relationsByPlayerAndLeague.values()].flatMap((relation) =>
+      relation.team.id === teamId &&
+      relation.league.id === leagueId &&
+      relation.shirtNumber !== null &&
+      relation.position
+        ? [[relation.shirtNumber, relation.position] as const]
+        : [],
+    ),
+  );
+}
+
+export function getRosterNotificationKey(
+  match: MatchEntity,
+  roster: Pick<IFetchedMatchRoster, 'home' | 'away'>,
+  newAbsenteePlayerIds: number[],
+): string {
+  const rosterSignature = [roster.home, roster.away]
+    .map((team) =>
+      [...team]
+        .sort(
+          (left, right) =>
+            left.externalId.localeCompare(right.externalId) ||
+            (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
+            (left.position ?? '').localeCompare(right.position ?? ''),
+        )
+        .map(
+          ({ externalId, shirtNumber, position }) =>
+            `${externalId}:${shirtNumber ?? ''}:${position ?? ''}`,
+        )
+        .join(','),
+    )
+    .join('|');
+  const absenteesSignature = [...newAbsenteePlayerIds]
+    .sort((left, right) => left - right)
+    .join(',');
+  const digest = createHash('sha256')
+    .update(`${rosterSignature}|absentees:${absenteesSignature}`)
+    .digest('hex');
+
+  return `match-monitoring:${match.id}:roster-notification:${digest}`;
+}
+
+/** Ключ дедупа: Active только среди отслеживаемых. */
+export function getLiveNotificationKey(
+  match: MatchEntity,
+  lineup: Pick<IFetchedMatchLineup, 'home' | 'away'>,
+  currentSet: number,
+): string {
+  const signature = [lineup.home, lineup.away]
+    .map((team) =>
+      [...team]
+        .filter((player) => isActiveMark(player.setMarks[currentSet - 1] ?? ''))
+        .sort(
+          (left, right) =>
+            (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
+            left.playerName.localeCompare(right.playerName),
+        )
+        .map(
+          ({ playerName, shirtNumber }) => `${playerName}:${shirtNumber ?? ''}`,
+        )
+        .join(','),
+    )
+    .join('|');
+  const digest = createHash('sha256').update(signature).digest('hex');
+
+  return `match-monitoring:${match.id}:live-notification:${currentSet}:${digest}`;
 }
 
 export function findLineupPlayer(

@@ -13,6 +13,8 @@ import {
   ILegaMatchReference,
   ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
+import { ICevMatchRosterPlayer } from '../interfaces/requests/player-statistics.interface';
+import { LEGA_VOLLEY_PREGARA_POSITION_CODES } from './consts/constants';
 import { ECompetitionType, EMatchStatus } from './enums';
 import { parseCevLocalDate } from './cev-timezone.utils';
 
@@ -349,6 +351,82 @@ export function normalizeLegaName(value: string): string {
     .trim();
 }
 
+/** Индекс матчей с Pre Gara: data-id + названия команд из span.gara2roster. */
+export function readLegaPregaraMatchIds(html: string): Array<{
+  sourceMatchId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+}> {
+  const matches: Array<{
+    sourceMatchId: string;
+    homeTeamName: string;
+    awayTeamName: string;
+  }> = [];
+
+  for (const match of html.matchAll(
+    /<span\b[^>]*data-id=["'](\d+)["'][^>]*class=["'][^"']*\bgara2roster\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
+  )) {
+    const label = cleanLegaText(match[2]);
+    const teams = label.split(/\s+[-–—]\s+/).map((part) => part.trim());
+    if (teams.length < 2 || !teams[0] || !teams[1]) continue;
+
+    matches.push({
+      sourceMatchId: match[1],
+      homeTeamName: teams[0],
+      awayTeamName: teams[1],
+    });
+  }
+
+  return matches;
+}
+
+export function createLegaPregaraMatchKey(
+  homeTeamName: string,
+  awayTeamName: string,
+): string {
+  return `${normalizeLegaName(homeTeamName)}:${normalizeLegaName(awayTeamName)}`;
+}
+
+/** Foglio Gara: два table#roster (home/away) на /pregara-roster?match_id=. */
+export function parseLegaPregaraMatchRoster(html: string): {
+  home: ICevMatchRosterPlayer[];
+  away: ICevMatchRosterPlayer[];
+} {
+  const tables = [
+    ...html.matchAll(
+      /<table\b(?=[^>]*\bid=["']roster["'])[^>]*>([\s\S]*?)<\/table>/gi,
+    ),
+  ].map((match) => readLegaPregaraRosterPlayers(match[1]));
+
+  return {
+    home: tables[0] ?? [],
+    away: tables[1] ?? [],
+  };
+}
+
+function readLegaPregaraRosterPlayers(table: string): ICevMatchRosterPlayer[] {
+  const players: ICevMatchRosterPlayer[] = [];
+
+  for (const match of table.matchAll(
+    /\/player\/([^"'\)\s]+)[\s\S]*?<td\b[^>]*class=["'][^"']*\bnum-maglia\b[^"']*["'][^>]*>\s*(\d+)\s*<\/td>\s*<td\b[^>]*class=["'][^"']*\bnome\b[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<td\b[^>]*class=["'][^"']*\bruolo\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/gi,
+  )) {
+    const playerName = cleanLegaText(match[3].replace(/<!--[\s\S]*?-->/g, ''));
+    if (!playerName) continue;
+
+    const positionCode = cleanLegaText(match[4]).toUpperCase();
+    players.push({
+      externalId: match[1],
+      playerName,
+      shirtNumber: Number(match[2]),
+      position:
+        LEGA_VOLLEY_PREGARA_POSITION_CODES[positionCode] ?? positionCode,
+      isInRoster: true,
+    });
+  }
+
+  return players;
+}
+
 function extractLegaTeamCountry(value: string): string | undefined {
   return value.match(/\(([a-z]{3})\)\s*$/i)?.[1]?.toUpperCase();
 }
@@ -408,13 +486,10 @@ function extractLegaRosterHtml(html: string): string {
 }
 
 function isLegaPlayerPosition(value: string): boolean {
-  return [
-    'schiacciatore',
-    'opposto',
-    'centrale',
-    'palleggiatore',
-    'libero',
-  ].includes(value.trim().toLowerCase());
+  const normalized = value.trim().toLowerCase();
+  return Object.values(LEGA_VOLLEY_PREGARA_POSITION_CODES).some(
+    (position) => position.toLowerCase() === normalized,
+  );
 }
 
 function parseLegaNumber(value: string | undefined): number | null {
