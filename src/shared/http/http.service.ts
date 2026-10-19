@@ -73,7 +73,8 @@ export class HttpService {
         }
 
         if (attempt < MAX_ATTEMPTS) {
-          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+          const delayMs = 1000 * 2 ** (attempt - 1);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
     }

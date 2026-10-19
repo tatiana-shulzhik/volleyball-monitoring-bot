@@ -21,7 +21,7 @@ export enum ESourceCode {
 }
 
 export enum ESynchronizationKey {
-  CevInitialCatalog = 'initial-catalog-country',
+  CevInitialCatalog = 'initial-catalog-cev',
   LegaVolleyInitialCatalog = 'initial-catalog-legavolley',
   LegaVolleyFemminileInitialCatalog = 'initial-catalog-legavolley-femminile',
 }

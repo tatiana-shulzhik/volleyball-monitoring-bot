@@ -3,7 +3,7 @@ import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league
 import { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
 import {
-  CEV_COUNTRIES,
+  createLegaVolleyScheduleUrl,
   createMatchPageUrl,
   LEGA_VOLLEY_BASE_URL,
   LEGA_VOLLEY_FEMMINILE_STATISTICS_URL,
@@ -62,14 +62,9 @@ export function formatTodayMatches(
 }
 
 export function formatTodayMatchButton(match: MatchEntity): string {
-  const home = formatTeamCountry(match.homeTeam.country, match.homeTeam.name);
-  const away = formatTeamCountry(match.awayTeam.country, match.awayTeam.name);
-  const teams =
-    home === away
-      ? `${match.homeTeam.name} — ${match.awayTeam.name}`
-      : `${home} — ${away}`;
-
-  return truncateButtonText(`${formatTime(match.scheduledAt)} · ${teams}`);
+  return truncateButtonText(
+    `${formatTime(match.scheduledAt)} · ${match.homeTeam.name} — ${match.awayTeam.name}`,
+  );
 }
 
 export function formatTodayMatchRoster(
@@ -94,9 +89,10 @@ export function formatTodayMatchRoster(
 function getMatchUrl(match: MatchEntity): string | null {
   const externalId = match.externalId;
   const sourceCode = match.league.stage.championship.source?.code;
-  if (!externalId || !sourceCode) return null;
+  if (!sourceCode) return null;
 
   if (sourceCode === ESourceCode.Cev) {
+    if (!externalId) return null;
     return createMatchPageUrl(
       match.league.stage.championship.externalId,
       match.league.externalId,
@@ -105,12 +101,22 @@ function getMatchUrl(match: MatchEntity): string | null {
   }
 
   if (sourceCode === ESourceCode.LegaVolleyFemminile) {
+    if (!externalId) return null;
     return `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${encodeURIComponent(externalId)}`;
   }
 
-  return /^\d+$/.test(externalId)
-    ? `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`
-    : null;
+  if (sourceCode !== ESourceCode.LegaVolley) return null;
+
+  if (externalId && /^\d+$/.test(externalId)) {
+    return `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`;
+  }
+
+  const year =
+    externalId?.match(/^legavolley:(\d{4}):/)?.[1] ??
+    match.league.stage.season?.name?.slice(0, 4) ??
+    String(new Date().getFullYear());
+
+  return createLegaVolleyScheduleUrl(year, match.league.externalId);
 }
 
 function formatRosterTable(
@@ -231,8 +237,4 @@ function truncateButtonText(value: string): string {
   return characters.length <= maxLength
     ? value
     : `${characters.slice(0, maxLength - 1).join('')}…`;
-}
-
-function formatTeamCountry(country: string | null, fallback: string): string {
-  return country ? (CEV_COUNTRIES[country] ?? country) : fallback;
 }

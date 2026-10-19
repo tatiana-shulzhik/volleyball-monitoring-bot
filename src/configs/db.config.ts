@@ -42,6 +42,8 @@ import { CreateMonitoringSubscriptions1760000024000 } from '../databases/migrati
 import { ResetCevCatalog1760000025000 } from '../databases/migrations/1760000025000-ResetCevCatalog';
 import { DropMatchMonitoringStartedAt1760000026000 } from '../databases/migrations/1760000026000-DropMatchMonitoringStartedAt';
 import { AddQueryIndexes1760000027000 } from '../databases/migrations/1760000027000-AddQueryIndexes';
+import { RenameCevInitialCatalogKey1760000028000 } from '../databases/migrations/1760000028000-RenameCevInitialCatalogKey';
+import { SeedTelegramAccess1760000029000 } from '../databases/migrations/1760000029000-SeedTelegramAccess';
 import { ConfigService } from './config.service';
 
 @Injectable()
@@ -116,6 +118,8 @@ export class DbConfig implements TypeOrmOptionsFactory {
         ResetCevCatalog1760000025000,
         DropMatchMonitoringStartedAt1760000026000,
         AddQueryIndexes1760000027000,
+        RenameCevInitialCatalogKey1760000028000,
+        SeedTelegramAccess1760000029000,
       ],
     };
   }

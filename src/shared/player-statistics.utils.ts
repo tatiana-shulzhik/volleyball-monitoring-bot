@@ -10,7 +10,10 @@ import type {
 } from '../interfaces/requests/player-statistics.interface';
 import type { MatchEntity } from '../databases/entities/match.entity';
 import { createCompetitionStageKey } from './competition-stages.utils';
-import { CEV_COUNTRIES } from './consts/constants';
+import {
+  CEV_COUNTRIES,
+  PLAYER_POSITION_SHORT_LABELS,
+} from './consts/constants';
 import { ESourceCode } from './enums';
 import { parseSeasonEndYear } from './season.utils';
 
@@ -681,21 +684,9 @@ export function formatPlayerPosition(
   }
 
   const normalizedPosition = position.trim().toLowerCase();
-  const positionLabels: Record<string, string> = {
-    'outside spiker': 'WS',
-    schiacciatore: 'WS',
-    schiacciatrice: 'WS',
-    opposite: 'O',
-    opposto: 'O',
-    'middle blocker': 'MB',
-    centrale: 'MB',
-    setter: 'S',
-    palleggiatore: 'S',
-    palleggiatrice: 'S',
-    libero: 'L',
-  };
-
-  return positionLabels[normalizedPosition] ?? escapeHtml(position);
+  return (
+    PLAYER_POSITION_SHORT_LABELS[normalizedPosition] ?? escapeHtml(position)
+  );
 }
 
 function createStatisticsKey(
