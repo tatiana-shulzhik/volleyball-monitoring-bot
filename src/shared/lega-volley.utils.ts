@@ -16,7 +16,10 @@ import {
 import { ICevMatchRosterPlayer } from '../interfaces/requests/player-statistics.interface';
 import { LEGA_VOLLEY_PREGARA_POSITION_CODES } from './consts/constants';
 import { ECompetitionType, EMatchStatus } from './enums';
-import { parseCevLocalDate } from './cev-timezone.utils';
+import {
+  CEV_COUNTRY_TIME_ZONES,
+  parseCevLocalDate,
+} from './cev-timezone.utils';
 
 export function parseLegaSeason(
   year: number,
@@ -176,8 +179,11 @@ export function readLegaMatches(
       : score && (Number(score[1]) > 0 || Number(score[2]) > 0)
         ? EMatchStatus.Finished
         : EMatchStatus.Scheduled;
+    const venueCountry =
+      extractLegaTeamCountry(cells[8] ?? '') ??
+      extractLegaTeamCountry(cells[2] ?? '');
     const scheduledAt =
-      parseLegaScheduleDate(cells[0], cells[1]) ??
+      parseLegaScheduleDate(cells[0], cells[1], venueCountry) ??
       parseLegaMatchDate(html.slice(0, rowMatch.index ?? 0));
 
     matches.set(externalId, {
@@ -540,6 +546,7 @@ function parseLegaMatchDate(value: string): Date | null {
 function parseLegaScheduleDate(
   dateValue: string | undefined,
   timeValue: string | undefined,
+  countryCode?: string,
 ): Date | null {
   const date = dateValue?.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!date) return null;
@@ -551,6 +558,7 @@ function parseLegaScheduleDate(
     Number(date[3]),
     Number(time?.[1] ?? 0),
     Number(time?.[2] ?? 0),
+    countryCode,
   );
 }
 
@@ -560,11 +568,16 @@ function parseLegaLocalDate(
   year: number,
   hours: number,
   minutes: number,
+  countryCode?: string,
 ): Date | null {
+  const timeZone =
+    (countryCode ? CEV_COUNTRY_TIME_ZONES[countryCode] : undefined) ??
+    'Europe/Rome';
+
   return parseCevLocalDate(
     `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/` +
       `${year} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
-    'Europe/Rome',
+    timeZone,
   );
 }
 
