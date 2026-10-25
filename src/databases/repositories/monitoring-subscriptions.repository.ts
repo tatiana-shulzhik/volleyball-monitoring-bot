@@ -99,11 +99,6 @@ export class MonitoringSubscriptionsRepository {
     return new Set(subscriptions.map(({ championshipId }) => championshipId));
   }
 
-  async removeByChampionship(championshipId: number): Promise<number> {
-    const result = await this.repository.delete({ championshipId });
-    return result.affected ?? 0;
-  }
-
   async findTeamIdsWithSubscriptions(
     championshipId: number,
     stageId: number,
@@ -119,26 +114,5 @@ export class MonitoringSubscriptionsRepository {
     );
 
     return new Set(rows.map(({ teamId }) => teamId));
-  }
-
-  async removeByTeam(
-    teamId: number,
-    leagueId: number,
-    championshipId: number,
-  ): Promise<number> {
-    const result = await this.repository
-      .createQueryBuilder()
-      .delete()
-      .where('"championship_id" = :championshipId', { championshipId })
-      .andWhere(
-        `"player_id" IN (
-          SELECT "player_id" FROM "player_team_leagues"
-          WHERE "team_id" = :teamId AND "league_id" = :leagueId
-        )`,
-        { teamId, leagueId },
-      )
-      .execute();
-
-    return result.affected ?? 0;
   }
 }
