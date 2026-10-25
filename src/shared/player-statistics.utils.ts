@@ -655,6 +655,18 @@ function aggregateCurrentSeasonStatistics(
   return [...totals.values()];
 }
 
+export function formatPlayerQuickStats(
+  player: ITeamStatistics['players'][number] | undefined,
+): string {
+  if (!player) return '';
+
+  const rating = formatPlayerRating(player);
+  const attacks = formatPlayerAttacks(player);
+  if (rating === '—' && attacks === '—') return '';
+
+  return `⭐${rating}⚡${attacks}`;
+}
+
 function formatPlayerRating(
   player: ITeamStatistics['players'][number],
 ): string {

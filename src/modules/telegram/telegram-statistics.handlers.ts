@@ -7,8 +7,10 @@ import {
 } from '../../shared/consts/constants';
 import { ECompetitionType, ESourceCode } from '../../shared/enums';
 import {
+  formatPlayerQuickStats,
   formatTeamStatistics,
   formatTeamStatisticsPages,
+  normalizePlayerName,
 } from '../../shared/player-statistics.utils';
 import {
   parseCompetitionType,
@@ -998,9 +1000,18 @@ export class TelegramStatisticsHandlers {
       competitionType: ECompetitionType;
     },
   ): Promise<void> {
-    const { teamName, players } = await this.playersService.findTeamPlayers(
-      options.teamId,
-      options.leagueId,
+    const [{ teamName, players }, teamStatistics] = await Promise.all([
+      this.playersService.findTeamPlayers(options.teamId, options.leagueId),
+      this.playersService.findTeamStatistics({
+        teamId: options.teamId,
+        leagueId: options.leagueId,
+      }),
+    ]);
+    const statisticsByName = new Map(
+      (teamStatistics?.players ?? []).map((player) => [
+        normalizePlayerName(player.fullName),
+        player,
+      ]),
     );
     const monitoredPlayerIds =
       await this.monitoringSubscriptionsService.findPlayerIds(
@@ -1008,19 +1019,29 @@ export class TelegramStatisticsHandlers {
         options.championshipId,
       );
     const keyboard = Markup.inlineKeyboard([
-      ...players.map((player) => [
-        Markup.button.callback(
-          `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ${player.shirtNumber ?? '—'} ${player.fullName}`,
-          TELEGRAM_CALLBACKS.monitoring.player(
-            player.id,
-            options.teamId,
-            options.leagueId,
-            options.stageId,
-            options.championshipId,
-            options.competitionType,
+      ...players.map((player) => {
+        const stats = formatPlayerQuickStats(
+          statisticsByName.get(normalizePlayerName(player.fullName)),
+        );
+        const label =
+          `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ` +
+          `${player.shirtNumber ?? '—'} ${player.fullName}` +
+          (stats ? ` (${stats})` : '');
+
+        return [
+          Markup.button.callback(
+            label.slice(0, 64),
+            TELEGRAM_CALLBACKS.monitoring.player(
+              player.id,
+              options.teamId,
+              options.leagueId,
+              options.stageId,
+              options.championshipId,
+              options.competitionType,
+            ),
           ),
-        ),
-      ]),
+        ];
+      }),
       ...(monitoredPlayerIds.size
         ? [
             [
