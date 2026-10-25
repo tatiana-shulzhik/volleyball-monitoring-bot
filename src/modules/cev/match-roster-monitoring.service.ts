@@ -344,6 +344,9 @@ export class MatchRosterMonitoringService {
       awayStatistics?.players,
     );
     const message = {
+      championshipName: match.league.stage.championship.name,
+      stageName: match.league.stage.name,
+      leagueName: match.league.name,
       homeTeamName: match.homeTeam.name,
       awayTeamName: match.awayTeam.name,
       home,
@@ -441,6 +444,9 @@ export class MatchRosterMonitoringService {
     );
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatStartingLineupMonitoringMessage({
+        championshipName: match.league.stage.championship.name,
+        stageName: match.league.stage.name,
+        leagueName: match.league.name,
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
         home: lineup.home,
@@ -562,6 +568,9 @@ export class MatchRosterMonitoringService {
 
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatLiveMonitoringMessage({
+        championshipName: match.league.stage.championship.name,
+        stageName: match.league.stage.name,
+        leagueName: match.league.name,
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
         home: lineup.home,

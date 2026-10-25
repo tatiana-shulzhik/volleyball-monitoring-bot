@@ -478,6 +478,7 @@ export function formatMatchRosterMonitoringMessage(
 
   return [
     '<p><b>🏐 Заявка на матч</b></p>',
+    formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     `<p>Проверка: за ${escapeHtml(timeUntilMatch)} до начала</p>`,
     hasAbsentees
@@ -510,6 +511,7 @@ export function formatFullMatchRosterMonitoringMessage(
 ): string {
   return [
     '<p><b>🏐 Заявка на матч</b></p>',
+    formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     '<p><b>Расклад на матч</b></p>',
     formatMatchRosterTable(data.homeTeamName, data.home, {
@@ -621,6 +623,7 @@ export function formatStartingLineupMonitoringMessage(
 ): string {
   return [
     '<p><b>🏐 Стартовый состав</b></p>',
+    formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     '<p><b>🔴 Отсутствуют из стартового состава</b></p>',
     data.absentHome.length
@@ -719,6 +722,7 @@ export function formatLiveMonitoringMessage(
 
   return [
     `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
+    formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     changes ? `<br>${changes}<br>` : '',
     formatLiveLineupTable(
@@ -898,6 +902,29 @@ function normalizePlayerName(value: string): string {
     .normalize('NFD')
     .replace(/[^a-z0-9]/gi, '')
     .toUpperCase();
+}
+
+function formatCompetitionHeader(data: {
+  championshipName: string;
+  stageName: string;
+  leagueName: string;
+}): string {
+  const details = [data.stageName, data.leagueName]
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .filter(
+      (name, index, names) =>
+        name !== data.championshipName && names.indexOf(name) === index,
+    );
+
+  return [
+    '<br>',
+    `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
+    details.length
+      ? `<p>📌 ${details.map((name) => escapeHtml(name)).join(' · ')}</p>`
+      : '',
+    '<br>',
+  ].join('');
 }
 
 function formatMonitoringMessage(
