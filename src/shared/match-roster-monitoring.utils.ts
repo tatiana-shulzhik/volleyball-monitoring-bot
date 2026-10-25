@@ -531,7 +531,6 @@ function formatMatchRosterTable(
   const rows = [...roster]
     .sort(
       (left, right) =>
-        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
         (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.playerName.localeCompare(right.playerName),
@@ -560,9 +559,9 @@ function formatMatchRosterTable(
     '<th>№</th>',
     '<th>Игрок</th>',
     ...(showStatus ? ['<th>Статус</th>'] : []),
-    '<th>Рейтинг (очки/сеты)</th>',
-    '<th>Атака (успешные/попытки)</th>',
-    '<th>Поз.</th>',
+    '<th>Рейтинг (о/с)</th>',
+    '<th>Атака (у/п)</th>',
+    '<th>Поз</th>',
   ];
 
   return [
@@ -669,7 +668,7 @@ function formatAbsentStartingLineupTable(
   return [
     `<p><b>🔴 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Поз.</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -707,7 +706,7 @@ function formatStartingLineupTable(
   return [
     `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Поз.</th><th>Статус</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Поз</th><th>Статус</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -843,9 +842,9 @@ function formatLiveLineupTable(
     '<table bordered striped>',
     '<tr><th>№</th><th>Игрок</th>' +
       setHeaders.join('') +
-      '<th>Рейтинг (очки/сеты)</th>' +
-      '<th>Атака (успешные/попытки)</th>' +
-      '<th>Поз.</th></tr>',
+      '<th>Рейтинг (о/с)</th>' +
+      '<th>Атака (у/п)</th>' +
+      '<th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
