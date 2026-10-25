@@ -465,6 +465,12 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           ({ seasonName }) =>
             getLatestSeasonYear(seasonName) === latestSeasonYear,
         );
+      const latestPosition = sortedSeasons.find(
+        ({ position }) => position,
+      )?.position;
+      const positionLabel = latestPosition
+        ? ` (${escapeHtml(latestPosition)})`
+        : '';
       const rosterIndicator = getRosterIndicator(getRosterChange(seasons));
       const rows = sortedSeasons.map(
         (season) =>
@@ -474,14 +480,13 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           `<td>${escapeHtml(season.teamName)}</td>` +
           `<td align="center">${formatPlayerRating(season)}</td>` +
           `<td align="center">${formatPlayerAttacks(season)}</td>` +
-          `<td align="center">${formatPlayerPosition(season.position)}</td>` +
           '</tr>',
       );
 
       return [
         sectionHeader,
         `<p>👤 №${latestSeason?.shirtNumber ?? '—'} `,
-        `${rosterIndicator}<b>${escapeHtml(seasons[0].fullName)}</b> · `,
+        `${rosterIndicator}<b>${escapeHtml(seasons[0].fullName)}${positionLabel}</b> · `,
         `${seasons[0].birthYear ?? '—'} г.р.</p>`,
         '<table bordered striped>',
         '<tr>' +
@@ -490,7 +495,6 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           '<th>Команда</th>' +
           '<th>Рейтинг (о/с)</th>' +
           '<th>Атака (у/п)</th>' +
-          '<th>Поз</th>' +
           '</tr>',
         ...rows,
         '</table>',
