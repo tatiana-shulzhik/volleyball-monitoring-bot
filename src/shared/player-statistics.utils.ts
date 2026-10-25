@@ -493,8 +493,8 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           '<th>Сезон</th>' +
           '<th>Турнир</th>' +
           '<th>Команда</th>' +
-          '<th>Рейтинг (о/с)</th>' +
-          '<th>Атака (у/п)</th>' +
+          '<th>Рейтинг<br>(о/с)</th>' +
+          '<th>Атака<br>(у/п)</th>' +
           '</tr>',
         ...rows,
         '</table>',
@@ -619,8 +619,8 @@ function formatPlayersTable(
     '<tr>' +
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
-      '<th align="center">Рейтинг (о/с)</th>' +
-      '<th align="center">Атака (у/п)</th>' +
+      '<th align="center">Рейтинг<br>(о/с)</th>' +
+      '<th align="center">Атака<br>(у/п)</th>' +
       '<th align="center">Год рождения</th>' +
       '<th align="center">Поз</th>' +
       '</tr>',
