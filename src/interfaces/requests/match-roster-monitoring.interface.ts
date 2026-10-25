@@ -6,6 +6,9 @@ export interface IRosterNotificationViews {
 }
 
 export interface IMatchRosterMonitoringMessageData {
+  championshipName: string;
+  stageName: string;
+  leagueName: string;
   homeTeamName: string;
   awayTeamName: string;
   home: ICevMatchRosterPlayer[];

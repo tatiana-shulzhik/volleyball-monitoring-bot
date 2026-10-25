@@ -7,6 +7,9 @@ export interface IAbsentStartingLineupPlayer {
 }
 
 export interface IStartingLineupMonitoringMessageData {
+  championshipName: string;
+  stageName: string;
+  leagueName: string;
   homeTeamName: string;
   awayTeamName: string;
   home: ICevMatchLineupPlayer[];

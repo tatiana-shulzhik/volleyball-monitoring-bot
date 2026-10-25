@@ -19,6 +19,9 @@ export interface ILiveLineupChangeGroup {
 }
 
 export interface ILiveLineupMonitoringMessageData {
+  championshipName: string;
+  stageName: string;
+  leagueName: string;
   homeTeamName: string;
   awayTeamName: string;
   home: ICevMatchLineupPlayer[];
