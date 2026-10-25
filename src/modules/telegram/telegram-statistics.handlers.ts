@@ -214,27 +214,6 @@ export class TelegramStatisticsHandlers {
     );
 
     bot.action(
-      TELEGRAM_CALLBACK_PATTERNS.monitoring.clearChampionship,
-      async (context) => {
-        const championshipId = Number(context.match[1]);
-        const competitionType = parseCompetitionType(context.match[2]);
-        const removed =
-          await this.monitoringSubscriptionsService.removeByChampionship(
-            championshipId,
-          );
-
-        await this.showMonitoringStages(
-          context,
-          championshipId,
-          competitionType,
-          removed
-            ? `Очищено игроков: ${removed}`
-            : 'В чемпионате нет выбранных игроков',
-        );
-      },
-    );
-
-    bot.action(
       TELEGRAM_CALLBACK_PATTERNS.monitoring.championship,
       async (context) => {
         await this.showMonitoringStages(
@@ -265,30 +244,6 @@ export class TelegramStatisticsHandlers {
         competitionType: parseCompetitionType(context.match[5]),
       });
     });
-
-    bot.action(
-      TELEGRAM_CALLBACK_PATTERNS.monitoring.clearTeam,
-      async (context) => {
-        const options = {
-          teamId: Number(context.match[1]),
-          leagueId: Number(context.match[2]),
-          stageId: Number(context.match[3]),
-          championshipId: Number(context.match[4]),
-          competitionType: parseCompetitionType(context.match[5]),
-        };
-        const removed = await this.monitoringSubscriptionsService.removeByTeam(
-          options.teamId,
-          options.leagueId,
-          options.championshipId,
-        );
-        await context.answerCbQuery(
-          removed
-            ? `Очищено игроков: ${removed}`
-            : 'У команды нет выбранных игроков',
-        );
-        await this.renderMonitoringPlayers(context, options);
-      },
-    );
 
     bot.action(
       TELEGRAM_CALLBACK_PATTERNS.monitoring.player,
@@ -802,46 +757,26 @@ export class TelegramStatisticsHandlers {
     context: Context,
     championshipId: number,
     competitionType: ECompetitionType,
-    answerText?: string,
   ): Promise<void> {
     const stages = await this.telegramService.findStages(
       championshipId,
       competitionType,
       this.getSource(context.chat?.id),
     );
-    const hasSubscriptions = (
-      await this.monitoringSubscriptionsService.findChampionshipIdsWithSubscriptions(
-        [championshipId],
-      )
-    ).has(championshipId);
 
     await showList(context, {
-      items: [
-        ...(hasSubscriptions
-          ? [
-              {
-                text: '🗑 Очистить выбранных',
-                callbackData: TELEGRAM_CALLBACKS.monitoring.clearChampionship(
-                  championshipId,
-                  competitionType,
-                ),
-              },
-            ]
-          : []),
-        ...stages.map(({ id, name }) => ({
-          text: name,
-          callbackData: TELEGRAM_CALLBACKS.monitoring.stage(
-            id,
-            championshipId,
-            competitionType,
-          ),
-        })),
-      ],
+      items: stages.map(({ id, name }) => ({
+        text: name,
+        callbackData: TELEGRAM_CALLBACKS.monitoring.stage(
+          id,
+          championshipId,
+          competitionType,
+        ),
+      })),
       message: TELEGRAM_MESSAGES.stages.select,
       emptyMessage: TELEGRAM_MESSAGES.stages.empty,
       backText: '⬅️ К чемпионатам',
       backCallbackData: TELEGRAM_CALLBACKS.monitoring.season(competitionType),
-      answerText,
     });
   }
 
@@ -1042,22 +977,6 @@ export class TelegramStatisticsHandlers {
           ),
         ];
       }),
-      ...(monitoredPlayerIds.size
-        ? [
-            [
-              Markup.button.callback(
-                '🗑 Очистить выбранных',
-                TELEGRAM_CALLBACKS.monitoring.clearTeam(
-                  options.teamId,
-                  options.leagueId,
-                  options.stageId,
-                  options.championshipId,
-                  options.competitionType,
-                ),
-              ),
-            ],
-          ]
-        : []),
       [
         Markup.button.callback(
           TELEGRAM_MESSAGES.teams.back,
