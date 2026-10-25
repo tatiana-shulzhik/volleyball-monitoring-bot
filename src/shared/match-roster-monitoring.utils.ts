@@ -15,6 +15,7 @@ import {
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
 import {
   ILiveLineupChangeGroup,
+  ILiveLineupChangeItem,
   ILiveLineupMonitoringMessageData,
 } from '../interfaces/requests/live-lineup-monitoring.interface';
 import {
@@ -273,22 +274,20 @@ export function getLineupChanges(
     (player) => !previousKeys.has(key(player)),
   );
 
-  const items = Array.from(
-    { length: Math.max(outgoing.length, incoming.length) },
-    (_, index) => {
-      const outPlayer = outgoing[index];
-      const inPlayer = incoming[index];
-      const format = (player: ICevMatchLineupPlayer) =>
-        `№${player.shirtNumber ?? '—'} ${player.playerName}`;
-
-      if (outPlayer && inPlayer) {
-        return `${format(outPlayer)} → ${format(inPlayer)}`;
-      }
-      return outPlayer
-        ? `вне состава ${format(outPlayer)}`
-        : `в составе ${format(inPlayer)}`;
+  const toItem = (
+    kind: ILiveLineupChangeItem['kind'],
+    player: ICevMatchLineupPlayer,
+  ): ILiveLineupChangeItem => ({
+    kind,
+    player: {
+      shirtNumber: player.shirtNumber,
+      playerName: player.playerName,
     },
-  );
+  });
+  const items = [
+    ...outgoing.map((player) => toItem('out', player)),
+    ...incoming.map((player) => toItem('in', player)),
+  ];
   if (!items.length) return null;
 
   return { teamName, items };
@@ -717,20 +716,12 @@ function formatStartingLineupTable(
 export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
+  const changes = formatLiveChanges(data);
+
   return [
     `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
-    data.changes?.length
-      ? [
-          '<p><b>🔁 Изменения:</b></p>',
-          ...data.changes.map(
-            (group) =>
-              `<p><b>${escapeHtml(group.teamName)}</b><br>` +
-              group.items.map(escapeHtml).join('<br>') +
-              '</p>',
-          ),
-        ].join('')
-      : '',
+    changes ? `<br>${changes}<br>` : '',
     formatLiveLineupTable(
       data.homeTeamName,
       data.home,
@@ -738,6 +729,7 @@ export function formatLiveMonitoringMessage(
       data.homePositionsByShirtNumber,
       data.currentSet,
     ),
+    '<br>',
     formatLiveLineupTable(
       data.awayTeamName,
       data.away,
@@ -746,9 +738,56 @@ export function formatLiveMonitoringMessage(
       data.currentSet,
     ),
     data.matchProtocolUrl
-      ? `<p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
+      ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
       : '',
   ].join('');
+}
+
+function formatLiveChanges(data: ILiveLineupMonitoringMessageData): string {
+  if (!data.changes?.length) return '';
+
+  const groups = data.changes.map((group) => {
+    const isHome = group.teamName === data.homeTeamName;
+    const lineup = isHome ? data.home : data.away;
+    const attackStatistics = isHome
+      ? data.homeAttackStatistics
+      : data.awayAttackStatistics;
+    const positionsByShirtNumber = isHome
+      ? data.homePositionsByShirtNumber
+      : data.awayPositionsByShirtNumber;
+
+    return [
+      `<p><b>🔁 ${escapeHtml(group.teamName)}</b></p>`,
+      ...group.items.map((item) => {
+        const marker = item.kind === 'out' ? '🔴' : '🟢';
+        const player = findLineupPlayer(
+          lineup,
+          item.player.playerName,
+          item.player.shirtNumber,
+        ) ?? {
+          playerName: item.player.playerName,
+          shirtNumber: item.player.shirtNumber,
+          setMarks: [],
+        };
+        const statistics = findLivePlayerStatistics(player, attackStatistics);
+        const position =
+          player.shirtNumber === null
+            ? '—'
+            : formatPlayerPosition(
+                positionsByShirtNumber.get(player.shirtNumber) ?? '—',
+              );
+
+        return (
+          `<p><b>${marker} №${item.player.shirtNumber ?? '—'} ` +
+          `${escapeHtml(item.player.playerName)} (${position})</b><br>` +
+          `⭐ ${formatLivePlayerRating(statistics)} · ` +
+          `⚡ ${formatLivePlayerAttacks(statistics)}</p>`
+        );
+      }),
+    ].join('');
+  });
+
+  return ['<p><b>🔔 ИЗМЕНЕНИЕ СОСТАВА</b></p>', ...groups].join('<br>');
 }
 
 function formatLiveLineupTable(
@@ -758,6 +797,8 @@ function formatLiveLineupTable(
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
 ): string {
+  if (!lineup.length) return '';
+
   const setHeaders = Array.from(
     { length: currentSet },
     (_, index) => `<th>С${index + 1}</th>`,
