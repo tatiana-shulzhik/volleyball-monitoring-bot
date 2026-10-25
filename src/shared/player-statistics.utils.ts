@@ -465,6 +465,12 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           ({ seasonName }) =>
             getLatestSeasonYear(seasonName) === latestSeasonYear,
         );
+      const latestPosition = sortedSeasons.find(
+        ({ position }) => position,
+      )?.position;
+      const positionLabel = latestPosition
+        ? ` (${escapeHtml(latestPosition)})`
+        : '';
       const rosterIndicator = getRosterIndicator(getRosterChange(seasons));
       const rows = sortedSeasons.map(
         (season) =>
@@ -474,23 +480,21 @@ function formatRetroPlayerGroups(groups: ITeamStatistics['players'][]): string {
           `<td>${escapeHtml(season.teamName)}</td>` +
           `<td align="center">${formatPlayerRating(season)}</td>` +
           `<td align="center">${formatPlayerAttacks(season)}</td>` +
-          `<td align="center">${formatPlayerPosition(season.position)}</td>` +
           '</tr>',
       );
 
       return [
         sectionHeader,
         `<p>👤 №${latestSeason?.shirtNumber ?? '—'} `,
-        `${rosterIndicator}<b>${escapeHtml(seasons[0].fullName)}</b> · `,
+        `${rosterIndicator}<b>${escapeHtml(seasons[0].fullName)}${positionLabel}</b> · `,
         `${seasons[0].birthYear ?? '—'} г.р.</p>`,
         '<table bordered striped>',
         '<tr>' +
           '<th>Сезон</th>' +
           '<th>Турнир</th>' +
           '<th>Команда</th>' +
-          '<th>Рейтинг (о/с)</th>' +
-          '<th>Атака (у/п)</th>' +
-          '<th>Поз</th>' +
+          '<th>Рейтинг<br>(о/с)</th>' +
+          '<th>Атака<br>(у/п)</th>' +
           '</tr>',
         ...rows,
         '</table>',
@@ -615,8 +619,8 @@ function formatPlayersTable(
     '<tr>' +
       '<th align="center">№</th>' +
       '<th align="center">Игрок</th>' +
-      '<th align="center">Рейтинг (о/с)</th>' +
-      '<th align="center">Атака (у/п)</th>' +
+      '<th align="center">Рейтинг<br>(о/с)</th>' +
+      '<th align="center">Атака<br>(у/п)</th>' +
       '<th align="center">Год рождения</th>' +
       '<th align="center">Поз</th>' +
       '</tr>',
