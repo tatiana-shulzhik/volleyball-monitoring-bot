@@ -137,10 +137,8 @@ function formatRosterTable(
   const rows = players
     .sort(
       (left, right) =>
-        (right.statisticsPlayer?.points ?? -1) -
-          (left.statisticsPlayer?.points ?? -1) ||
-        getPlayerRating(right.statisticsPlayer) -
-          getPlayerRating(left.statisticsPlayer) ||
+        (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.player.fullName.localeCompare(right.player.fullName),
     )
     .map(({ player, shirtNumber, position, statisticsPlayer }) => {
@@ -161,20 +159,12 @@ function formatRosterTable(
     rows.length
       ? [
           '<table bordered striped>',
-          '<tr><th>№</th><th>Игрок</th><th>Рейтинг (очки/сеты)</th><th>Атака (успешные/попытки)</th><th>Год рождения</th><th>Поз</th></tr>',
+          '<tr><th>№</th><th>Игрок</th><th>Рейтинг (о/с)</th><th>Атака (у/п)</th><th>Год рождения</th><th>Поз</th></tr>',
           ...rows,
           '</table>',
         ].join('')
       : '<p><i>Состав в базе не найден.</i></p>',
   ].join('\n');
-}
-
-function getPlayerRating(
-  player: ITeamStatistics['players'][number] | undefined,
-): number {
-  return player?.points !== null && player?.setsPlayed
-    ? player.points / player.setsPlayed
-    : -1;
 }
 
 function formatRating(
