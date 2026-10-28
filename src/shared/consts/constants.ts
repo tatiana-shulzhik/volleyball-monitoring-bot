@@ -42,6 +42,13 @@ export const LEGA_VOLLEY_PREGARA_SERIES = [
   'A3blu',
 ] as const;
 
+/** CEV-турниры на legavolley.it — без live/статистики сайта; их ведёт источник CEV. */
+export const LEGA_VOLLEY_EUROPEAN_CHAMPIONSHIP_NAMES = [
+  'Champions League',
+  'CEV Cup',
+  'Challenge Cup',
+] as const;
+
 /** Коды амплуа в Foglio Gara → полные названия как на страницах команд. */
 export const LEGA_VOLLEY_PREGARA_POSITION_CODES: Readonly<
   Record<string, string>
@@ -200,18 +207,6 @@ export function createLegaVolleyPregaraRosterUrl(
   return (
     `${LEGA_VOLLEY_BASE_URL}/pregara-roster` +
     `?match_id=${encodeURIComponent(sourceMatchId)}`
-  );
-}
-
-export function createLegaVolleyScheduleUrl(
-  year: number | string,
-  leagueExternalId: number,
-): string {
-  return (
-    `${LEGA_VOLLEY_BASE_URL}/schedule` +
-    `?stagione=${encodeURIComponent(String(year))}` +
-    `&campionato=${encodeURIComponent(String(leagueExternalId))}` +
-    `&fase=&AllMatches=true`
   );
 }
 

@@ -3,7 +3,6 @@ import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league
 import { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
 import {
-  createLegaVolleyScheduleUrl,
   createMatchPageUrl,
   LEGA_VOLLEY_BASE_URL,
   LEGA_VOLLEY_FEMMINILE_STATISTICS_URL,
@@ -106,17 +105,9 @@ function getMatchUrl(match: MatchEntity): string | null {
   }
 
   if (sourceCode !== ESourceCode.LegaVolley) return null;
+  if (!externalId || !/^\d+$/.test(externalId)) return null;
 
-  if (externalId && /^\d+$/.test(externalId)) {
-    return `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`;
-  }
-
-  const year =
-    externalId?.match(/^legavolley:(\d{4}):/)?.[1] ??
-    match.league.stage.season?.name?.slice(0, 4) ??
-    String(new Date().getFullYear());
-
-  return createLegaVolleyScheduleUrl(year, match.league.externalId);
+  return `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`;
 }
 
 function formatRosterTable(

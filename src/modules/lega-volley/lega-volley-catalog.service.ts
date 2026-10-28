@@ -9,7 +9,10 @@ import { PlayersService } from '../players/players.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { TeamsService } from '../teams/teams.service';
 import { ESourceCode } from '../../shared/enums';
-import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
+import {
+  createLegaMatchLookupKey,
+  isLegaEuropeanChampionship,
+} from '../../shared/lega-volley.utils';
 import {
   getEarliestCatalogYear,
   parseSeasonEndYear,
@@ -41,8 +44,10 @@ export class LegaVolleyCatalogService {
 
   async synchronizeCurrentAndFutureMatches(): Promise<void> {
     const currentYear = new Date().getFullYear();
-    const leagues = await this.leaguesService.getBySource(
-      ESourceCode.LegaVolley,
+    const leagues = (
+      await this.leaguesService.getBySource(ESourceCode.LegaVolley)
+    ).filter(
+      (league) => !isLegaEuropeanChampionship(league.stage.championship.name),
     );
     const schedules = leagues.flatMap((league) => {
       const year = Number(league.stage.season?.name.slice(0, 4));
