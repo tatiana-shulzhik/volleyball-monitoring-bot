@@ -7,8 +7,13 @@ import { TeamLeaguesRepository } from '../../databases/repositories/team-leagues
 import { CompetitionStagesEntity } from '../../databases/entities/competition-stages.entity';
 import { LeaguesEntity } from '../../databases/entities/leagues.entity';
 import { TeamEntity } from '../../databases/entities/team.entity';
+import { CevGateway } from '../../gateway/cev.gateway';
+import { LegaVolleyGateway } from '../../gateway/lega-volley.gateway';
+import { LegaVolleyFemminileGateway } from '../../gateway/lega-volley-femminile.gateway';
 import { ICevMatch } from '../../interfaces/requests/matches.interface';
 import { IFetchedMatches } from '../../interfaces/requests/matches.interface';
+import { IFetchedMatchRoster } from '../../interfaces/requests/player-statistics.interface';
+import { IMatchRosterForDisplay } from '../../interfaces/responses/match-roster-display.interface';
 import { IPlayerRosterSource } from '../../interfaces/responses/synchronized-teams.interface';
 import { calculateMatchChanges } from '../../shared/matches.utils';
 import {
@@ -17,6 +22,11 @@ import {
 } from '../../shared/synchronization.utils';
 import { uniqueBy } from '../../shared/array.utils';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
+import { addRosterStatistics } from '../../shared/match-roster-monitoring.utils';
+import {
+  getMatchUrl,
+  toDisplayRoster,
+} from '../../shared/telegram-today-matches.utils';
 import { EMatchStatus, ESourceCode } from '../../shared/enums';
 import { parseCevDate } from '../../shared/cev-matches.utils';
 import {
@@ -27,6 +37,7 @@ import { getErrorMessage } from '../../shared/error.utils';
 import { MatchEntity } from '../../databases/entities/match.entity';
 import { PlayerTeamLeagueEntity } from '../../databases/entities/player-team-league.entity';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
+import { PlayersService } from '../players/players.service';
 
 @Injectable()
 export class MatchesService {
@@ -38,6 +49,10 @@ export class MatchesService {
     private readonly teamsRepository: TeamsRepository,
     private readonly teamLeaguesRepository: TeamLeaguesRepository,
     private readonly playerTeamLeaguesService: PlayerTeamLeaguesService,
+    private readonly playersService: PlayersService,
+    private readonly cevGateway: CevGateway,
+    private readonly legaVolleyGateway: LegaVolleyGateway,
+    private readonly femminileGateway: LegaVolleyFemminileGateway,
   ) {}
 
   async getMatchRoster(matchId: number): Promise<{
@@ -55,6 +70,106 @@ export class MatchesService {
       homeRoster: roster.home,
       awayRoster: roster.away,
     };
+  }
+
+  /** Заявка с сайта + статистика из БД; при ошибке сайта — состав из базы. */
+  async getMatchRosterForDisplay(
+    matchId: number,
+  ): Promise<IMatchRosterForDisplay | null> {
+    const [match] = await this.matchesRepository.getWhere({ id: matchId });
+    if (!match) return null;
+
+    const [homeStatistics, awayStatistics] = await Promise.all([
+      this.playersService.findTeamStatistics({
+        teamId: match.homeTeam.id,
+        leagueId: match.league.id,
+      }),
+      this.playersService.findTeamStatistics({
+        teamId: match.awayTeam.id,
+        leagueId: match.league.id,
+      }),
+    ]);
+
+    const siteRoster = await this.fetchSiteMatchRoster(match);
+    if (siteRoster && (siteRoster.home.length || siteRoster.away.length)) {
+      return {
+        match,
+        homeRoster: addRosterStatistics(
+          siteRoster.home,
+          homeStatistics?.players,
+        ),
+        awayRoster: addRosterStatistics(
+          siteRoster.away,
+          awayStatistics?.players,
+        ),
+        homeStatistics,
+        awayStatistics,
+        source: 'site',
+        matchUrl: getMatchUrl(match, siteRoster.sourceMatchId),
+      };
+    }
+
+    const dbRoster = await this.playerTeamLeaguesService.getMatchRosters(match);
+    return {
+      match,
+      homeRoster: addRosterStatistics(
+        toDisplayRoster(dbRoster.home),
+        homeStatistics?.players,
+      ),
+      awayRoster: addRosterStatistics(
+        toDisplayRoster(dbRoster.away),
+        awayStatistics?.players,
+      ),
+      homeStatistics,
+      awayStatistics,
+      source: 'database',
+      matchUrl: getMatchUrl(match),
+    };
+  }
+
+  private async fetchSiteMatchRoster(
+    match: MatchEntity,
+  ): Promise<IFetchedMatchRoster | null> {
+    const sourceCode = match.league.stage.championship.source?.code;
+    if (!sourceCode) return null;
+
+    const fetchBySource: Partial<
+      Record<
+        ESourceCode,
+        (
+          matches: MatchEntity[],
+        ) => Promise<PromiseSettledResult<IFetchedMatchRoster>[]>
+      >
+    > = {
+      [ESourceCode.Cev]: (items) => this.cevGateway.fetchMatchRosters(items),
+      [ESourceCode.LegaVolley]: (items) =>
+        this.legaVolleyGateway.fetchMatchRosters(items),
+      [ESourceCode.LegaVolleyFemminile]: (items) =>
+        this.femminileGateway.fetchMatchRosters(items),
+    };
+    const fetchRosters = fetchBySource[sourceCode];
+    if (!fetchRosters) return null;
+
+    try {
+      const [result] = await fetchRosters([match]);
+      if (result?.status !== 'fulfilled') {
+        this.logger.warn(
+          `Site roster unavailable for match ${match.externalId ?? match.id}: ${
+            result?.status === 'rejected'
+              ? getErrorMessage(result.reason)
+              : 'empty result'
+          }`,
+        );
+        return null;
+      }
+
+      return result.value;
+    } catch (error) {
+      this.logger.warn(
+        `Site roster request failed for match ${match.externalId ?? match.id}: ${getErrorMessage(error)}`,
+      );
+      return null;
+    }
   }
 
   async getCevMatchesWithRosterSources(stageIds?: number[]): Promise<{
