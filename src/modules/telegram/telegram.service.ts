@@ -285,7 +285,6 @@ export class TelegramService
           matchRoster.homeStatistics,
           matchRoster.awayStatistics,
           matchRoster.source,
-          matchRoster.matchUrl,
         ),
         createLiveMatchRosterKeyboard(
           context.chat?.id !== this.config.groupId,
