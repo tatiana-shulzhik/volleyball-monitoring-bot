@@ -19,8 +19,13 @@ import {
   ILegaPendingMatchKeys,
 } from '../interfaces/requests/lega-volley.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
-import { IFetchedMatchRoster } from '../interfaces/requests/player-statistics.interface';
 import {
+  IFetchedMatchAttackStatistics,
+  IFetchedMatchLineup,
+  IFetchedMatchRoster,
+} from '../interfaces/requests/player-statistics.interface';
+import {
+  createLegaVolleyLiveMatchUrl,
   createLegaVolleyPregaraRosterUrl,
   LEGA_VOLLEY_HTTP_CONCURRENCY,
   LEGA_VOLLEY_HTTP_TIMEOUT_MS,
@@ -33,6 +38,7 @@ import {
   createLegaPregaraMatchKey,
   parseLegaPostGaraDate,
   parseLegaPregaraMatchRoster,
+  parseLegaVolleyLiveMatchData,
   parseLegaTeamPage,
   parseLegaMatchStatistics,
   parseLegaSeason,
@@ -346,6 +352,52 @@ export class LegaVolleyGateway {
     });
 
     return results;
+  }
+
+  async fetchLiveMatchData(matches: MatchEntity[]): Promise<
+    PromiseSettledResult<{
+      lineup: IFetchedMatchLineup;
+      attackStatistics: IFetchedMatchAttackStatistics;
+    }>[]
+  > {
+    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    return mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const sourceMatchId = this.resolvePregaraMatchId(match, matchIdsByKey);
+        if (!sourceMatchId) {
+          throw new Error(
+            `Lega Volley match ${match.id} has no live match ID ` +
+              `(${match.homeTeam.name} — ${match.awayTeam.name})`,
+          );
+        }
+
+        const html = await this.get(
+          createLegaVolleyLiveMatchUrl(sourceMatchId),
+        );
+        const parsed = parseLegaVolleyLiveMatchData(html);
+        if (!parsed.home.length && !parsed.away.length) {
+          throw new Error(
+            `Lega Volley live lineup is empty for match ${sourceMatchId}`,
+          );
+        }
+
+        const matchExternalId = match.externalId ?? sourceMatchId;
+        return {
+          lineup: {
+            matchExternalId,
+            home: parsed.home,
+            away: parsed.away,
+          },
+          attackStatistics: {
+            matchExternalId,
+            home: parsed.homeAttackStatistics,
+            away: parsed.awayAttackStatistics,
+          },
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
   }
 
   async fetchMatchStatisticsByIds(
