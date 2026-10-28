@@ -1,6 +1,11 @@
 import { MatchEntity } from '../databases/entities/match.entity';
 import { PlayerTeamLeagueEntity } from '../databases/entities/player-team-league.entity';
-import { ITeamStatistics } from '../interfaces/responses/team-statistics.interface';
+import { ICevMatchRosterPlayer } from '../interfaces/requests/player-statistics.interface';
+import { MatchRosterDisplaySource } from '../interfaces/responses/match-roster-display.interface';
+import {
+  ITeamPlayerStatistics,
+  ITeamStatistics,
+} from '../interfaces/responses/team-statistics.interface';
 import { SOURCE_BUTTONS } from '../modules/telegram/telegram.constants';
 import {
   createMatchPageUrl,
@@ -9,6 +14,18 @@ import {
   MOSCOW_TIME_ZONE,
 } from './consts/constants';
 import { ESourceCode } from './enums';
+import { normalizePlayerName } from './player-statistics.utils';
+
+export function toDisplayRoster(
+  roster: PlayerTeamLeagueEntity[],
+): ICevMatchRosterPlayer[] {
+  return roster.map(({ player, shirtNumber, position }) => ({
+    externalId: player.externalId,
+    playerName: player.fullName,
+    shirtNumber,
+    position: position ?? undefined,
+  }));
+}
 
 export function getMoscowDayBounds(
   date = new Date(),
@@ -68,17 +85,32 @@ export function formatTodayMatchButton(match: MatchEntity): string {
 
 export function formatTodayMatchRoster(
   match: MatchEntity,
-  homeRoster: PlayerTeamLeagueEntity[],
-  awayRoster: PlayerTeamLeagueEntity[],
+  homeRoster: ICevMatchRosterPlayer[],
+  awayRoster: ICevMatchRosterPlayer[],
   homeStatistics: ITeamStatistics | null,
   awayStatistics: ITeamStatistics | null,
+  source: MatchRosterDisplaySource = 'database',
 ): string {
   const matchUrl = getMatchUrl(match);
+  const emptyMessage =
+    source === 'site'
+      ? 'Заявка пока не опубликована.'
+      : 'Состав в базе не найден.';
 
   return [
     `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
-    formatRosterTable(match.homeTeam.name, homeRoster, homeStatistics),
-    formatRosterTable(match.awayTeam.name, awayRoster, awayStatistics),
+    formatRosterTable(
+      match.homeTeam.name,
+      homeRoster,
+      homeStatistics,
+      emptyMessage,
+    ),
+    formatRosterTable(
+      match.awayTeam.name,
+      awayRoster,
+      awayStatistics,
+      emptyMessage,
+    ),
     matchUrl
       ? `<p><a href="${escapeHtml(matchUrl)}">🔗 Открыть матч на сайте</a></p>`
       : '',
@@ -112,35 +144,29 @@ function getMatchUrl(match: MatchEntity): string | null {
 
 function formatRosterTable(
   teamName: string,
-  roster: PlayerTeamLeagueEntity[],
+  roster: ICevMatchRosterPlayer[],
   statistics: ITeamStatistics | null,
+  emptyMessage: string,
 ): string {
-  const players = roster.map(({ player, shirtNumber, position }) => ({
-    player,
-    shirtNumber,
-    position,
-    statisticsPlayer: statistics?.players.find(
-      (item) =>
-        item.fullName === player.fullName &&
-        (shirtNumber === null || item.shirtNumber === shirtNumber),
-    ),
-  }));
-  const rows = players
+  const rows = [...roster]
     .sort(
       (left, right) =>
         (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
-        left.player.fullName.localeCompare(right.player.fullName),
+        left.playerName.localeCompare(right.playerName),
     )
-    .map(({ player, shirtNumber, position, statisticsPlayer }) => {
+    .map((player) => {
+      const statisticsPlayer = findStatisticsPlayer(player, statistics);
       return [
         '<tr>',
-        `<td align="center">${shirtNumber ?? '—'}</td>`,
-        `<td>${escapeHtml(player.fullName)}</td>`,
-        `<td align="center">${formatRating(statisticsPlayer)}</td>`,
-        `<td align="center">${formatAttacks(statisticsPlayer)}</td>`,
+        `<td align="center">${player.shirtNumber ?? '—'}</td>`,
+        `<td>${escapeHtml(player.playerName)}</td>`,
+        `<td align="center">${formatRating(player, statisticsPlayer)}</td>`,
+        `<td align="center">${formatAttacks(player, statisticsPlayer)}</td>`,
         `<td align="center">${statisticsPlayer?.birthYear ?? '—'}</td>`,
-        `<td align="center">${escapeHtml(statisticsPlayer?.position ?? position ?? '—')}</td>`,
+        `<td align="center">${escapeHtml(
+          statisticsPlayer?.position ?? player.position ?? '—',
+        )}</td>`,
         '</tr>',
       ].join('');
     });
@@ -154,39 +180,62 @@ function formatRosterTable(
           ...rows,
           '</table>',
         ].join('')
-      : '<p><i>Состав в базе не найден.</i></p>',
+      : `<p><i>${escapeHtml(emptyMessage)}</i></p>`,
   ].join('\n');
 }
 
+function findStatisticsPlayer(
+  player: ICevMatchRosterPlayer,
+  statistics: ITeamStatistics | null,
+): ITeamPlayerStatistics | undefined {
+  if (!statistics) return undefined;
+
+  const name = normalizePlayerName(player.playerName);
+  return statistics.players.find(
+    (item) =>
+      normalizePlayerName(item.fullName) === name &&
+      (player.shirtNumber === null ||
+        item.shirtNumber === null ||
+        item.shirtNumber === player.shirtNumber),
+  );
+}
+
 function formatRating(
-  player: ITeamStatistics['players'][number] | undefined,
+  player: ICevMatchRosterPlayer,
+  statisticsPlayer: ITeamPlayerStatistics | undefined,
 ): string {
-  if (
-    !player ||
-    player.points === null ||
-    player.setsPlayed === null ||
-    !player.setsPlayed
-  ) {
+  const points = player.statistics?.points ?? statisticsPlayer?.points ?? null;
+  const setsPlayed =
+    player.statistics?.setsPlayed ?? statisticsPlayer?.setsPlayed ?? null;
+  if (points === null || setsPlayed === null || !setsPlayed) {
     return '—';
   }
 
-  return `${(player.points / player.setsPlayed).toFixed(2)} (${player.points}/${player.setsPlayed})`;
+  return `${(points / setsPlayed).toFixed(2)} (${points}/${setsPlayed})`;
 }
 
 function formatAttacks(
-  player: ITeamStatistics['players'][number] | undefined,
+  player: ICevMatchRosterPlayer,
+  statisticsPlayer: ITeamPlayerStatistics | undefined,
 ): string {
+  const attackAttempts =
+    player.statistics?.attackAttempts ??
+    statisticsPlayer?.attackAttempts ??
+    null;
+  const successfulAttacks =
+    player.statistics?.successfulAttacks ??
+    statisticsPlayer?.successfulAttacks ??
+    null;
   if (
-    !player ||
-    player.attackAttempts === null ||
-    player.successfulAttacks === null ||
-    !player.attackAttempts
+    attackAttempts === null ||
+    successfulAttacks === null ||
+    !attackAttempts
   ) {
     return '—';
   }
 
-  return `${player.successfulAttacks}/${player.attackAttempts} (${(
-    (player.successfulAttacks / player.attackAttempts) *
+  return `${successfulAttacks}/${attackAttempts} (${(
+    (successfulAttacks / attackAttempts) *
     100
   ).toFixed(0)}%)`;
 }

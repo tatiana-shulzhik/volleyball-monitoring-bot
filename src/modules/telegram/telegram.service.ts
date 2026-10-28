@@ -49,7 +49,6 @@ import { TelegramStatisticsHandlers } from './telegram-statistics.handlers';
 import { IFindRecentSeasonsFromParams } from '../../interfaces/requests/seasons.interface';
 import { IRosterNotificationViews } from '../../interfaces/requests/match-roster-monitoring.interface';
 import { MatchesService } from '../matches/matches.service';
-import { PlayersService } from '../players/players.service';
 import {
   formatTodayMatchRoster,
   formatTodayMatches,
@@ -71,7 +70,6 @@ export class TelegramService
     private readonly accessRepository: TelegramAccessRepository,
     private readonly matchesRepository: MatchesRepository,
     private readonly matchesService: MatchesService,
-    private readonly playersService: PlayersService,
     private readonly sourcesRepository: SourcesRepository,
     private readonly seasonsRepository: SeasonsRepository,
     private readonly championshipsRepository: ChampionshipsRepository,
@@ -267,7 +265,7 @@ export class TelegramService
     });
 
     this.bot.action(TELEGRAM_CALLBACK_PATTERNS.liveMatch, async (context) => {
-      const matchRoster = await this.matchesService.getMatchRoster(
+      const matchRoster = await this.matchesService.getMatchRosterForDisplay(
         Number(context.match[1]),
       );
 
@@ -278,25 +276,15 @@ export class TelegramService
 
       await context.answerCbQuery();
 
-      const [homeStatistics, awayStatistics] = await Promise.all([
-        this.playersService.findTeamStatistics({
-          teamId: matchRoster.match.homeTeam.id,
-          leagueId: matchRoster.match.league.id,
-        }),
-        this.playersService.findTeamStatistics({
-          teamId: matchRoster.match.awayTeam.id,
-          leagueId: matchRoster.match.league.id,
-        }),
-      ]);
-
       await editTelegramRichMessage(
         context,
         formatTodayMatchRoster(
           matchRoster.match,
           matchRoster.homeRoster,
           matchRoster.awayRoster,
-          homeStatistics,
-          awayStatistics,
+          matchRoster.homeStatistics,
+          matchRoster.awayStatistics,
+          matchRoster.source,
         ),
         createLiveMatchRosterKeyboard(
           context.chat?.id !== this.config.groupId,
