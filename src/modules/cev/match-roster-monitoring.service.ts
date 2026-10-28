@@ -57,7 +57,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку для CEV / Lega Volley / Femminile; live — CEV+Femminile; старт — только Femminile. */
+/** Проверяет заявку для CEV / Lega Volley / Femminile; live — все три; старт — Lega Volley + Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -134,7 +134,7 @@ export class MatchRosterMonitoringService {
   }
 
   /**
-   * Проверяет стартовый состав Lega Volley Femminile за 10 минут до матча.
+   * Проверяет стартовый состав Lega Volley / Femminile за 10 минут до матча.
    * CEV не проверяем: стартовые составы появляются уже после начала матча.
    */
   async checkStartingLineups(): Promise<number> {
@@ -143,23 +143,45 @@ export class MatchRosterMonitoringService {
     const windowEnd = new Date(
       now.getTime() + MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES * 60_000,
     );
-    const notifications = await this.processMatches(
-      await this.matchesService.findMonitoredWithin(
-        ESourceCode.LegaVolleyFemminile,
-        now,
-        windowEnd,
-      ),
-      now,
-      (items) => this.femminileGateway.fetchMatchLineups(items),
-      (match, lineup, context, checkedAt) =>
-        this.processStartingLineupMatch({
-          match,
-          lineup,
-          context,
-          now: checkedAt,
-        }),
-      ESourceCode.LegaVolleyFemminile,
+    const handleStartingLineup = (
+      match: MatchEntity,
+      lineup: IProcessLineupMatchParams['lineup'],
+      context: IMonitoringContext,
+      checkedAt: Date,
+    ) =>
+      this.processStartingLineupMatch({
+        match,
+        lineup,
+        context,
+        now: checkedAt,
+      });
+    const [legaVolleyNotifications, femminileNotifications] = await Promise.all(
+      [
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.LegaVolley,
+            now,
+            windowEnd,
+          ),
+          now,
+          (items) => this.legaVolleyGateway.fetchMatchLineups(items),
+          handleStartingLineup,
+          ESourceCode.LegaVolley,
+        ),
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.LegaVolleyFemminile,
+            now,
+            windowEnd,
+          ),
+          now,
+          (items) => this.femminileGateway.fetchMatchLineups(items),
+          handleStartingLineup,
+          ESourceCode.LegaVolleyFemminile,
+        ),
+      ],
     );
+    const notifications = legaVolleyNotifications + femminileNotifications;
 
     if (notifications) {
       this.logger.log(
@@ -191,31 +213,44 @@ export class MatchRosterMonitoringService {
         context,
         now: checkedAt,
       });
-    const [cevNotifications, femminileNotifications] = await Promise.all([
-      this.processMatches(
-        await this.matchesService.findMonitoredWithin(
+    const [cevNotifications, legaVolleyNotifications, femminileNotifications] =
+      await Promise.all([
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.Cev,
+            windowStart,
+            now,
+          ),
+          now,
+          (items) => this.gateway.fetchLiveMatchData(items),
+          handleLiveMatch,
           ESourceCode.Cev,
-          windowStart,
-          now,
         ),
-        now,
-        (items) => this.gateway.fetchLiveMatchData(items),
-        handleLiveMatch,
-        ESourceCode.Cev,
-      ),
-      this.processMatches(
-        await this.matchesService.findMonitoredWithin(
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.LegaVolley,
+            windowStart,
+            now,
+          ),
+          now,
+          (items) => this.legaVolleyGateway.fetchLiveMatchData(items),
+          handleLiveMatch,
+          ESourceCode.LegaVolley,
+        ),
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.LegaVolleyFemminile,
+            windowStart,
+            now,
+          ),
+          now,
+          (items) => this.femminileGateway.fetchLiveMatchData(items),
+          handleLiveMatch,
           ESourceCode.LegaVolleyFemminile,
-          windowStart,
-          now,
         ),
-        now,
-        (items) => this.femminileGateway.fetchLiveMatchData(items),
-        handleLiveMatch,
-        ESourceCode.LegaVolleyFemminile,
-      ),
-    ]);
-    const notifications = cevNotifications + femminileNotifications;
+      ]);
+    const notifications =
+      cevNotifications + legaVolleyNotifications + femminileNotifications;
     if (notifications) {
       this.logger.log(`Sent ${notifications} live monitoring notification(s)`);
     }

@@ -13,7 +13,11 @@ import {
   ILegaMatchReference,
   ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
-import { ICevMatchRosterPlayer } from '../interfaces/requests/player-statistics.interface';
+import {
+  ICevMatchLineupPlayer,
+  ICevMatchRosterPlayer,
+  ICevPlayerAttackStatistics,
+} from '../interfaces/requests/player-statistics.interface';
 import {
   LEGA_VOLLEY_EUROPEAN_CHAMPIONSHIP_NAMES,
   LEGA_VOLLEY_PREGARA_POSITION_CODES,
@@ -404,6 +408,27 @@ export function createLegaPregaraMatchKey(
   return `${normalizeLegaName(homeTeamName)}:${normalizeLegaName(awayTeamName)}`;
 }
 
+/**
+ * LiveScore tabellini_online: составы S1–S5 + punti / attacchi punto.
+ * Колонки выровнены по порядку игроков в price_table_left.
+ */
+export function parseLegaVolleyLiveMatchData(html: string): {
+  home: ICevMatchLineupPlayer[];
+  away: ICevMatchLineupPlayer[];
+  homeAttackStatistics: ICevPlayerAttackStatistics[];
+  awayAttackStatistics: ICevPlayerAttackStatistics[];
+} {
+  const home = readLegaLiveTeamBlock(html, 'DIV_HomeStats');
+  const away = readLegaLiveTeamBlock(html, 'DIV_GuestStats');
+
+  return {
+    home: home.lineup,
+    away: away.lineup,
+    homeAttackStatistics: home.attackStatistics,
+    awayAttackStatistics: away.attackStatistics,
+  };
+}
+
 /** Foglio Gara: два table#roster (home/away) на /pregara-roster?match_id=. */
 export function parseLegaPregaraMatchRoster(html: string): {
   home: ICevMatchRosterPlayer[];
@@ -442,6 +467,100 @@ function readLegaPregaraRosterPlayers(table: string): ICevMatchRosterPlayer[] {
   }
 
   return players;
+}
+
+function readLegaLiveTeamBlock(
+  html: string,
+  blockId: 'DIV_HomeStats' | 'DIV_GuestStats',
+): {
+  lineup: ICevMatchLineupPlayer[];
+  attackStatistics: ICevPlayerAttackStatistics[];
+} {
+  const block = html.match(
+    new RegExp(
+      `<div\\b[^>]*\\bid=["']${blockId}["'][^>]*>([\\s\\S]*?)(?=<div\\b[^>]*\\bid=["']DIV_(?:Home|Guest)Stats["']|$)`,
+      'i',
+    ),
+  )?.[1];
+  if (!block) return { lineup: [], attackStatistics: [] };
+
+  const players = readLegaLivePlayers(block);
+  if (!players.length) return { lineup: [], attackStatistics: [] };
+
+  const setColumns = readLegaLiveMetricColumns(block, /^S[1-5]$/i);
+  const points = readLegaLiveMetricValues(block, /^punti$/i);
+  const attacks = readLegaLiveMetricValues(block, /^attacchi\s*punto$/i);
+
+  const lineup: ICevMatchLineupPlayer[] = players.map((player, index) => ({
+    playerName: player.playerName,
+    shirtNumber: player.shirtNumber,
+    setMarks: [0, 1, 2, 3, 4].map((setIndex) => {
+      const mark = cleanLegaText(setColumns[setIndex]?.[index] ?? '');
+      return mark && mark !== '.' ? mark : '-';
+    }),
+  }));
+
+  const attackStatistics: ICevPlayerAttackStatistics[] = players.map(
+    (player, index) => {
+      const setMarks = lineup[index].setMarks;
+      const setsPlayed = setMarks.filter(
+        (mark) => mark !== '' && mark !== '-',
+      ).length;
+      return {
+        playerName: player.playerName,
+        shirtNumber: player.shirtNumber,
+        attempts: 0,
+        successful: parseLegaNumber(attacks[index]) ?? 0,
+        points: parseLegaNumber(points[index]) ?? 0,
+        setsPlayed,
+      };
+    },
+  );
+
+  return { lineup, attackStatistics };
+}
+
+function readLegaLivePlayers(
+  block: string,
+): Array<{ playerName: string; shirtNumber: number | null }> {
+  const list = block.match(
+    /<div\b[^>]*class=["'][^"']*\bprice_table_left\b[^"']*["'][^>]*>[\s\S]*?<ul\b[^>]*>([\s\S]*?)<\/ul>/i,
+  )?.[1];
+  if (!list) return [];
+
+  return [...list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].flatMap((row) => {
+    const shirtNumber = parseLegaNumber(
+      cleanLegaText(
+        row[1].match(
+          /<span\b[^>]*class=["'][^"']*\bnumber\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i,
+        )?.[1] ?? '',
+      ),
+    );
+    const playerName = cleanLegaText(
+      row[1].match(/<b\b[^>]*>([\s\S]*?)<\/b>/i)?.[1] ?? '',
+    );
+    return playerName ? [{ playerName, shirtNumber }] : [];
+  });
+}
+
+function readLegaLiveMetricColumns(block: string, label: RegExp): string[][] {
+  return [
+    ...block.matchAll(
+      /<div\b[^>]*class=["'][^"']*\bprice_table\b[^"']*["'][^>]*>[\s\S]*?<ul\b[^>]*>([\s\S]*?)<\/ul>/gi,
+    ),
+  ]
+    .map((match) => {
+      const cells = [...match[1].matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map(
+        (cell) => cleanLegaText(cell[1]),
+      );
+      if (!label.test(cells[0] ?? '')) return null;
+      return cells.slice(1);
+    })
+    .filter((column): column is string[] => column !== null);
+}
+
+function readLegaLiveMetricValues(block: string, label: RegExp): string[] {
+  return readLegaLiveMetricColumns(block, label)[0] ?? [];
 }
 
 function extractLegaTeamCountry(value: string): string | undefined {

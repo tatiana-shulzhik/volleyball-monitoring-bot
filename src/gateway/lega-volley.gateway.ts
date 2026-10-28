@@ -19,8 +19,13 @@ import {
   ILegaPendingMatchKeys,
 } from '../interfaces/requests/lega-volley.interface';
 import { IFetchedMatches } from '../interfaces/requests/matches.interface';
-import { IFetchedMatchRoster } from '../interfaces/requests/player-statistics.interface';
 import {
+  IFetchedMatchAttackStatistics,
+  IFetchedMatchLineup,
+  IFetchedMatchRoster,
+} from '../interfaces/requests/player-statistics.interface';
+import {
+  createLegaVolleyLiveMatchUrl,
   createLegaVolleyPregaraRosterUrl,
   LEGA_VOLLEY_HTTP_CONCURRENCY,
   LEGA_VOLLEY_HTTP_TIMEOUT_MS,
@@ -33,6 +38,7 @@ import {
   createLegaPregaraMatchKey,
   parseLegaPostGaraDate,
   parseLegaPregaraMatchRoster,
+  parseLegaVolleyLiveMatchData,
   parseLegaTeamPage,
   parseLegaMatchStatistics,
   parseLegaSeason,
@@ -346,6 +352,94 @@ export class LegaVolleyGateway {
     });
 
     return results;
+  }
+
+  /** Starting six / S1 с LiveScore (за ~10 минут до старта). */
+  async fetchMatchLineups(
+    matches: MatchEntity[],
+  ): Promise<PromiseSettledResult<IFetchedMatchLineup>[]> {
+    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    const results = await mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const parsed = await this.fetchParsedLiveMatchData(
+          match,
+          matchIdsByKey,
+        );
+        return {
+          matchExternalId: match.externalId ?? parsed.sourceMatchId,
+          home: parsed.home,
+          away: parsed.away,
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn(
+          `Match lineup request failed for ${matches[index].externalId}: ` +
+            getErrorMessage(result.reason),
+        );
+      }
+    });
+
+    return results;
+  }
+
+  async fetchLiveMatchData(matches: MatchEntity[]): Promise<
+    PromiseSettledResult<{
+      lineup: IFetchedMatchLineup;
+      attackStatistics: IFetchedMatchAttackStatistics;
+    }>[]
+  > {
+    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    return mapSettledWithConcurrency({
+      items: matches,
+      mapper: async (match) => {
+        const parsed = await this.fetchParsedLiveMatchData(
+          match,
+          matchIdsByKey,
+        );
+        const matchExternalId = match.externalId ?? parsed.sourceMatchId;
+        return {
+          lineup: {
+            matchExternalId,
+            home: parsed.home,
+            away: parsed.away,
+          },
+          attackStatistics: {
+            matchExternalId,
+            home: parsed.homeAttackStatistics,
+            away: parsed.awayAttackStatistics,
+          },
+        };
+      },
+      concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+    });
+  }
+
+  private async fetchParsedLiveMatchData(
+    match: MatchEntity,
+    matchIdsByKey: Map<string, string>,
+  ) {
+    const sourceMatchId = this.resolvePregaraMatchId(match, matchIdsByKey);
+    if (!sourceMatchId) {
+      throw new Error(
+        `Lega Volley match ${match.id} has no live match ID ` +
+          `(${match.homeTeam.name} — ${match.awayTeam.name})`,
+      );
+    }
+
+    const html = await this.get(createLegaVolleyLiveMatchUrl(sourceMatchId));
+    const parsed = parseLegaVolleyLiveMatchData(html);
+    if (!parsed.home.length && !parsed.away.length) {
+      throw new Error(
+        `Lega Volley live lineup is empty for match ${sourceMatchId}`,
+      );
+    }
+
+    return { sourceMatchId, ...parsed };
   }
 
   async fetchMatchStatisticsByIds(

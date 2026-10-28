@@ -2,6 +2,8 @@ import { ESourceCode } from '../enums';
 
 export const CEV_BASE_URL = 'https://www-old.cev.eu';
 export const LEGA_VOLLEY_BASE_URL = 'https://www.legavolley.it';
+/** LiveScore: составы по сетам и атаки во время матча. */
+export const LEGA_VOLLEY_LIVE_BASE_URL = 'https://ww2.legavolley.it';
 export const LEGA_VOLLEY_FEMMINILE_BASE_URL =
   'https://www.legavolleyfemminile.it';
 export const LEGA_VOLLEY_FEMMINILE_SEASONS_PATH = '/classifica/';
@@ -210,6 +212,10 @@ export function createLegaVolleyPregaraRosterUrl(
   );
 }
 
+export function createLegaVolleyLiveMatchUrl(sourceMatchId: string): string {
+  return `${LEGA_VOLLEY_LIVE_BASE_URL}/tabellini_online/gara_${encodeURIComponent(sourceMatchId)}.html`;
+}
+
 export function createLegaVolleyFemminileMatchStatsUrl(
   sourceMatchId: string,
 ): string {
@@ -231,7 +237,7 @@ export function createMatchProtocolUrl(
 
   if (sourceCode === ESourceCode.LegaVolley) {
     return /^\d+$/.test(matchExternalId)
-      ? createLegaVolleyPregaraRosterUrl(matchExternalId)
+      ? createLegaVolleyLiveMatchUrl(matchExternalId)
       : undefined;
   }
 
