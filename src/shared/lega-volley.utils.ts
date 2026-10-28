@@ -14,12 +14,21 @@ import {
   ILegaMatchStatistics,
 } from '../interfaces/requests/lega-volley.interface';
 import { ICevMatchRosterPlayer } from '../interfaces/requests/player-statistics.interface';
-import { LEGA_VOLLEY_PREGARA_POSITION_CODES } from './consts/constants';
+import {
+  LEGA_VOLLEY_EUROPEAN_CHAMPIONSHIP_NAMES,
+  LEGA_VOLLEY_PREGARA_POSITION_CODES,
+} from './consts/constants';
 import { ECompetitionType, EMatchStatus } from './enums';
 import {
   CEV_COUNTRY_TIME_ZONES,
   parseCevLocalDate,
 } from './cev-timezone.utils';
+
+export function isLegaEuropeanChampionship(championshipName: string): boolean {
+  return (
+    LEGA_VOLLEY_EUROPEAN_CHAMPIONSHIP_NAMES as readonly string[]
+  ).includes(championshipName);
+}
 
 export function parseLegaSeason(
   year: number,
@@ -34,6 +43,8 @@ export function parseLegaSeason(
   for (const option of championshipOptions) {
     const parsedName = parseCompetitionName(option.label);
     const competitionName = parsedName.championshipName;
+    if (isLegaEuropeanChampionship(competitionName)) continue;
+
     const stageName = parsedName.stageName;
     const championshipExternalId = hashLegaId(
       `legavolley:championship:${toLegaKey(competitionName)}`,
