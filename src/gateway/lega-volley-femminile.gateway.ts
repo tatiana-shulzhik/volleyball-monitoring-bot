@@ -479,6 +479,7 @@ export class LegaVolleyFemminileGateway {
 
         return {
           matchExternalId: match.externalId ?? sourceMatchId,
+          sourceMatchId,
           ...roster,
         };
       },

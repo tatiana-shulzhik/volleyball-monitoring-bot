@@ -90,15 +90,19 @@ export function formatTodayMatchRoster(
   homeStatistics: ITeamStatistics | null,
   awayStatistics: ITeamStatistics | null,
   source: MatchRosterDisplaySource = 'database',
+  matchUrl: string | null = null,
 ): string {
-  const matchUrl = getMatchUrl(match);
   const emptyMessage =
     source === 'site'
       ? 'Заявка пока не опубликована.'
       : 'Состав в базе не найден.';
+  const resolvedMatchUrl = matchUrl ?? getMatchUrl(match);
 
   return [
     `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
+    resolvedMatchUrl
+      ? `<p><a href="${escapeHtml(resolvedMatchUrl)}">🔗 Открыть матч на сайте</a></p>`
+      : '',
     formatRosterTable(
       match.homeTeam.name,
       homeRoster,
@@ -111,13 +115,15 @@ export function formatTodayMatchRoster(
       awayStatistics,
       emptyMessage,
     ),
-    matchUrl
-      ? `<p><a href="${escapeHtml(matchUrl)}">🔗 Открыть матч на сайте</a></p>`
-      : '',
-  ].join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
-function getMatchUrl(match: MatchEntity): string | null {
+export function getMatchUrl(
+  match: MatchEntity,
+  siteMatchId?: string | null,
+): string | null {
   const externalId = match.externalId;
   const sourceCode = match.league.stage.championship.source?.code;
   if (!sourceCode) return null;
@@ -132,14 +138,19 @@ function getMatchUrl(match: MatchEntity): string | null {
   }
 
   if (sourceCode === ESourceCode.LegaVolleyFemminile) {
-    if (!externalId) return null;
-    return `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${encodeURIComponent(externalId)}`;
+    const sourceMatchId =
+      siteMatchId ?? externalId?.match(/(\d+)$/)?.[1] ?? null;
+    if (!sourceMatchId) return null;
+    return `${LEGA_VOLLEY_FEMMINILE_STATISTICS_URL}${encodeURIComponent(sourceMatchId)}`;
   }
 
   if (sourceCode !== ESourceCode.LegaVolley) return null;
-  if (!externalId || !/^\d+$/.test(externalId)) return null;
 
-  return `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(externalId)}`;
+  const sourceMatchId =
+    siteMatchId ?? (externalId && /^\d+$/.test(externalId) ? externalId : null);
+  if (!sourceMatchId) return null;
+
+  return `${LEGA_VOLLEY_BASE_URL}/match/${encodeURIComponent(sourceMatchId)}`;
 }
 
 function formatRosterTable(

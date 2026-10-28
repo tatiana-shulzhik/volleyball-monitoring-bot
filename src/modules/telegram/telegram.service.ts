@@ -285,11 +285,13 @@ export class TelegramService
           matchRoster.homeStatistics,
           matchRoster.awayStatistics,
           matchRoster.source,
+          matchRoster.matchUrl,
         ),
         createLiveMatchRosterKeyboard(
           context.chat?.id !== this.config.groupId,
           Number(context.match[2] ?? 0) as 0 | 1,
           context.match[3] as ESourceCode | undefined,
+          matchRoster.matchUrl,
         ),
       );
     });

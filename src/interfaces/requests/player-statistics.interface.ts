@@ -25,6 +25,8 @@ export interface ICevMatchRosterPlayer {
 
 export interface IFetchedMatchRoster {
   matchExternalId: string;
+  /** Числовой ID матча на сайте (Pre Gara / Live), если отличается от externalId в БД. */
+  sourceMatchId?: string;
   home: ICevMatchRosterPlayer[];
   away: ICevMatchRosterPlayer[];
 }

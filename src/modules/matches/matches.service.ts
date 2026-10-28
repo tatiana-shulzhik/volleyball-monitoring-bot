@@ -23,7 +23,10 @@ import {
 import { uniqueBy } from '../../shared/array.utils';
 import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
 import { addRosterStatistics } from '../../shared/match-roster-monitoring.utils';
-import { toDisplayRoster } from '../../shared/telegram-today-matches.utils';
+import {
+  getMatchUrl,
+  toDisplayRoster,
+} from '../../shared/telegram-today-matches.utils';
 import { EMatchStatus, ESourceCode } from '../../shared/enums';
 import { parseCevDate } from '../../shared/cev-matches.utils';
 import {
@@ -102,6 +105,7 @@ export class MatchesService {
         homeStatistics,
         awayStatistics,
         source: 'site',
+        matchUrl: getMatchUrl(match, siteRoster.sourceMatchId),
       };
     }
 
@@ -119,6 +123,7 @@ export class MatchesService {
       homeStatistics,
       awayStatistics,
       source: 'database',
+      matchUrl: getMatchUrl(match),
     };
   }
 

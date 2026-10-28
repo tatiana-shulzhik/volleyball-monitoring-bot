@@ -336,6 +336,7 @@ export class LegaVolleyGateway {
 
         return {
           matchExternalId: match.externalId ?? sourceMatchId,
+          sourceMatchId,
           ...roster,
         };
       },

@@ -141,18 +141,18 @@ export class SynchronizationService implements OnApplicationBootstrap {
         )
       ) {
         this.logger.log(
-          'Catalog is already initialized; startup synchronization skipped',
+          'CEV catalog is already initialized; startup synchronization skipped',
         );
         return;
       }
 
-      this.logger.log('Starting full catalog synchronization');
+      this.logger.log('Starting full CEV catalog synchronization');
       const matchesComplete = await this.runExclusive(async () => {
         return this.cevCatalogService.synchronizeStoredRange();
       });
       if (!matchesComplete) {
         this.logger.warn(
-          'Full catalog synchronization is incomplete; it will be retried after restart',
+          'Full CEV catalog synchronization is incomplete; it will be retried after restart',
         );
         return;
       }
@@ -166,7 +166,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
       );
     } catch (error) {
       this.logger.error(
-        'Initial catalog synchronization failed',
+        'Initial CEV catalog synchronization failed',
         error instanceof Error ? error.stack : String(error),
       );
     }

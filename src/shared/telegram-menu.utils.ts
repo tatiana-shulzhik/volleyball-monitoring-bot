@@ -110,8 +110,12 @@ export function createLiveMatchRosterKeyboard(
   showSourceButton = true,
   dayOffset: 0 | 1 = 0,
   sourceCode?: ESourceCode,
+  matchUrl?: string | null,
 ) {
   return Markup.inlineKeyboard([
+    ...(matchUrl
+      ? [[Markup.button.url('🔗 Открыть матч на сайте', matchUrl)]]
+      : []),
     [
       Markup.button.callback(
         '⬅️ Назад',
