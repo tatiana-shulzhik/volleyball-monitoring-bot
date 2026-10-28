@@ -90,19 +90,14 @@ export function formatTodayMatchRoster(
   homeStatistics: ITeamStatistics | null,
   awayStatistics: ITeamStatistics | null,
   source: MatchRosterDisplaySource = 'database',
-  matchUrl: string | null = null,
 ): string {
   const emptyMessage =
     source === 'site'
       ? 'Заявка пока не опубликована.'
       : 'Состав в базе не найден.';
-  const resolvedMatchUrl = matchUrl ?? getMatchUrl(match);
 
   return [
     `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
-    resolvedMatchUrl
-      ? `<p><a href="${escapeHtml(resolvedMatchUrl)}">🔗 Открыть матч на сайте</a></p>`
-      : '',
     formatRosterTable(
       match.homeTeam.name,
       homeRoster,
@@ -115,9 +110,7 @@ export function formatTodayMatchRoster(
       awayStatistics,
       emptyMessage,
     ),
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  ].join('\n\n');
 }
 
 export function getMatchUrl(
@@ -159,15 +152,20 @@ function formatRosterTable(
   statistics: ITeamStatistics | null,
   emptyMessage: string,
 ): string {
-  const rows = [...roster]
+  const rows = roster
+    .map((player) => ({
+      player,
+      statisticsPlayer: findStatisticsPlayer(player, statistics),
+    }))
     .sort(
       (left, right) =>
-        (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
-          (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
-        left.playerName.localeCompare(right.playerName),
+        getPlayerPoints(right.player, right.statisticsPlayer) -
+          getPlayerPoints(left.player, left.statisticsPlayer) ||
+        (left.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
+          (right.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
+        left.player.playerName.localeCompare(right.player.playerName),
     )
-    .map((player) => {
-      const statisticsPlayer = findStatisticsPlayer(player, statistics);
+    .map(({ player, statisticsPlayer }) => {
       return [
         '<tr>',
         `<td align="center">${player.shirtNumber ?? '—'}</td>`,
@@ -209,6 +207,14 @@ function findStatisticsPlayer(
         item.shirtNumber === null ||
         item.shirtNumber === player.shirtNumber),
   );
+}
+
+/** Без очков в конец (−1), с очками — по убыванию. */
+function getPlayerPoints(
+  player: ICevMatchRosterPlayer,
+  statisticsPlayer: ITeamPlayerStatistics | undefined,
+): number {
+  return player.statistics?.points ?? statisticsPlayer?.points ?? -1;
 }
 
 function formatRating(

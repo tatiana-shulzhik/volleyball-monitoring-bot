@@ -533,6 +533,7 @@ function formatMatchRosterTable(
   const rows = [...roster]
     .sort(
       (left, right) =>
+        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
         (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.playerName.localeCompare(right.playerName),
