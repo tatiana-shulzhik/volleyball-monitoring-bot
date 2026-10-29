@@ -19,6 +19,7 @@ import {
   createMatchProtocolUrl,
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
+  MATCH_STARTING_LINEUP_AFTER_START_MINUTES,
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
 } from '../../shared/consts/constants';
 import {
@@ -45,6 +46,7 @@ import {
   getMonitoredRoster,
   getPlayerMonitoringStateKey,
   getPlayerMonitoringStateTtl,
+  getStartingLineupInMatchSentKey,
   getPositionsByShirtNumber,
   getRosterNotificationKey,
   isActiveMark,
@@ -135,12 +137,15 @@ export class MatchRosterMonitoringService {
   }
 
   /**
-   * Проверяет стартовый состав Lega Volley / Femminile за 10 минут до матча.
+   * Проверяет стартовый состав Lega Volley / Femminile:
+   * за 10 минут до матча и после старта, пока не начался 2-й сет.
    * CEV не проверяем: стартовые составы появляются уже после начала матча.
    */
   async checkStartingLineups(): Promise<number> {
     const now = new Date();
-    // Матч проверяется с момента, когда до начала остаётся 10 минут, и до старта.
+    const windowStart = new Date(
+      now.getTime() - MATCH_STARTING_LINEUP_AFTER_START_MINUTES * 60_000,
+    );
     const windowEnd = new Date(
       now.getTime() + MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES * 60_000,
     );
@@ -161,7 +166,7 @@ export class MatchRosterMonitoringService {
         this.processMatches(
           await this.matchesService.findMonitoredWithin(
             ESourceCode.LegaVolley,
-            now,
+            windowStart,
             windowEnd,
           ),
           now,
@@ -172,7 +177,7 @@ export class MatchRosterMonitoringService {
         this.processMatches(
           await this.matchesService.findMonitoredWithin(
             ESourceCode.LegaVolleyFemminile,
-            now,
+            windowStart,
             windowEnd,
           ),
           now,
@@ -406,6 +411,20 @@ export class MatchRosterMonitoringService {
     data: IProcessLineupMatchParams,
   ): Promise<number> {
     const { match, lineup, context, now } = data;
+    const currentSet = getCurrentSet(lineup.home, lineup.away);
+    if (currentSet !== null && currentSet >= 2) return 0;
+
+    const matchStarted =
+      (currentSet !== null && currentSet >= 1) ||
+      (match.scheduledAt !== null &&
+        match.scheduledAt.getTime() <= now.getTime());
+    const inMatchSentKey = getStartingLineupInMatchSentKey(match);
+    const ttlSeconds = getPlayerMonitoringStateTtl(match, now);
+    if (matchStarted) {
+      const alreadySent = await this.cache.get<boolean>(inMatchSentKey);
+      if (alreadySent) return 0;
+    }
+
     const changedPlayers: IStartingLineupMonitoringChange[] = [];
     const monitoredPlayers = getMonitoredPlayers(
       match,
@@ -500,6 +519,9 @@ export class MatchRosterMonitoringService {
       monitoring.startingStatus = status;
     });
     await this.saveStates(match, changedPlayers, now);
+    if (matchStarted) {
+      await this.cache.set(inMatchSentKey, true, ttlSeconds);
+    }
 
     return 1;
   }

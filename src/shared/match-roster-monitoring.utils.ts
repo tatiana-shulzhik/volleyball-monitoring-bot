@@ -246,6 +246,11 @@ export function getPlayerMonitoringStateKey(
   return `match-monitoring:${match.id}:player:${playerId}`;
 }
 
+/** Ключ: стартовый состав уже отправили после начала матча — больше не слать. */
+export function getStartingLineupInMatchSentKey(match: MatchEntity): string {
+  return `match-monitoring:${match.id}:starting-lineup-in-match-sent`;
+}
+
 /** Возвращает TTL состояния до окончания допустимого live-окна матча. */
 export function getPlayerMonitoringStateTtl(
   match: MatchEntity,
