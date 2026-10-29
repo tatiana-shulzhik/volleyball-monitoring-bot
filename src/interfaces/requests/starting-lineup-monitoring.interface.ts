@@ -39,5 +39,6 @@ export interface IStartingLineupMonitoringMessageData {
   absentAway: IAbsentStartingLineupPlayer[];
   homePositionsByShirtNumber: Map<number, string>;
   awayPositionsByShirtNumber: Map<number, string>;
+  scheduledAt: Date | null;
   matchProtocolUrl?: string;
 }
