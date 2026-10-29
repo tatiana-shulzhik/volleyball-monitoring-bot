@@ -1,3 +1,4 @@
+import { ESourceCode } from '../../shared/enums';
 import { ICevMatchRosterPlayer } from './player-statistics.interface';
 
 export interface IRosterNotificationViews {
@@ -11,6 +12,7 @@ export interface IMatchRosterMonitoringMessageData {
   championshipName: string;
   stageName: string;
   leagueName: string;
+  sourceCode?: ESourceCode;
   homeTeamName: string;
   awayTeamName: string;
   home: ICevMatchRosterPlayer[];

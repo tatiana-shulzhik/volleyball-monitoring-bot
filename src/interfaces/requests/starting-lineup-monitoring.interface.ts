@@ -1,3 +1,4 @@
+import { ESourceCode } from '../../shared/enums';
 import { ICevMatchLineupPlayer } from './player-statistics.interface';
 
 export type TStartingLineupAbsenceReason = 'not_registered' | 'bench';
@@ -29,6 +30,7 @@ export interface IStartingLineupMonitoringMessageData {
   championshipName: string;
   stageName: string;
   leagueName: string;
+  sourceCode?: ESourceCode;
   homeTeamName: string;
   awayTeamName: string;
   home: IStartingLineupPlayer[];

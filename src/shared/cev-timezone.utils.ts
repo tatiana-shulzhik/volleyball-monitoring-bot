@@ -11,6 +11,7 @@ const CEV_CITY_TIME_ZONE_OVERRIDES: Readonly<Record<string, string>> = {
   STRUMICA: 'Europe/Skopje',
   TENERIFE: 'Atlantic/Canary',
   TIRANA: 'Europe/Tirane',
+  YEREVAN: 'Asia/Yerevan',
 };
 
 export const CEV_COUNTRY_TIME_ZONES: Readonly<Record<string, string>> = {

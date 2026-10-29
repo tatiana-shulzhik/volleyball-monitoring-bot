@@ -23,7 +23,7 @@ import {
   IStartingLineupPlayer,
   TStartingLineupAbsenceReason,
 } from '../interfaces/requests/starting-lineup-monitoring.interface';
-import { EStartingLineupMonitoringStatus } from './enums';
+import { ESourceCode, EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
 import {
   formatPlayerPosition,
@@ -211,7 +211,7 @@ export function getAbsentStartingLineupPlayers(
   positionsByShirtNumber: Map<number, string>,
   statistics?: ITeamPlayerStatistics[],
 ): IAbsentStartingLineupPlayer[] {
-  const absentees = monitored.flatMap(
+  const absentees: IAbsentStartingLineupPlayer[] = monitored.flatMap(
     ({ subscription, relation, teamData }) => {
       if (relation.team.id !== teamId) return [];
 
@@ -229,13 +229,16 @@ export function getAbsentStartingLineupPlayers(
           : positionsByShirtNumber.get(shirtNumber)) ??
         relation.position ??
         undefined;
+      const reason: TStartingLineupAbsenceReason = player
+        ? 'bench'
+        : 'not_registered';
 
       return [
         {
           playerName: player?.playerName ?? subscription.player.fullName,
           shirtNumber,
           position,
-          reason: player ? 'bench' : 'not_registered',
+          reason,
         },
       ];
     },
@@ -653,7 +656,7 @@ export function formatStartingLineupMonitoringMessage(
       ? ''
       : '<p><b>🟢 Все отслеживаемые в стартовом составе</b></p>',
     formatStartingLineupTeamSection(
-      '🔴',
+      '🔵',
       data.homeTeamName,
       data.home.filter((player) => isStarter(player.setMarks[0])),
       data.absentHome,
@@ -776,27 +779,30 @@ function formatStartingLineupTable(
 export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
-  const changes = formatLiveChanges(data);
+  const title =
+    data.currentSet <= 1
+      ? '🏐 Стартовый состав'
+      : `🔄 Замена · ${data.currentSet} сет`;
 
   return [
-    `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
+    `<p><b>${title}</b></p>`,
     formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
-    changes ? `<br>${changes}<br>` : '',
-    formatLiveLineupTable(
+    formatLiveTeamSection(
       data.homeTeamName,
       data.home,
       data.homeAttackStatistics,
       data.homePositionsByShirtNumber,
       data.currentSet,
+      data.changes?.find((group) => group.teamName === data.homeTeamName),
     ),
-    '<br>',
-    formatLiveLineupTable(
+    formatLiveTeamSection(
       data.awayTeamName,
       data.away,
       data.awayAttackStatistics,
       data.awayPositionsByShirtNumber,
       data.currentSet,
+      data.changes?.find((group) => group.teamName === data.awayTeamName),
     ),
     data.matchProtocolUrl
       ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
@@ -804,55 +810,96 @@ export function formatLiveMonitoringMessage(
   ].join('');
 }
 
-function formatLiveChanges(data: ILiveLineupMonitoringMessageData): string {
-  if (!data.changes?.length) return '';
+function formatLiveTeamSection(
+  teamName: string,
+  lineup: ICevMatchLineupPlayer[],
+  attackStatistics: ICevPlayerAttackStatistics[] | undefined,
+  positionsByShirtNumber: Map<number, string>,
+  currentSet: number,
+  changes: ILiveLineupChangeGroup | undefined,
+): string {
+  const changeItems = changes?.items ?? [];
 
-  const groups = data.changes.map((group) => {
-    const isHome = group.teamName === data.homeTeamName;
-    const lineup = isHome ? data.home : data.away;
-    const attackStatistics = isHome
-      ? data.homeAttackStatistics
-      : data.awayAttackStatistics;
-    const positionsByShirtNumber = isHome
-      ? data.homePositionsByShirtNumber
-      : data.awayPositionsByShirtNumber;
-
-    return [
-      `<p><b>🔁 ${escapeHtml(group.teamName)}</b></p>`,
-      ...group.items.map((item) => {
-        const marker = item.kind === 'out' ? '🔴' : '🟢';
-        const player = findLineupPlayer(
+  return [
+    `<p><b>🔵 ${escapeHtml(teamName)}</b></p>`,
+    changeItems.length
+      ? formatLiveChangesTable(
           lineup,
-          item.player.playerName,
-          item.player.shirtNumber,
-        ) ?? {
-          playerName: item.player.playerName,
-          shirtNumber: item.player.shirtNumber,
-          setMarks: [],
-        };
-        const statistics = findLivePlayerStatistics(player, attackStatistics);
-        const position =
-          player.shirtNumber === null
-            ? '—'
-            : formatPlayerPosition(
-                positionsByShirtNumber.get(player.shirtNumber) ?? '—',
-              );
+          attackStatistics,
+          positionsByShirtNumber,
+          changeItems,
+          currentSet,
+        )
+      : '',
+    formatLiveLineupTable(
+      lineup,
+      attackStatistics,
+      positionsByShirtNumber,
+      currentSet,
+    ),
+  ].join('');
+}
 
-        return (
-          `<p><b>${marker} №${item.player.shirtNumber ?? '—'} ` +
-          `${escapeHtml(item.player.playerName)} (${position})</b><br>` +
-          `⭐ ${formatLivePlayerRating(statistics)} · ` +
-          `⚡ ${formatLivePlayerAttacks(statistics)}</p>`
-        );
-      }),
-    ].join('');
+function formatLiveChangesTable(
+  lineup: ICevMatchLineupPlayer[],
+  attackStatistics: ICevPlayerAttackStatistics[] | undefined,
+  positionsByShirtNumber: Map<number, string>,
+  items: ILiveLineupChangeItem[],
+  currentSet: number,
+): string {
+  const setHeaders = Array.from(
+    { length: currentSet },
+    (_, index) => `<th>С${index + 1}</th>`,
+  );
+  const rows = items.map((item) => {
+    const player = findLineupPlayer(
+      lineup,
+      item.player.playerName,
+      item.player.shirtNumber,
+    ) ?? {
+      playerName: item.player.playerName,
+      shirtNumber: item.player.shirtNumber,
+      setMarks: [],
+    };
+    const statistics = findLivePlayerStatistics(player, attackStatistics);
+    const setMarks = Array.from(
+      { length: currentSet },
+      (_, index) =>
+        `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
+    );
+    const position =
+      player.shirtNumber === null
+        ? '—'
+        : formatPlayerPosition(
+            positionsByShirtNumber.get(player.shirtNumber) ?? '—',
+          );
+
+    return (
+      '<tr>' +
+      `<td align="center">${item.player.shirtNumber ?? '—'}</td>` +
+      `<td>${escapeHtml(item.player.playerName)}</td>` +
+      setMarks.join('') +
+      `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
+      `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
+      `<td align="center">${position}</td>` +
+      '</tr>'
+    );
   });
 
-  return ['<p><b>🔔 ИЗМЕНЕНИЕ СОСТАВА</b></p>', ...groups].join('<br>');
+  return [
+    '<p><b>🔁 Замена</b></p>',
+    '<table bordered striped>',
+    '<tr><th>№</th><th>Игрок</th>' +
+      setHeaders.join('') +
+      '<th>Рейтинг<br>(о/с)</th>' +
+      '<th>Атака<br>(у/п)</th>' +
+      '<th>Поз</th></tr>',
+    ...rows,
+    '</table>',
+  ].join('');
 }
 
 function formatLiveLineupTable(
-  teamName: string,
   lineup: ICevMatchLineupPlayer[],
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
@@ -869,12 +916,8 @@ function formatLiveLineupTable(
       player,
       statistics: findLivePlayerStatistics(player, attackStatistics),
     }))
-    // В таблице оставляем только тех, кто реально выходил / имеет статистику.
-    .filter(
-      ({ player, statistics }) =>
-        player.setMarks.some((mark) => isActiveMark(mark)) ||
-        Boolean(statistics?.points),
-    )
+    // Стартовый состав текущего сета + история по прошлым сетам в колонках С1…СN.
+    .filter(({ player }) => isStarter(player.setMarks[currentSet - 1]))
     .sort(
       (left, right) =>
         (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
@@ -883,7 +926,7 @@ function formatLiveLineupTable(
         left.player.playerName.localeCompare(right.player.playerName),
     )
     .map(({ player, statistics }) => {
-      const statuses = Array.from(
+      const setMarks = Array.from(
         { length: currentSet },
         (_, index) =>
           `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
@@ -897,7 +940,7 @@ function formatLiveLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        statuses.join('') +
+        setMarks.join('') +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
         `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
@@ -905,8 +948,10 @@ function formatLiveLineupTable(
       );
     });
 
+  if (!rows.length) return '';
+
   return [
-    `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
+    '<p><b>👥 Основной состав</b></p>',
     '<table bordered striped>',
     '<tr><th>№</th><th>Игрок</th>' +
       setHeaders.join('') +
@@ -968,11 +1013,31 @@ function normalizePlayerName(value: string): string {
     .toUpperCase();
 }
 
+function resolveCompetitionGenderLabel(
+  championshipName: string,
+  sourceCode?: ESourceCode,
+): 'M' | 'W' | null {
+  if (sourceCode === ESourceCode.LegaVolleyFemminile) return 'W';
+  if (sourceCode === ESourceCode.LegaVolley) return 'M';
+  if (/\bWomen\b|\bFemminile\b/i.test(championshipName)) return 'W';
+  if (/\bMen\b|\bMaschile\b/i.test(championshipName)) return 'M';
+
+  return null;
+}
+
 function formatCompetitionHeader(data: {
   championshipName: string;
   stageName: string;
   leagueName: string;
+  sourceCode?: ESourceCode;
 }): string {
+  const gender = resolveCompetitionGenderLabel(
+    data.championshipName,
+    data.sourceCode,
+  );
+  const championshipTitle = gender
+    ? `${data.championshipName} - ${gender}`
+    : data.championshipName;
   const details = [data.stageName, data.leagueName]
     .map((name) => name.trim())
     .filter(Boolean)
@@ -983,7 +1048,7 @@ function formatCompetitionHeader(data: {
 
   return [
     '<br>',
-    `<p>🏆 ${escapeHtml(data.championshipName)}</p>`,
+    `<p>🏆 ${escapeHtml(championshipTitle)}</p>`,
     details.length
       ? `<p>📌 ${details.map((name) => escapeHtml(name)).join(' · ')}</p>`
       : '',
