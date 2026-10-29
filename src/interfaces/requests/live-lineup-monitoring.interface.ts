@@ -1,3 +1,4 @@
+import { ESourceCode } from '../../shared/enums';
 import {
   ICevMatchLineupPlayer,
   ICevPlayerAttackStatistics,
@@ -22,6 +23,7 @@ export interface ILiveLineupMonitoringMessageData {
   championshipName: string;
   stageName: string;
   leagueName: string;
+  sourceCode?: ESourceCode;
   homeTeamName: string;
   awayTeamName: string;
   home: ICevMatchLineupPlayer[];
