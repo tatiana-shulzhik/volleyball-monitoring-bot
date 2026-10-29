@@ -531,7 +531,7 @@ export class TelegramService
   private async showRosterNotificationView(
     context: Context,
     matchId: number,
-    view: keyof IRosterNotificationViews,
+    view: 'watchedHtml' | 'fullHtml',
   ): Promise<void> {
     const details = await this.cache.get<IRosterNotificationViews>(
       getRosterDetailsKey(matchId),

@@ -21,6 +21,7 @@ import {
 import {
   IAbsentStartingLineupPlayer,
   IStartingLineupMonitoringMessageData,
+  IStartingLineupPlayer,
 } from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
@@ -118,7 +119,30 @@ export function addRosterStatistics(
   roster: ICevMatchRosterPlayer[],
   statistics: ITeamPlayerStatistics[] | undefined,
 ): ICevMatchRosterPlayer[] {
-  if (!statistics) return roster;
+  return attachPlayerStatistics(roster, statistics);
+}
+
+export function addLineupStatistics(
+  lineup: ICevMatchLineupPlayer[],
+  statistics: ITeamPlayerStatistics[] | undefined,
+): IStartingLineupPlayer[] {
+  return attachPlayerStatistics(lineup, statistics);
+}
+
+function attachPlayerStatistics<
+  T extends { playerName: string; shirtNumber: number | null },
+>(
+  players: T[],
+  statistics: ITeamPlayerStatistics[] | undefined,
+): (T & {
+  statistics?: {
+    points: number | null;
+    setsPlayed: number | null;
+    attackAttempts: number | null;
+    successfulAttacks: number | null;
+  };
+})[] {
+  if (!statistics) return players;
 
   const statisticsByName = new Map<string, ITeamPlayerStatistics[]>();
   for (const item of statistics) {
@@ -128,7 +152,7 @@ export function addRosterStatistics(
     statisticsByName.set(name, items);
   }
 
-  return roster.map((player) => {
+  return players.map((player) => {
     const matched = statisticsByName
       .get(normalizeStatisticsPlayerName(player.playerName))
       ?.find(
@@ -562,8 +586,8 @@ function formatMatchRosterTable(
     '<th>№</th>',
     '<th>Игрок</th>',
     ...(showStatus ? ['<th>Статус</th>'] : []),
-    '<th>Рейтинг (о/с)</th>',
-    '<th>Атака (у/п)</th>',
+    '<th>Рейтинг<br>(о/с)</th>',
+    '<th>Атака<br>(у/п)</th>',
     '<th>Поз</th>',
   ];
 
@@ -580,7 +604,9 @@ function formatMatchRosterTable(
   ].join('');
 }
 
-function formatRosterPlayerRating(player: ICevMatchRosterPlayer): string {
+function formatRosterPlayerRating(player: {
+  statistics?: ICevMatchRosterPlayer['statistics'];
+}): string {
   const statistics = player.statistics;
   if (
     statistics?.points === null ||
@@ -593,7 +619,9 @@ function formatRosterPlayerRating(player: ICevMatchRosterPlayer): string {
   return `${(statistics.points / statistics.setsPlayed).toFixed(2)} (${statistics.points}/${statistics.setsPlayed})`;
 }
 
-function formatRosterPlayerAttacks(player: ICevMatchRosterPlayer): string {
+function formatRosterPlayerAttacks(player: {
+  statistics?: ICevMatchRosterPlayer['statistics'];
+}): string {
   const statistics = player.statistics;
   if (!statistics?.attackAttempts || statistics.successfulAttacks === null) {
     return '—';
@@ -692,12 +720,13 @@ function formatAbsentStartingLineupTable(
 
 function formatStartingLineupTable(
   teamName: string,
-  lineup: ICevMatchLineupPlayer[],
+  lineup: IStartingLineupPlayer[],
   positionsByShirtNumber: Map<number, string>,
 ): string {
   const rows = [...lineup]
     .sort(
       (left, right) =>
+        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
         (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.playerName.localeCompare(right.playerName),
@@ -713,8 +742,10 @@ function formatStartingLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${formatPlayerPosition(position)}</td>` +
         `<td align="center">${status}</td>` +
+        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
+        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
+        `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
     });
@@ -722,30 +753,13 @@ function formatStartingLineupTable(
   return [
     `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Поз</th><th>Статус</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
 }
 
 export function formatLiveMonitoringMessage(
-  data: ILiveLineupMonitoringMessageData,
-): string {
-  const changes = formatLiveChanges(data);
-
-  return [
-    `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
-    formatCompetitionHeader(data),
-    `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
-    changes ? `<br>${changes}<br>` : '',
-    data.matchProtocolUrl
-      ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
-      : '',
-  ].join('');
-}
-
-/** Полный состав по сетам — для кнопки из сигнала, не для самого уведомления. */
-export function formatFullLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
   const changes = formatLiveChanges(data);
@@ -882,8 +896,8 @@ function formatLiveLineupTable(
     '<table bordered striped>',
     '<tr><th>№</th><th>Игрок</th>' +
       setHeaders.join('') +
-      '<th>Рейтинг (о/с)</th>' +
-      '<th>Атака (у/п)</th>' +
+      '<th>Рейтинг<br>(о/с)</th>' +
+      '<th>Атака<br>(у/п)</th>' +
       '<th>Поз</th></tr>',
     ...rows,
     '</table>',

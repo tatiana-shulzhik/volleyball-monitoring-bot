@@ -6,14 +6,23 @@ export interface IAbsentStartingLineupPlayer {
   position?: string;
 }
 
+export interface IStartingLineupPlayer extends ICevMatchLineupPlayer {
+  statistics?: {
+    points: number | null;
+    setsPlayed: number | null;
+    attackAttempts: number | null;
+    successfulAttacks: number | null;
+  };
+}
+
 export interface IStartingLineupMonitoringMessageData {
   championshipName: string;
   stageName: string;
   leagueName: string;
   homeTeamName: string;
   awayTeamName: string;
-  home: ICevMatchLineupPlayer[];
-  away: ICevMatchLineupPlayer[];
+  home: IStartingLineupPlayer[];
+  away: IStartingLineupPlayer[];
   absentHome: IAbsentStartingLineupPlayer[];
   absentAway: IAbsentStartingLineupPlayer[];
   homePositionsByShirtNumber: Map<number, string>;

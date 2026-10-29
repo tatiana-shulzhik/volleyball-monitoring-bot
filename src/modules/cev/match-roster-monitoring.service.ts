@@ -27,12 +27,12 @@ import {
   EStartingLineupMonitoringStatus,
 } from '../../shared/enums';
 import {
+  addLineupStatistics,
   addRosterPositions,
   addRosterStatistics,
   findLineupPlayer,
   findRosterPlayer,
   formatLiveMonitoringMessage,
-  formatFullLiveMonitoringMessage,
   formatFullMatchRosterMonitoringMessage,
   formatMatchRosterMonitoringMessage,
   formatStartingLineupMonitoringMessage,
@@ -457,6 +457,16 @@ export class MatchRosterMonitoringService {
       match.league.id,
       context,
     );
+    const [homeStatistics, awayStatistics] = await Promise.all([
+      this.playersService.findTeamStatistics({
+        teamId: match.homeTeam.id,
+        leagueId: match.league.id,
+      }),
+      this.playersService.findTeamStatistics({
+        teamId: match.awayTeam.id,
+        leagueId: match.league.id,
+      }),
+    ]);
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatStartingLineupMonitoringMessage({
         championshipName: match.league.stage.championship.name,
@@ -464,8 +474,8 @@ export class MatchRosterMonitoringService {
         leagueName: match.league.name,
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
-        home: lineup.home,
-        away: lineup.away,
+        home: addLineupStatistics(lineup.home, homeStatistics?.players),
+        away: addLineupStatistics(lineup.away, awayStatistics?.players),
         absentHome: getAbsentStartingLineupPlayers(
           monitoredPlayers,
           match.homeTeam.id,
@@ -581,41 +591,34 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const liveMessage = {
-      championshipName: match.league.stage.championship.name,
-      stageName: match.league.stage.name,
-      leagueName: match.league.name,
-      homeTeamName: match.homeTeam.name,
-      awayTeamName: match.awayTeam.name,
-      home: lineup.home,
-      away: lineup.away,
-      homeAttackStatistics: attackStatistics.home,
-      awayAttackStatistics: attackStatistics.away,
-      homePositionsByShirtNumber: getPositionsByShirtNumber(
-        match.homeTeam.id,
-        match.league.id,
-        context,
-      ),
-      awayPositionsByShirtNumber: getPositionsByShirtNumber(
-        match.awayTeam.id,
-        match.league.id,
-        context,
-      ),
-      changes,
-      currentSet,
-      matchProtocolUrl: createMatchProtocolUrl(
-        match.league.stage.championship.source?.code,
-        match.externalId,
-      ),
-    };
     const sent = await this.telegramService.sendRosterMonitoringNotification(
-      formatLiveMonitoringMessage(liveMessage),
-      {
-        fullHtml: formatFullLiveMonitoringMessage(liveMessage),
-        matchId: match.id,
-        fullButtonLabel: 'Полный состав',
-        watchedButtonLabel: 'Изменения',
-      },
+      formatLiveMonitoringMessage({
+        championshipName: match.league.stage.championship.name,
+        stageName: match.league.stage.name,
+        leagueName: match.league.name,
+        homeTeamName: match.homeTeam.name,
+        awayTeamName: match.awayTeam.name,
+        home: lineup.home,
+        away: lineup.away,
+        homeAttackStatistics: attackStatistics.home,
+        awayAttackStatistics: attackStatistics.away,
+        homePositionsByShirtNumber: getPositionsByShirtNumber(
+          match.homeTeam.id,
+          match.league.id,
+          context,
+        ),
+        awayPositionsByShirtNumber: getPositionsByShirtNumber(
+          match.awayTeam.id,
+          match.league.id,
+          context,
+        ),
+        changes,
+        currentSet,
+        matchProtocolUrl: createMatchProtocolUrl(
+          match.league.stage.championship.source?.code,
+          match.externalId,
+        ),
+      }),
     );
     if (!sent) {
       await this.cache.delete(notificationKey);

@@ -185,7 +185,7 @@ function formatRosterTable(
     rows.length
       ? [
           '<table bordered striped>',
-          '<tr><th>№</th><th>Игрок</th><th>Рейтинг (о/с)</th><th>Атака (у/п)</th><th>Год рождения</th><th>Поз</th></tr>',
+          '<tr><th>№</th><th>Игрок</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Год рождения</th><th>Поз</th></tr>',
           ...rows,
           '</table>',
         ].join('')
