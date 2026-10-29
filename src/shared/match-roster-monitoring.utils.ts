@@ -9,7 +9,6 @@ import {
   ICevMatchLineupPlayer,
   ICevPlayerAttackStatistics,
   ICevMatchRosterPlayer,
-  IFetchedMatchLineup,
   IFetchedMatchRoster,
 } from '../interfaces/requests/player-statistics.interface';
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
@@ -370,30 +369,12 @@ export function getRosterNotificationKey(
   return `match-monitoring:${match.id}:roster-notification:${digest}`;
 }
 
-/** Ключ дедупа: Active только среди отслеживаемых. */
+/** Ключ дедупа: один live-сигнал на сет. */
 export function getLiveNotificationKey(
   match: MatchEntity,
-  lineup: Pick<IFetchedMatchLineup, 'home' | 'away'>,
   currentSet: number,
 ): string {
-  const signature = [lineup.home, lineup.away]
-    .map((team) =>
-      [...team]
-        .filter((player) => isActiveMark(player.setMarks[currentSet - 1] ?? ''))
-        .sort(
-          (left, right) =>
-            (left.shirtNumber ?? -1) - (right.shirtNumber ?? -1) ||
-            left.playerName.localeCompare(right.playerName),
-        )
-        .map(
-          ({ playerName, shirtNumber }) => `${playerName}:${shirtNumber ?? ''}`,
-        )
-        .join(','),
-    )
-    .join('|');
-  const digest = createHash('sha256').update(signature).digest('hex');
-
-  return `match-monitoring:${match.id}:live-notification:${currentSet}:${digest}`;
+  return `match-monitoring:${match.id}:live-notification:${currentSet}`;
 }
 
 export function findLineupPlayer(

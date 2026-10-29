@@ -616,7 +616,7 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const notificationKey = getLiveNotificationKey(match, snapshot, currentSet);
+    const notificationKey = getLiveNotificationKey(match, currentSet);
     const acquired = await this.cache.acquire(notificationKey, lineupTtl);
     if (!acquired) {
       await this.cache.set(lineupKey, snapshot, lineupTtl);
