@@ -115,4 +115,25 @@ export class MonitoringSubscriptionsRepository {
 
     return new Set(rows.map(({ teamId }) => teamId));
   }
+
+  async removeByTeam(
+    teamId: number,
+    leagueId: number,
+    championshipId: number,
+  ): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .delete()
+      .where('"championship_id" = :championshipId', { championshipId })
+      .andWhere(
+        `"player_id" IN (
+          SELECT "player_id" FROM "player_team_leagues"
+          WHERE "team_id" = :teamId AND "league_id" = :leagueId
+        )`,
+        { teamId, leagueId },
+      )
+      .execute();
+
+    return result.affected ?? 0;
+  }
 }

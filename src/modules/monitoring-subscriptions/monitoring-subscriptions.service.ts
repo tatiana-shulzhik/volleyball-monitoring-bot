@@ -73,4 +73,12 @@ export class MonitoringSubscriptionsService {
       stageId,
     );
   }
+
+  removeByTeam(teamId: number, leagueId: number, championshipId: number) {
+    return this.monitoringSubscriptionsRepository.removeByTeam(
+      teamId,
+      leagueId,
+      championshipId,
+    );
+  }
 }
