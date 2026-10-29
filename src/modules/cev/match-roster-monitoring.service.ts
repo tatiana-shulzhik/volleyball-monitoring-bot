@@ -60,7 +60,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку для CEV / Lega Volley / Femminile; live — все три; старт — Lega Volley + Femminile. */
+/** Проверяет заявку, стартовый состав и live для CEV / Lega Volley / Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -137,9 +137,8 @@ export class MatchRosterMonitoringService {
   }
 
   /**
-   * Проверяет стартовый состав Lega Volley / Femminile:
+   * Проверяет стартовый состав CEV / Lega Volley / Femminile:
    * за 10 минут до матча и после старта, пока не начался 2-й сет.
-   * CEV не проверяем: стартовые составы появляются уже после начала матча.
    */
   async checkStartingLineups(): Promise<number> {
     const now = new Date();
@@ -161,8 +160,19 @@ export class MatchRosterMonitoringService {
         context,
         now: checkedAt,
       });
-    const [legaVolleyNotifications, femminileNotifications] = await Promise.all(
-      [
+    const [cevNotifications, legaVolleyNotifications, femminileNotifications] =
+      await Promise.all([
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.Cev,
+            windowStart,
+            windowEnd,
+          ),
+          now,
+          (items) => this.gateway.fetchMatchLineups(items),
+          handleStartingLineup,
+          ESourceCode.Cev,
+        ),
         this.processMatches(
           await this.matchesService.findMonitoredWithin(
             ESourceCode.LegaVolley,
@@ -185,9 +195,9 @@ export class MatchRosterMonitoringService {
           handleStartingLineup,
           ESourceCode.LegaVolleyFemminile,
         ),
-      ],
-    );
-    const notifications = legaVolleyNotifications + femminileNotifications;
+      ]);
+    const notifications =
+      cevNotifications + legaVolleyNotifications + femminileNotifications;
 
     if (notifications) {
       this.logger.log(
