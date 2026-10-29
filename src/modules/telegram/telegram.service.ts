@@ -150,7 +150,12 @@ export class TelegramService
 
   async sendRosterMonitoringNotification(
     html: string,
-    details?: { fullHtml: string; matchId: number },
+    details?: {
+      fullHtml: string;
+      matchId: number;
+      fullButtonLabel?: string;
+      watchedButtonLabel?: string;
+    },
   ): Promise<boolean> {
     try {
       const sendRichMessage = this.bot.telegram.callApi.bind(
@@ -163,7 +168,12 @@ export class TelegramService
       if (details) {
         await this.cache.set(
           getRosterDetailsKey(details.matchId),
-          { watchedHtml: html, fullHtml: details.fullHtml },
+          {
+            watchedHtml: html,
+            fullHtml: details.fullHtml,
+            fullButtonLabel: details.fullButtonLabel,
+            watchedButtonLabel: details.watchedButtonLabel,
+          },
           ROSTER_NOTIFICATION_TTL_SECONDS,
         );
       }
@@ -175,7 +185,7 @@ export class TelegramService
           ? Markup.inlineKeyboard([
               [
                 Markup.button.callback(
-                  'Расклад на матч',
+                  details.fullButtonLabel ?? 'Расклад на матч',
                   TELEGRAM_CALLBACKS.roster.all(details.matchId),
                 ),
               ],
@@ -521,7 +531,7 @@ export class TelegramService
   private async showRosterNotificationView(
     context: Context,
     matchId: number,
-    view: keyof IRosterNotificationViews,
+    view: 'watchedHtml' | 'fullHtml',
   ): Promise<void> {
     const details = await this.cache.get<IRosterNotificationViews>(
       getRosterDetailsKey(matchId),
@@ -541,7 +551,9 @@ export class TelegramService
       Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            showFullRoster ? 'Отслеживаемые игроки' : 'Расклад на матч',
+            showFullRoster
+              ? (details.watchedButtonLabel ?? 'Отслеживаемые игроки')
+              : (details.fullButtonLabel ?? 'Расклад на матч'),
             showFullRoster
               ? TELEGRAM_CALLBACKS.roster.watched(matchId)
               : TELEGRAM_CALLBACKS.roster.all(matchId),

@@ -19,6 +19,7 @@ import {
   createMatchProtocolUrl,
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
+  MATCH_STARTING_LINEUP_AFTER_START_MINUTES,
   MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES,
 } from '../../shared/consts/constants';
 import {
@@ -27,6 +28,7 @@ import {
   EStartingLineupMonitoringStatus,
 } from '../../shared/enums';
 import {
+  addLineupStatistics,
   addRosterPositions,
   addRosterStatistics,
   findLineupPlayer,
@@ -44,6 +46,7 @@ import {
   getMonitoredRoster,
   getPlayerMonitoringStateKey,
   getPlayerMonitoringStateTtl,
+  getStartingLineupInMatchSentKey,
   getPositionsByShirtNumber,
   getRosterNotificationKey,
   isActiveMark,
@@ -57,7 +60,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку для CEV / Lega Volley / Femminile; live — все три; старт — Lega Volley + Femminile. */
+/** Проверяет заявку, стартовый состав и live для CEV / Lega Volley / Femminile. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -134,12 +137,14 @@ export class MatchRosterMonitoringService {
   }
 
   /**
-   * Проверяет стартовый состав Lega Volley / Femminile за 10 минут до матча.
-   * CEV не проверяем: стартовые составы появляются уже после начала матча.
+   * Проверяет стартовый состав CEV / Lega Volley / Femminile:
+   * за 10 минут до матча и после старта, пока не начался 2-й сет.
    */
   async checkStartingLineups(): Promise<number> {
     const now = new Date();
-    // Матч проверяется с момента, когда до начала остаётся 10 минут, и до старта.
+    const windowStart = new Date(
+      now.getTime() - MATCH_STARTING_LINEUP_AFTER_START_MINUTES * 60_000,
+    );
     const windowEnd = new Date(
       now.getTime() + MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES * 60_000,
     );
@@ -155,12 +160,23 @@ export class MatchRosterMonitoringService {
         context,
         now: checkedAt,
       });
-    const [legaVolleyNotifications, femminileNotifications] = await Promise.all(
-      [
+    const [cevNotifications, legaVolleyNotifications, femminileNotifications] =
+      await Promise.all([
+        this.processMatches(
+          await this.matchesService.findMonitoredWithin(
+            ESourceCode.Cev,
+            windowStart,
+            windowEnd,
+          ),
+          now,
+          (items) => this.gateway.fetchMatchLineups(items),
+          handleStartingLineup,
+          ESourceCode.Cev,
+        ),
         this.processMatches(
           await this.matchesService.findMonitoredWithin(
             ESourceCode.LegaVolley,
-            now,
+            windowStart,
             windowEnd,
           ),
           now,
@@ -171,7 +187,7 @@ export class MatchRosterMonitoringService {
         this.processMatches(
           await this.matchesService.findMonitoredWithin(
             ESourceCode.LegaVolleyFemminile,
-            now,
+            windowStart,
             windowEnd,
           ),
           now,
@@ -179,9 +195,9 @@ export class MatchRosterMonitoringService {
           handleStartingLineup,
           ESourceCode.LegaVolleyFemminile,
         ),
-      ],
-    );
-    const notifications = legaVolleyNotifications + femminileNotifications;
+      ]);
+    const notifications =
+      cevNotifications + legaVolleyNotifications + femminileNotifications;
 
     if (notifications) {
       this.logger.log(
@@ -415,6 +431,20 @@ export class MatchRosterMonitoringService {
     data: IProcessLineupMatchParams,
   ): Promise<number> {
     const { match, lineup, context, now } = data;
+    const currentSet = getCurrentSet(lineup.home, lineup.away);
+    if (currentSet !== null && currentSet >= 2) return 0;
+
+    const matchStarted =
+      (currentSet !== null && currentSet >= 1) ||
+      (match.scheduledAt !== null &&
+        match.scheduledAt.getTime() <= now.getTime());
+    const inMatchSentKey = getStartingLineupInMatchSentKey(match);
+    const ttlSeconds = getPlayerMonitoringStateTtl(match, now);
+    if (matchStarted) {
+      const alreadySent = await this.cache.get<boolean>(inMatchSentKey);
+      if (alreadySent) return 0;
+    }
+
     const changedPlayers: IStartingLineupMonitoringChange[] = [];
     const monitoredPlayers = getMonitoredPlayers(
       match,
@@ -477,6 +507,16 @@ export class MatchRosterMonitoringService {
       match.league.id,
       context,
     );
+    const [homeStatistics, awayStatistics] = await Promise.all([
+      this.playersService.findTeamStatistics({
+        teamId: match.homeTeam.id,
+        leagueId: match.league.id,
+      }),
+      this.playersService.findTeamStatistics({
+        teamId: match.awayTeam.id,
+        leagueId: match.league.id,
+      }),
+    ]);
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatStartingLineupMonitoringMessage({
         championshipName: match.league.stage.championship.name,
@@ -484,17 +524,19 @@ export class MatchRosterMonitoringService {
         leagueName: match.league.name,
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
-        home: lineup.home,
-        away: lineup.away,
+        home: addLineupStatistics(lineup.home, homeStatistics?.players),
+        away: addLineupStatistics(lineup.away, awayStatistics?.players),
         absentHome: getAbsentStartingLineupPlayers(
           monitoredPlayers,
           match.homeTeam.id,
           homePositionsByShirtNumber,
+          homeStatistics?.players,
         ),
         absentAway: getAbsentStartingLineupPlayers(
           monitoredPlayers,
           match.awayTeam.id,
           awayPositionsByShirtNumber,
+          awayStatistics?.players,
         ),
         homePositionsByShirtNumber,
         awayPositionsByShirtNumber,
@@ -510,6 +552,9 @@ export class MatchRosterMonitoringService {
       monitoring.startingStatus = status;
     });
     await this.saveStates(match, changedPlayers, now);
+    if (matchStarted) {
+      await this.cache.set(inMatchSentKey, true, ttlSeconds);
+    }
 
     return 1;
   }
@@ -594,7 +639,7 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
-    const notificationKey = getLiveNotificationKey(match, snapshot, currentSet);
+    const notificationKey = getLiveNotificationKey(match, currentSet);
     const acquired = await this.cache.acquire(notificationKey, lineupTtl);
     if (!acquired) {
       await this.cache.set(lineupKey, snapshot, lineupTtl);

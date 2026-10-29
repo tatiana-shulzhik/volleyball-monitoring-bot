@@ -3,6 +3,8 @@ import { ICevMatchRosterPlayer } from './player-statistics.interface';
 export interface IRosterNotificationViews {
   watchedHtml: string;
   fullHtml: string;
+  fullButtonLabel?: string;
+  watchedButtonLabel?: string;
 }
 
 export interface IMatchRosterMonitoringMessageData {

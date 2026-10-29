@@ -91,7 +91,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
   }
 
   @Cron(CronExpression.EVERY_MINUTE, {
-    name: 'match-starting-lineup-check-10-minutes-before-start',
+    name: 'match-starting-lineup-check-until-second-set',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
   })
