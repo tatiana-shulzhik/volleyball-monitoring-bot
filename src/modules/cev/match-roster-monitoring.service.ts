@@ -32,6 +32,7 @@ import {
   findLineupPlayer,
   findRosterPlayer,
   formatLiveMonitoringMessage,
+  formatFullLiveMonitoringMessage,
   formatFullMatchRosterMonitoringMessage,
   formatMatchRosterMonitoringMessage,
   formatStartingLineupMonitoringMessage,
@@ -321,21 +322,11 @@ export class MatchRosterMonitoringService {
 
     if (!changedPlayers.length) return 0;
 
-    const newAbsenteePlayerIds = changedPlayers
-      .filter(({ status }) => status === ERosterMonitoringStatus.Absent)
-      .map(({ playerId }) => playerId);
-    if (!newAbsenteePlayerIds.length) {
-      changedPlayers.forEach(({ status, monitoring }) => {
-        monitoring.rosterStatus = status;
-      });
-      await this.saveStates(match, changedPlayers, now);
-      return 0;
-    }
-
+    const changedPlayerIds = changedPlayers.map(({ playerId }) => playerId);
     const notificationKey = getRosterNotificationKey(
       match,
       roster,
-      newAbsenteePlayerIds,
+      changedPlayerIds,
     );
     const acquired = await this.cache.acquire(
       notificationKey,
@@ -455,17 +446,6 @@ export class MatchRosterMonitoringService {
       });
     }
     if (!changedPlayers.length) return 0;
-
-    const newBenchPlayerIds = changedPlayers
-      .filter(({ status }) => status === EStartingLineupMonitoringStatus.Bench)
-      .map(({ playerId }) => playerId);
-    if (!newBenchPlayerIds.length) {
-      changedPlayers.forEach(({ status, monitoring }) => {
-        monitoring.startingStatus = status;
-      });
-      await this.saveStates(match, changedPlayers, now);
-      return 0;
-    }
 
     const homePositionsByShirtNumber = getPositionsByShirtNumber(
       match.homeTeam.id,
@@ -601,34 +581,41 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
+    const liveMessage = {
+      championshipName: match.league.stage.championship.name,
+      stageName: match.league.stage.name,
+      leagueName: match.league.name,
+      homeTeamName: match.homeTeam.name,
+      awayTeamName: match.awayTeam.name,
+      home: lineup.home,
+      away: lineup.away,
+      homeAttackStatistics: attackStatistics.home,
+      awayAttackStatistics: attackStatistics.away,
+      homePositionsByShirtNumber: getPositionsByShirtNumber(
+        match.homeTeam.id,
+        match.league.id,
+        context,
+      ),
+      awayPositionsByShirtNumber: getPositionsByShirtNumber(
+        match.awayTeam.id,
+        match.league.id,
+        context,
+      ),
+      changes,
+      currentSet,
+      matchProtocolUrl: createMatchProtocolUrl(
+        match.league.stage.championship.source?.code,
+        match.externalId,
+      ),
+    };
     const sent = await this.telegramService.sendRosterMonitoringNotification(
-      formatLiveMonitoringMessage({
-        championshipName: match.league.stage.championship.name,
-        stageName: match.league.stage.name,
-        leagueName: match.league.name,
-        homeTeamName: match.homeTeam.name,
-        awayTeamName: match.awayTeam.name,
-        home: lineup.home,
-        away: lineup.away,
-        homeAttackStatistics: attackStatistics.home,
-        awayAttackStatistics: attackStatistics.away,
-        homePositionsByShirtNumber: getPositionsByShirtNumber(
-          match.homeTeam.id,
-          match.league.id,
-          context,
-        ),
-        awayPositionsByShirtNumber: getPositionsByShirtNumber(
-          match.awayTeam.id,
-          match.league.id,
-          context,
-        ),
-        changes,
-        currentSet,
-        matchProtocolUrl: createMatchProtocolUrl(
-          match.league.stage.championship.source?.code,
-          match.externalId,
-        ),
-      }),
+      formatLiveMonitoringMessage(liveMessage),
+      {
+        fullHtml: formatFullLiveMonitoringMessage(liveMessage),
+        matchId: match.id,
+        fullButtonLabel: 'Полный состав',
+        watchedButtonLabel: 'Изменения',
+      },
     );
     if (!sent) {
       await this.cache.delete(notificationKey);

@@ -313,7 +313,7 @@ export function getPositionsByShirtNumber(
 export function getRosterNotificationKey(
   match: MatchEntity,
   roster: Pick<IFetchedMatchRoster, 'home' | 'away'>,
-  newAbsenteePlayerIds: number[],
+  changedPlayerIds: number[],
 ): string {
   const rosterSignature = [roster.home, roster.away]
     .map((team) =>
@@ -331,11 +331,11 @@ export function getRosterNotificationKey(
         .join(','),
     )
     .join('|');
-  const absenteesSignature = [...newAbsenteePlayerIds]
+  const changedPlayersSignature = [...changedPlayerIds]
     .sort((left, right) => left - right)
     .join(',');
   const digest = createHash('sha256')
-    .update(`${rosterSignature}|absentees:${absenteesSignature}`)
+    .update(`${rosterSignature}|changed:${changedPlayersSignature}`)
     .digest('hex');
 
   return `match-monitoring:${match.id}:roster-notification:${digest}`;
@@ -622,25 +622,37 @@ export function formatStartingLineupMessage(
 export function formatStartingLineupMonitoringMessage(
   data: IStartingLineupMonitoringMessageData,
 ): string {
+  const hasAbsentees = data.absentHome.length > 0 || data.absentAway.length > 0;
+
   return [
     '<p><b>🏐 Стартовый состав</b></p>',
     formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
-    '<p><b>🔴 Отсутствуют из стартового состава</b></p>',
-    data.absentHome.length
-      ? formatAbsentStartingLineupTable(data.homeTeamName, data.absentHome)
-      : '',
-    data.absentAway.length
-      ? formatAbsentStartingLineupTable(data.awayTeamName, data.absentAway)
-      : '',
+    hasAbsentees
+      ? [
+          '<p><b>🔴 Отсутствуют из стартового состава</b></p>',
+          data.absentHome.length
+            ? formatAbsentStartingLineupTable(
+                data.homeTeamName,
+                data.absentHome,
+              )
+            : '',
+          data.absentAway.length
+            ? formatAbsentStartingLineupTable(
+                data.awayTeamName,
+                data.absentAway,
+              )
+            : '',
+        ].join('')
+      : '<p><b>🟢 Все отслеживаемые в стартовом составе</b></p>',
     formatStartingLineupTable(
       data.homeTeamName,
-      data.home,
+      data.home.filter((player) => isStarter(player.setMarks[0])),
       data.homePositionsByShirtNumber,
     ),
     formatStartingLineupTable(
       data.awayTeamName,
-      data.away,
+      data.away.filter((player) => isStarter(player.setMarks[0])),
       data.awayPositionsByShirtNumber,
     ),
     data.matchProtocolUrl
@@ -717,6 +729,23 @@ function formatStartingLineupTable(
 }
 
 export function formatLiveMonitoringMessage(
+  data: ILiveLineupMonitoringMessageData,
+): string {
+  const changes = formatLiveChanges(data);
+
+  return [
+    `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
+    formatCompetitionHeader(data),
+    `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
+    changes ? `<br>${changes}<br>` : '',
+    data.matchProtocolUrl
+      ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
+      : '',
+  ].join('');
+}
+
+/** Полный состав по сетам — для кнопки из сигнала, не для самого уведомления. */
+export function formatFullLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
   const changes = formatLiveChanges(data);
@@ -812,6 +841,12 @@ function formatLiveLineupTable(
       player,
       statistics: findLivePlayerStatistics(player, attackStatistics),
     }))
+    // В таблице оставляем только тех, кто реально выходил / имеет статистику.
+    .filter(
+      ({ player, statistics }) =>
+        player.setMarks.some((mark) => isActiveMark(mark)) ||
+        Boolean(statistics?.points),
+    )
     .sort(
       (left, right) =>
         (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
