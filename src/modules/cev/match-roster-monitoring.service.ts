@@ -530,11 +530,13 @@ export class MatchRosterMonitoringService {
           monitoredPlayers,
           match.homeTeam.id,
           homePositionsByShirtNumber,
+          homeStatistics?.players,
         ),
         absentAway: getAbsentStartingLineupPlayers(
           monitoredPlayers,
           match.awayTeam.id,
           awayPositionsByShirtNumber,
+          awayStatistics?.players,
         ),
         homePositionsByShirtNumber,
         awayPositionsByShirtNumber,

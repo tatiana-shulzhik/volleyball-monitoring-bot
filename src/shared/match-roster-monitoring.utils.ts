@@ -21,6 +21,7 @@ import {
   IAbsentStartingLineupPlayer,
   IStartingLineupMonitoringMessageData,
   IStartingLineupPlayer,
+  TStartingLineupAbsenceReason,
 } from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { EStartingLineupMonitoringStatus } from './enums';
 import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
@@ -208,33 +209,39 @@ export function getAbsentStartingLineupPlayers(
   monitored: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
   teamId: number,
   positionsByShirtNumber: Map<number, string>,
+  statistics?: ITeamPlayerStatistics[],
 ): IAbsentStartingLineupPlayer[] {
-  return monitored.flatMap(({ subscription, relation, teamData }) => {
-    if (relation.team.id !== teamId) return [];
+  const absentees = monitored.flatMap(
+    ({ subscription, relation, teamData }) => {
+      if (relation.team.id !== teamId) return [];
 
-    const player = findLineupPlayer(
-      teamData,
-      subscription.player.fullName,
-      relation.shirtNumber,
-    );
-    if (player && isStarter(player.setMarks[0])) return [];
+      const player = findLineupPlayer(
+        teamData,
+        subscription.player.fullName,
+        relation.shirtNumber,
+      );
+      if (player && isStarter(player.setMarks[0])) return [];
 
-    const shirtNumber = player?.shirtNumber ?? relation.shirtNumber;
-    const position =
-      (shirtNumber === null
-        ? undefined
-        : positionsByShirtNumber.get(shirtNumber)) ??
-      relation.position ??
-      undefined;
+      const shirtNumber = player?.shirtNumber ?? relation.shirtNumber;
+      const position =
+        (shirtNumber === null
+          ? undefined
+          : positionsByShirtNumber.get(shirtNumber)) ??
+        relation.position ??
+        undefined;
 
-    return [
-      {
-        playerName: player?.playerName ?? subscription.player.fullName,
-        shirtNumber,
-        position,
-      },
-    ];
-  });
+      return [
+        {
+          playerName: player?.playerName ?? subscription.player.fullName,
+          shirtNumber,
+          position,
+          reason: player ? 'bench' : 'not_registered',
+        },
+      ];
+    },
+  );
+
+  return attachPlayerStatistics(absentees, statistics);
 }
 
 /** Формирует ключ Redis для состояния игрока в матче. */
@@ -643,30 +650,20 @@ export function formatStartingLineupMonitoringMessage(
     formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     hasAbsentees
-      ? [
-          '<p><b>🔴 Отсутствуют из стартового состава</b></p>',
-          data.absentHome.length
-            ? formatAbsentStartingLineupTable(
-                data.homeTeamName,
-                data.absentHome,
-              )
-            : '',
-          data.absentAway.length
-            ? formatAbsentStartingLineupTable(
-                data.awayTeamName,
-                data.absentAway,
-              )
-            : '',
-        ].join('')
+      ? ''
       : '<p><b>🟢 Все отслеживаемые в стартовом составе</b></p>',
-    formatStartingLineupTable(
+    formatStartingLineupTeamSection(
+      '🔴',
       data.homeTeamName,
       data.home.filter((player) => isStarter(player.setMarks[0])),
+      data.absentHome,
       data.homePositionsByShirtNumber,
     ),
-    formatStartingLineupTable(
+    formatStartingLineupTeamSection(
+      '🔵',
       data.awayTeamName,
       data.away.filter((player) => isStarter(player.setMarks[0])),
+      data.absentAway,
       data.awayPositionsByShirtNumber,
     ),
     data.matchProtocolUrl
@@ -675,13 +672,42 @@ export function formatStartingLineupMonitoringMessage(
   ].join('');
 }
 
-function formatAbsentStartingLineupTable(
+function formatStartingLineupTeamSection(
+  teamEmoji: string,
   teamName: string,
+  starters: IStartingLineupPlayer[],
+  absentees: IAbsentStartingLineupPlayer[],
+  positionsByShirtNumber: Map<number, string>,
+): string {
+  const notRegistered = absentees.filter(
+    (player) => player.reason === 'not_registered',
+  );
+  const bench = absentees.filter((player) => player.reason === 'bench');
+
+  return [
+    `<p><b>${teamEmoji} ${escapeHtml(teamName)}</b></p>`,
+    notRegistered.length
+      ? formatAbsentStartingLineupTable('❌ Не заявлены', notRegistered)
+      : '',
+    bench.length ? formatAbsentStartingLineupTable('🪑 На замене', bench) : '',
+    starters.length
+      ? formatStartingLineupTable(
+          '👥 Основной состав',
+          starters,
+          positionsByShirtNumber,
+        )
+      : '',
+  ].join('');
+}
+
+function formatAbsentStartingLineupTable(
+  title: string,
   lineup: IAbsentStartingLineupPlayer[],
 ): string {
   const rows = [...lineup]
     .sort(
       (left, right) =>
+        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
         (left.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.playerName.localeCompare(right.playerName),
@@ -691,21 +717,23 @@ function formatAbsentStartingLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
+        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
 
   return [
-    `<p><b>🔴 ${escapeHtml(teamName)}</b></p>`,
+    `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Поз</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
 }
 
 function formatStartingLineupTable(
-  teamName: string,
+  title: string,
   lineup: IStartingLineupPlayer[],
   positionsByShirtNumber: Map<number, string>,
 ): string {
@@ -737,7 +765,7 @@ function formatStartingLineupTable(
     });
 
   return [
-    `<p><b>🟢 ${escapeHtml(teamName)}</b></p>`,
+    `<p><b>${title}</b></p>`,
     '<table bordered striped>',
     '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
