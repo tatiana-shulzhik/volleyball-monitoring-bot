@@ -337,11 +337,21 @@ export class MatchRosterMonitoringService {
 
     if (!changedPlayers.length) return 0;
 
-    const changedPlayerIds = changedPlayers.map(({ playerId }) => playerId);
+    const newAbsenteePlayerIds = changedPlayers
+      .filter(({ status }) => status === ERosterMonitoringStatus.Absent)
+      .map(({ playerId }) => playerId);
+    if (!newAbsenteePlayerIds.length) {
+      changedPlayers.forEach(({ status, monitoring }) => {
+        monitoring.rosterStatus = status;
+      });
+      await this.saveStates(match, changedPlayers, now);
+      return 0;
+    }
+
     const notificationKey = getRosterNotificationKey(
       match,
       roster,
-      changedPlayerIds,
+      newAbsenteePlayerIds,
     );
     const acquired = await this.cache.acquire(
       notificationKey,
@@ -475,6 +485,17 @@ export class MatchRosterMonitoringService {
       });
     }
     if (!changedPlayers.length) return 0;
+
+    const newBenchPlayerIds = changedPlayers
+      .filter(({ status }) => status === EStartingLineupMonitoringStatus.Bench)
+      .map(({ playerId }) => playerId);
+    if (!newBenchPlayerIds.length) {
+      changedPlayers.forEach(({ status, monitoring }) => {
+        monitoring.startingStatus = status;
+      });
+      await this.saveStates(match, changedPlayers, now);
+      return 0;
+    }
 
     const homePositionsByShirtNumber = getPositionsByShirtNumber(
       match.homeTeam.id,
