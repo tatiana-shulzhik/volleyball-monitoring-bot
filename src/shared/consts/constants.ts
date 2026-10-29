@@ -147,6 +147,7 @@ export const CEV_COUNTRIES: Record<string, string> = {
   ROU: 'Romania',
   RUS: 'Russia',
   SCO: 'Scotland',
+  SMR: 'San Marino',
   SRB: 'Serbia',
   SLO: 'Slovenia',
   SUI: 'Switzerland',
