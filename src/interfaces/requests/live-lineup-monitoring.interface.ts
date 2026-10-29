@@ -34,5 +34,6 @@ export interface ILiveLineupMonitoringMessageData {
   awayPositionsByShirtNumber: Map<number, string>;
   changes?: ILiveLineupChangeGroup[];
   currentSet: number;
+  scheduledAt: Date | null;
   matchProtocolUrl?: string;
 }

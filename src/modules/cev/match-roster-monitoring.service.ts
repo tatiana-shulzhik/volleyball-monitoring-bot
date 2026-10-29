@@ -542,6 +542,7 @@ export class MatchRosterMonitoringService {
         ),
         homePositionsByShirtNumber,
         awayPositionsByShirtNumber,
+        scheduledAt: match.scheduledAt,
         matchProtocolUrl: createMatchProtocolUrl(
           match.league.stage.championship.source?.code,
           match.externalId,
@@ -672,6 +673,7 @@ export class MatchRosterMonitoringService {
         ),
         changes,
         currentSet,
+        scheduledAt: match.scheduledAt,
         matchProtocolUrl: createMatchProtocolUrl(
           match.league.stage.championship.source?.code,
           match.externalId,

@@ -24,7 +24,10 @@ import {
   TStartingLineupAbsenceReason,
 } from '../interfaces/requests/starting-lineup-monitoring.interface';
 import { ESourceCode, EStartingLineupMonitoringStatus } from './enums';
-import { LIVE_MONITORING_MAX_MATCH_AGE_HOURS } from './consts/constants';
+import {
+  LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
+  MOSCOW_TIME_ZONE,
+} from './consts/constants';
 import {
   formatPlayerPosition,
   normalizePlayerName as normalizeStatisticsPlayerName,
@@ -431,8 +434,9 @@ export function findRosterPlayer(
   );
 }
 
+/** Позиции 1–6 на площадке; `*` — либеро/вышедший по ходу сета, не старт. */
 export function isStarter(mark: string | undefined): boolean {
-  return Boolean(mark && (/^[1-6]$/.test(mark) || mark === '*'));
+  return Boolean(mark && /^[1-6]$/.test(mark));
 }
 
 export function isActiveMark(mark: string): boolean {
@@ -1030,6 +1034,7 @@ function formatCompetitionHeader(data: {
   stageName: string;
   leagueName: string;
   sourceCode?: ESourceCode;
+  scheduledAt?: Date | null;
 }): string {
   const gender = resolveCompetitionGenderLabel(
     data.championshipName,
@@ -1045,6 +1050,7 @@ function formatCompetitionHeader(data: {
       (name, index, names) =>
         name !== data.championshipName && names.indexOf(name) === index,
     );
+  const matchTime = formatMatchScheduledAt(data.scheduledAt);
 
   return [
     '<br>',
@@ -1052,8 +1058,25 @@ function formatCompetitionHeader(data: {
     details.length
       ? `<p>📌 ${details.map((name) => escapeHtml(name)).join(' · ')}</p>`
       : '',
+    matchTime ? `<p>🕒 ${escapeHtml(matchTime)}</p>` : '',
     '<br>',
   ].join('');
+}
+
+function formatMatchScheduledAt(scheduledAt: Date | null | undefined): string {
+  if (!scheduledAt) return '';
+
+  const formatted = new Intl.DateTimeFormat('ru-RU', {
+    timeZone: MOSCOW_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(scheduledAt);
+
+  return `${formatted} МСК`;
 }
 
 function formatMonitoringMessage(
