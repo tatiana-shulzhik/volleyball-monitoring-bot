@@ -211,7 +211,7 @@ export function getAbsentStartingLineupPlayers(
   positionsByShirtNumber: Map<number, string>,
   statistics?: ITeamPlayerStatistics[],
 ): IAbsentStartingLineupPlayer[] {
-  const absentees = monitored.flatMap(
+  const absentees: IAbsentStartingLineupPlayer[] = monitored.flatMap(
     ({ subscription, relation, teamData }) => {
       if (relation.team.id !== teamId) return [];
 
@@ -229,15 +229,16 @@ export function getAbsentStartingLineupPlayers(
           : positionsByShirtNumber.get(shirtNumber)) ??
         relation.position ??
         undefined;
+      const reason: TStartingLineupAbsenceReason = player
+        ? 'bench'
+        : 'not_registered';
 
       return [
         {
           playerName: player?.playerName ?? subscription.player.fullName,
           shirtNumber,
           position,
-          reason: (player
-            ? 'bench'
-            : 'not_registered') as TStartingLineupAbsenceReason,
+          reason,
         },
       ];
     },
@@ -655,7 +656,7 @@ export function formatStartingLineupMonitoringMessage(
       ? ''
       : '<p><b>🟢 Все отслеживаемые в стартовом составе</b></p>',
     formatStartingLineupTeamSection(
-      '🔴',
+      '🔵',
       data.homeTeamName,
       data.home.filter((player) => isStarter(player.setMarks[0])),
       data.absentHome,
@@ -778,13 +779,16 @@ function formatStartingLineupTable(
 export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
+  const title =
+    data.currentSet <= 1
+      ? '🏐 Стартовый состав'
+      : `🔄 Замена · ${data.currentSet} сет`;
+
   return [
-    `<p><b>🔄 Состав по сетам (1–${data.currentSet})</b></p>`,
+    `<p><b>${title}</b></p>`,
     formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
-    data.changes?.length ? '<p><b>🔔 ИЗМЕНЕНИЕ СОСТАВА</b></p>' : '',
     formatLiveTeamSection(
-      '🔴',
       data.homeTeamName,
       data.home,
       data.homeAttackStatistics,
@@ -793,7 +797,6 @@ export function formatLiveMonitoringMessage(
       data.changes?.find((group) => group.teamName === data.homeTeamName),
     ),
     formatLiveTeamSection(
-      '🔵',
       data.awayTeamName,
       data.away,
       data.awayAttackStatistics,
@@ -808,7 +811,6 @@ export function formatLiveMonitoringMessage(
 }
 
 function formatLiveTeamSection(
-  teamEmoji: string,
   teamName: string,
   lineup: ICevMatchLineupPlayer[],
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
@@ -816,14 +818,17 @@ function formatLiveTeamSection(
   currentSet: number,
   changes: ILiveLineupChangeGroup | undefined,
 ): string {
+  const changeItems = changes?.items ?? [];
+
   return [
-    `<p><b>${teamEmoji} ${escapeHtml(teamName)}</b></p>`,
-    changes?.items.length
+    `<p><b>🔵 ${escapeHtml(teamName)}</b></p>`,
+    changeItems.length
       ? formatLiveChangesTable(
           lineup,
           attackStatistics,
           positionsByShirtNumber,
-          changes.items,
+          changeItems,
+          currentSet,
         )
       : '',
     formatLiveLineupTable(
@@ -840,7 +845,12 @@ function formatLiveChangesTable(
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   items: ILiveLineupChangeItem[],
+  currentSet: number,
 ): string {
+  const setHeaders = Array.from(
+    { length: currentSet },
+    (_, index) => `<th>С${index + 1}</th>`,
+  );
   const rows = items.map((item) => {
     const player = findLineupPlayer(
       lineup,
@@ -852,6 +862,11 @@ function formatLiveChangesTable(
       setMarks: [],
     };
     const statistics = findLivePlayerStatistics(player, attackStatistics);
+    const setMarks = Array.from(
+      { length: currentSet },
+      (_, index) =>
+        `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
+    );
     const position =
       player.shirtNumber === null
         ? '—'
@@ -863,7 +878,7 @@ function formatLiveChangesTable(
       '<tr>' +
       `<td align="center">${item.player.shirtNumber ?? '—'}</td>` +
       `<td>${escapeHtml(item.player.playerName)}</td>` +
-      `<td align="center">${item.kind === 'out' ? '🔴' : '🟢'}</td>` +
+      setMarks.join('') +
       `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
       `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
       `<td align="center">${position}</td>` +
@@ -872,9 +887,13 @@ function formatLiveChangesTable(
   });
 
   return [
-    '<p><b>🔁 Изменения</b></p>',
+    '<p><b>🔁 Замена</b></p>',
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
+    '<tr><th>№</th><th>Игрок</th>' +
+      setHeaders.join('') +
+      '<th>Рейтинг<br>(о/с)</th>' +
+      '<th>Атака<br>(у/п)</th>' +
+      '<th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -897,12 +916,8 @@ function formatLiveLineupTable(
       player,
       statistics: findLivePlayerStatistics(player, attackStatistics),
     }))
-    // В таблице оставляем только тех, кто реально выходил / имеет статистику.
-    .filter(
-      ({ player, statistics }) =>
-        player.setMarks.some((mark) => isActiveMark(mark)) ||
-        Boolean(statistics?.points),
-    )
+    // Стартовый состав текущего сета + история по прошлым сетам в колонках С1…СN.
+    .filter(({ player }) => isStarter(player.setMarks[currentSet - 1]))
     .sort(
       (left, right) =>
         (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
@@ -911,7 +926,7 @@ function formatLiveLineupTable(
         left.player.playerName.localeCompare(right.player.playerName),
     )
     .map(({ player, statistics }) => {
-      const statuses = Array.from(
+      const setMarks = Array.from(
         { length: currentSet },
         (_, index) =>
           `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
@@ -925,7 +940,7 @@ function formatLiveLineupTable(
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
-        statuses.join('') +
+        setMarks.join('') +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
         `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
