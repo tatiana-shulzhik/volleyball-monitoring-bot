@@ -246,6 +246,30 @@ export class TelegramStatisticsHandlers {
     });
 
     bot.action(
+      TELEGRAM_CALLBACK_PATTERNS.monitoring.clearTeam,
+      async (context) => {
+        const options = {
+          teamId: Number(context.match[1]),
+          leagueId: Number(context.match[2]),
+          stageId: Number(context.match[3]),
+          championshipId: Number(context.match[4]),
+          competitionType: parseCompetitionType(context.match[5]),
+        };
+        const removed = await this.monitoringSubscriptionsService.removeByTeam(
+          options.teamId,
+          options.leagueId,
+          options.championshipId,
+        );
+        await context.answerCbQuery(
+          removed
+            ? `Очищено игроков: ${removed}`
+            : 'У команды нет выбранных игроков',
+        );
+        await this.renderMonitoringPlayers(context, options);
+      },
+    );
+
+    bot.action(
       TELEGRAM_CALLBACK_PATTERNS.monitoring.player,
       async (context) => {
         const options = {
@@ -977,6 +1001,22 @@ export class TelegramStatisticsHandlers {
           ),
         ];
       }),
+      ...(monitoredPlayerIds.size
+        ? [
+            [
+              Markup.button.callback(
+                '🗑 Очистить выбранных',
+                TELEGRAM_CALLBACKS.monitoring.clearTeam(
+                  options.teamId,
+                  options.leagueId,
+                  options.stageId,
+                  options.championshipId,
+                  options.competitionType,
+                ),
+              ),
+            ],
+          ]
+        : []),
       [
         Markup.button.callback(
           TELEGRAM_MESSAGES.teams.back,

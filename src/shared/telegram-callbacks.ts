@@ -102,6 +102,14 @@ export const TELEGRAM_CALLBACKS = {
       competitionType: ECompetitionType,
     ) =>
       `monitoring:team:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
+    clearTeam: (
+      teamId: number,
+      leagueId: number,
+      stageId: number,
+      championshipId: number,
+      competitionType: ECompetitionType,
+    ) =>
+      `monitoring:clear-team:${teamId}:${leagueId}:${stageId}:${championshipId}:${COMPETITION_TYPE_CODES[competitionType]}`,
     player: (
       playerId: number,
       teamId: number,
@@ -214,6 +222,9 @@ export const TELEGRAM_CALLBACK_PATTERNS = {
     ),
     team: new RegExp(
       `^monitoring:team:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
+    ),
+    clearTeam: new RegExp(
+      `^monitoring:clear-team:(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
     ),
     player: new RegExp(
       `^monitoring:player:(\\d+):(\\d+):(\\d+):(\\d+):(\\d+):${COMPETITION_TYPE_PATTERN}$`,
