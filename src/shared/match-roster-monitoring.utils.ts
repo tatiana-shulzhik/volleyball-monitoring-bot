@@ -434,8 +434,9 @@ export function findRosterPlayer(
   );
 }
 
+/** Позиции 1–6 на площадке; `*` — либеро/вышедший по ходу сета, не старт. */
 export function isStarter(mark: string | undefined): boolean {
-  return Boolean(mark && (/^[1-6]$/.test(mark) || mark === '*'));
+  return Boolean(mark && /^[1-6]$/.test(mark));
 }
 
 export function isActiveMark(mark: string): boolean {
