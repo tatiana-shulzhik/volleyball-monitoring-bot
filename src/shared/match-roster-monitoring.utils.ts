@@ -1063,7 +1063,9 @@ function formatCompetitionHeader(data: {
   ].join('');
 }
 
-function formatMatchScheduledAt(scheduledAt: Date | null | undefined): string {
+export function formatMatchScheduledAt(
+  scheduledAt: Date | null | undefined,
+): string {
   if (!scheduledAt) return '';
 
   const formatted = new Intl.DateTimeFormat('ru-RU', {
