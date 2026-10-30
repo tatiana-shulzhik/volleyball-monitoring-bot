@@ -14,7 +14,10 @@ import {
   MOSCOW_TIME_ZONE,
 } from './consts/constants';
 import { ESourceCode } from './enums';
-import { normalizePlayerName } from './player-statistics.utils';
+import {
+  calculatePlayerRating,
+  normalizePlayerName,
+} from './player-statistics.utils';
 
 export function toDisplayRoster(
   roster: PlayerTeamLeagueEntity[],
@@ -159,8 +162,8 @@ function formatRosterTable(
     }))
     .sort(
       (left, right) =>
-        getPlayerPoints(right.player, right.statisticsPlayer) -
-          getPlayerPoints(left.player, left.statisticsPlayer) ||
+        getPlayerRating(right.player, right.statisticsPlayer) -
+          getPlayerRating(left.player, left.statisticsPlayer) ||
         (left.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.player.playerName.localeCompare(right.player.playerName),
@@ -209,12 +212,17 @@ function findStatisticsPlayer(
   );
 }
 
-/** Без очков в конец (−1), с очками — по убыванию. */
-function getPlayerPoints(
+/** Без рейтинга в конец (−1), с рейтингом — по убыванию. */
+function getPlayerRating(
   player: ICevMatchRosterPlayer,
   statisticsPlayer: ITeamPlayerStatistics | undefined,
 ): number {
-  return player.statistics?.points ?? statisticsPlayer?.points ?? -1;
+  return (
+    calculatePlayerRating(
+      player.statistics?.points ?? statisticsPlayer?.points ?? null,
+      player.statistics?.setsPlayed ?? statisticsPlayer?.setsPlayed ?? null,
+    ) ?? -1
+  );
 }
 
 function formatRating(
