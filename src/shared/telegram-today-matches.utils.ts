@@ -14,6 +14,7 @@ import {
   MOSCOW_TIME_ZONE,
 } from './consts/constants';
 import { ESourceCode } from './enums';
+import { formatMatchScheduledAt } from './match-roster-monitoring.utils';
 import {
   calculatePlayerRating,
   normalizePlayerName,
@@ -99,8 +100,11 @@ export function formatTodayMatchRoster(
       ? 'Заявка пока не опубликована.'
       : 'Состав в базе не найден.';
 
+  const matchTime = formatMatchScheduledAt(match.scheduledAt);
+
   return [
     `<p><b>🏐 ${escapeHtml(match.homeTeam.name)} — ${escapeHtml(match.awayTeam.name)}</b></p>`,
+    matchTime ? `<br><p>🕒 ${escapeHtml(matchTime)}</p><br>` : '',
     formatRosterTable(
       match.homeTeam.name,
       homeRoster,
@@ -113,7 +117,9 @@ export function formatTodayMatchRoster(
       awayStatistics,
       emptyMessage,
     ),
-  ].join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 export function getMatchUrl(
