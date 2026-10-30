@@ -365,6 +365,38 @@ export function createLegaMatchLookupKey(
   return `${leagueExternalId}:${normalizeLegaName(homeTeamName)}:${normalizeLegaName(awayTeamName)}:${scheduledAt?.toISOString().slice(0, 10) ?? ''}`;
 }
 
+/** При нескольких сезонах с одной парой команд — берём матч с той же датой (или ±1 день). */
+export function resolveLegaMatchCandidate<
+  T extends { scheduledAt: Date | null },
+>(candidates: T[], playedOn: Date | null): T | undefined {
+  if (candidates.length <= 1) {
+    return candidates[0];
+  }
+
+  const target = playedOn?.toISOString().slice(0, 10);
+  if (!target) {
+    return undefined;
+  }
+
+  const targetTime = Date.parse(`${target}T00:00:00.000Z`);
+  const scored = candidates
+    .map((match) => {
+      const date = match.scheduledAt?.toISOString().slice(0, 10);
+      if (!date) return undefined;
+      const diff = Math.abs(Date.parse(`${date}T00:00:00.000Z`) - targetTime);
+      return { match, diff };
+    })
+    .filter((item): item is { match: T; diff: number } => item !== undefined)
+    .sort((left, right) => left.diff - right.diff);
+
+  if (!scored.length || scored[0].diff > 86_400_000) {
+    return undefined;
+  }
+
+  const best = scored.filter(({ diff }) => diff === scored[0].diff);
+  return best.length === 1 ? best[0].match : undefined;
+}
+
 export function normalizeLegaName(value: string): string {
   return value
     .toLocaleLowerCase('it-IT')

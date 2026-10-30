@@ -297,12 +297,8 @@ export class PlayersService {
     let displayedRelations = relations;
     let rosterRelations = relations;
 
-    if (isLegaVolley && !isAggregate) {
-      displayedRelations = await this.relationsRepository.getWhere({
-        team: { id: team.id },
-        league: commonLeagueFilter,
-      });
-    } else if (isAggregate) {
+    // Lega: не тянем соседние чемпионаты сезона (SuperLega ≠ Supercoppa).
+    if (isAggregate) {
       if (includeHistoricalRoster) {
         const { teamIds } = await this.findEquivalentTeamData({
           team,
@@ -360,7 +356,7 @@ export class PlayersService {
       result.country = team.country;
     }
 
-    if (isLegaVolley) {
+    if (isLegaVolley && isAggregate) {
       result.championshipName = 'Все чемпионаты';
     }
 

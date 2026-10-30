@@ -20,7 +20,10 @@ import {
   getMatchTeams,
   createPlayerTeamLeagueKey,
 } from '../../shared/player-statistics.utils';
-import { createLegaMatchLookupKey } from '../../shared/lega-volley.utils';
+import {
+  createLegaMatchLookupKey,
+  resolveLegaMatchCandidate,
+} from '../../shared/lega-volley.utils';
 import { ESourceCode } from '../../shared/enums';
 
 @Injectable()
@@ -110,7 +113,7 @@ export class PlayerStatisticsService {
       const candidates = matchesByTeams.get(teamsKey) ?? [];
       const match =
         matchesByKey.get(matchKey) ??
-        (candidates.length === 1 ? candidates[0] : undefined);
+        resolveLegaMatchCandidate(candidates, item.playedOn);
       if (!match) {
         this.logger.warn(
           `[MATCH NOT FOUND] externalId=${item.sourceMatchId} ` +
