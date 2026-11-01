@@ -4,21 +4,6 @@ import {
   ICevPlayerAttackStatistics,
 } from './player-statistics.interface';
 
-export interface ILiveLineupChangePlayer {
-  shirtNumber: number | null;
-  playerName: string;
-}
-
-export interface ILiveLineupChangeItem {
-  kind: 'out' | 'in';
-  player: ILiveLineupChangePlayer;
-}
-
-export interface ILiveLineupChangeGroup {
-  teamName: string;
-  items: ILiveLineupChangeItem[];
-}
-
 export interface ILiveLineupMonitoringMessageData {
   championshipName: string;
   stageName: string;
@@ -32,7 +17,6 @@ export interface ILiveLineupMonitoringMessageData {
   awayAttackStatistics?: ICevPlayerAttackStatistics[];
   homePositionsByShirtNumber: Map<number, string>;
   awayPositionsByShirtNumber: Map<number, string>;
-  changes?: ILiveLineupChangeGroup[];
   currentSet: number;
   scheduledAt: Date | null;
   matchProtocolUrl?: string;

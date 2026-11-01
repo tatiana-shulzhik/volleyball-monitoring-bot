@@ -39,9 +39,7 @@ import {
   formatStartingLineupMonitoringMessage,
   getCurrentSet,
   getAbsentStartingLineupPlayers,
-  getLineupChanges,
   getLiveNotificationKey,
-  getMonitoredLineupPlayers,
   getMonitoredPlayers,
   getMonitoredRoster,
   getPlayerMonitoringStateKey,
@@ -49,6 +47,7 @@ import {
   getStartingLineupInMatchSentKey,
   getPositionsByShirtNumber,
   getRosterNotificationKey,
+  hasSetStartingLineup,
   isActiveMark,
   isStarter,
   mergeLineupSetMarksHistory,
@@ -60,7 +59,7 @@ import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
 
-/** Проверяет заявку, стартовый состав и live для CEV / Lega Volley / Femminile. */
+/** Проверяет заявку, стартовый состав матча и начальные составы сетов. */
 @Injectable()
 export class MatchRosterMonitoringService {
   private readonly logger = new Logger(MatchRosterMonitoringService.name);
@@ -207,7 +206,7 @@ export class MatchRosterMonitoringService {
     return notifications;
   }
 
-  /** Опрашивает протокол матча, пока не истекло live-окно после местного старта. */
+  /** Опрашивает протокол и шлёт начальный состав каждого сета один раз. */
   async monitorLiveMatches(): Promise<number> {
     const now = new Date();
     const windowStart = new Date(
@@ -562,6 +561,10 @@ export class MatchRosterMonitoringService {
     return 1;
   }
 
+  /**
+   * Шлёт начальный состав сета один раз, когда на площадке есть стартовая
+   * шестёрка. Замены по ходу сета не отслеживаются.
+   */
   private async processLiveMatch(
     data: IProcessLineupMatchParams & {
       attackStatistics: IFetchedMatchAttackStatistics;
@@ -585,69 +588,12 @@ export class MatchRosterMonitoringService {
       lineup.away,
     );
     if (!monitoredPlayers.length) return 0;
+    if (!hasSetStartingLineup(lineup.home, lineup.away, currentSet)) return 0;
 
-    const lineupKey = `match-monitoring:${match.id}:live-lineup`;
     const lineupTtl = getPlayerMonitoringStateTtl(match, now);
-    const previous = await this.cache.get<{
-      set: number;
-      home: ICevMatchLineupPlayer[];
-      away: ICevMatchLineupPlayer[];
-    }>(lineupKey);
-    const snapshot = {
-      set: currentSet,
-      home: getMonitoredLineupPlayers(
-        monitoredPlayers,
-        match.homeTeam.id,
-        lineup.home,
-      ),
-      away: getMonitoredLineupPlayers(
-        monitoredPlayers,
-        match.awayTeam.id,
-        lineup.away,
-      ),
-    };
-    if (!previous) {
-      await this.cache.set(lineupKey, snapshot, lineupTtl);
-      return 0;
-    }
-
-    const previousHome = getMonitoredLineupPlayers(
-      monitoredPlayers,
-      match.homeTeam.id,
-      previous.home,
-    );
-    const previousAway = getMonitoredLineupPlayers(
-      monitoredPlayers,
-      match.awayTeam.id,
-      previous.away,
-    );
-    const changes = [
-      getLineupChanges(
-        match.homeTeam.name,
-        previousHome,
-        previous.set,
-        snapshot.home,
-        currentSet,
-      ),
-      getLineupChanges(
-        match.awayTeam.name,
-        previousAway,
-        previous.set,
-        snapshot.away,
-        currentSet,
-      ),
-    ].flatMap((group) => (group ? [group] : []));
-    if (!changes.length) {
-      await this.cache.set(lineupKey, snapshot, lineupTtl);
-      return 0;
-    }
-
     const notificationKey = getLiveNotificationKey(match, currentSet);
     const acquired = await this.cache.acquire(notificationKey, lineupTtl);
-    if (!acquired) {
-      await this.cache.set(lineupKey, snapshot, lineupTtl);
-      return 0;
-    }
+    if (!acquired) return 0;
 
     const sent = await this.telegramService.sendRosterMonitoringNotification(
       formatLiveMonitoringMessage({
@@ -671,7 +617,6 @@ export class MatchRosterMonitoringService {
           match.league.id,
           context,
         ),
-        changes,
         currentSet,
         scheduledAt: match.scheduledAt,
         matchProtocolUrl: createMatchProtocolUrl(
@@ -684,8 +629,6 @@ export class MatchRosterMonitoringService {
       await this.cache.delete(notificationKey);
       return 0;
     }
-
-    await this.cache.set(lineupKey, snapshot, lineupTtl);
 
     return 1;
   }
