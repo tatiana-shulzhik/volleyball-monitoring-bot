@@ -12,11 +12,7 @@ import {
   IFetchedMatchRoster,
 } from '../interfaces/requests/player-statistics.interface';
 import { IMatchRosterMonitoringMessageData } from '../interfaces/requests/match-roster-monitoring.interface';
-import {
-  ILiveLineupChangeGroup,
-  ILiveLineupChangeItem,
-  ILiveLineupMonitoringMessageData,
-} from '../interfaces/requests/live-lineup-monitoring.interface';
+import { ILiveLineupMonitoringMessageData } from '../interfaces/requests/live-lineup-monitoring.interface';
 import {
   IAbsentStartingLineupPlayer,
   IStartingLineupMonitoringMessageData,
@@ -275,65 +271,6 @@ export function getPlayerMonitoringStateTtl(
   return Math.max(1, Math.ceil((expiresAt - now.getTime()) / 1_000));
 }
 
-export function getMonitoredLineupPlayers(
-  monitoredPlayers: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
-  teamId: number,
-  lineup: ICevMatchLineupPlayer[],
-): ICevMatchLineupPlayer[] {
-  return monitoredPlayers.flatMap(({ subscription, relation }) => {
-    if (relation.team.id !== teamId) return [];
-    const player = findLineupPlayer(
-      lineup,
-      subscription.player.fullName,
-      relation.shirtNumber,
-    );
-    return player ? [player] : [];
-  });
-}
-
-export function getLineupChanges(
-  teamName: string,
-  previous: ICevMatchLineupPlayer[],
-  previousSet: number,
-  current: ICevMatchLineupPlayer[],
-  currentSet: number,
-): ILiveLineupChangeGroup | null {
-  const key = (player: ICevMatchLineupPlayer) =>
-    `${player.shirtNumber}:${player.playerName}`;
-  const previousActive = previous.filter((player) =>
-    isActiveMark(player.setMarks[previousSet - 1] ?? ''),
-  );
-  const currentActive = current.filter((player) =>
-    isActiveMark(player.setMarks[currentSet - 1] ?? ''),
-  );
-  const previousKeys = new Set(previousActive.map(key));
-  const currentKeys = new Set(currentActive.map(key));
-  const outgoing = previousActive.filter(
-    (player) => !currentKeys.has(key(player)),
-  );
-  const incoming = currentActive.filter(
-    (player) => !previousKeys.has(key(player)),
-  );
-
-  const toItem = (
-    kind: ILiveLineupChangeItem['kind'],
-    player: ICevMatchLineupPlayer,
-  ): ILiveLineupChangeItem => ({
-    kind,
-    player: {
-      shirtNumber: player.shirtNumber,
-      playerName: player.playerName,
-    },
-  });
-  const items = [
-    ...outgoing.map((player) => toItem('out', player)),
-    ...incoming.map((player) => toItem('in', player)),
-  ];
-  if (!items.length) return null;
-
-  return { teamName, items };
-}
-
 export function getPositionsByShirtNumber(
   teamId: number,
   leagueId: number,
@@ -382,12 +319,25 @@ export function getRosterNotificationKey(
   return `match-monitoring:${match.id}:roster-notification:${digest}`;
 }
 
-/** Ключ дедупа: один live-сигнал на сет. */
+/** Ключ дедупа: один сигнал начального состава на сет. */
 export function getLiveNotificationKey(
   match: MatchEntity,
   currentSet: number,
 ): string {
   return `match-monitoring:${match.id}:live-notification:${currentSet}`;
+}
+
+/** Есть ли стартовая шестёрка (позиции 1–6) у обеих команд в сете. */
+export function hasSetStartingLineup(
+  home: ICevMatchLineupPlayer[],
+  away: ICevMatchLineupPlayer[],
+  currentSet: number,
+): boolean {
+  const setIndex = currentSet - 1;
+  const countStarters = (players: ICevMatchLineupPlayer[]) =>
+    players.filter((player) => isStarter(player.setMarks[setIndex])).length;
+
+  return countStarters(home) >= 6 && countStarters(away) >= 6;
 }
 
 export function findLineupPlayer(
@@ -783,13 +733,8 @@ function formatStartingLineupTable(
 export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
-  const title =
-    data.currentSet <= 1
-      ? '🏐 Стартовый состав'
-      : `🔄 Замена · ${data.currentSet} сет`;
-
   return [
-    `<p><b>${title}</b></p>`,
+    `<p><b>🏐 Стартовый состав · ${data.currentSet} сет</b></p>`,
     formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     formatLiveTeamSection(
@@ -798,7 +743,6 @@ export function formatLiveMonitoringMessage(
       data.homeAttackStatistics,
       data.homePositionsByShirtNumber,
       data.currentSet,
-      data.changes?.find((group) => group.teamName === data.homeTeamName),
     ),
     formatLiveTeamSection(
       data.awayTeamName,
@@ -806,7 +750,6 @@ export function formatLiveMonitoringMessage(
       data.awayAttackStatistics,
       data.awayPositionsByShirtNumber,
       data.currentSet,
-      data.changes?.find((group) => group.teamName === data.awayTeamName),
     ),
     data.matchProtocolUrl
       ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
@@ -820,86 +763,15 @@ function formatLiveTeamSection(
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
-  changes: ILiveLineupChangeGroup | undefined,
 ): string {
-  const changeItems = changes?.items ?? [];
-
   return [
     `<p><b>🔵 ${escapeHtml(teamName)}</b></p>`,
-    changeItems.length
-      ? formatLiveChangesTable(
-          lineup,
-          attackStatistics,
-          positionsByShirtNumber,
-          changeItems,
-          currentSet,
-        )
-      : '',
     formatLiveLineupTable(
       lineup,
       attackStatistics,
       positionsByShirtNumber,
       currentSet,
     ),
-  ].join('');
-}
-
-function formatLiveChangesTable(
-  lineup: ICevMatchLineupPlayer[],
-  attackStatistics: ICevPlayerAttackStatistics[] | undefined,
-  positionsByShirtNumber: Map<number, string>,
-  items: ILiveLineupChangeItem[],
-  currentSet: number,
-): string {
-  const setHeaders = Array.from(
-    { length: currentSet },
-    (_, index) => `<th>С${index + 1}</th>`,
-  );
-  const rows = items.map((item) => {
-    const player = findLineupPlayer(
-      lineup,
-      item.player.playerName,
-      item.player.shirtNumber,
-    ) ?? {
-      playerName: item.player.playerName,
-      shirtNumber: item.player.shirtNumber,
-      setMarks: [],
-    };
-    const statistics = findLivePlayerStatistics(player, attackStatistics);
-    const setMarks = Array.from(
-      { length: currentSet },
-      (_, index) =>
-        `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
-    );
-    const position =
-      player.shirtNumber === null
-        ? '—'
-        : formatPlayerPosition(
-            positionsByShirtNumber.get(player.shirtNumber) ?? '—',
-          );
-
-    return (
-      '<tr>' +
-      `<td align="center">${item.player.shirtNumber ?? '—'}</td>` +
-      `<td>${escapeHtml(item.player.playerName)}</td>` +
-      setMarks.join('') +
-      `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
-      `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
-      `<td align="center">${position}</td>` +
-      '</tr>'
-    );
-  });
-
-  return [
-    '<p><b>🔁 Замена</b></p>',
-    '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th>' +
-      setHeaders.join('') +
-      '<th>Рейтинг<br>(о/с)</th>' +
-      '<th>Атака<br>(у/п)</th>' +
-      '<th>Поз</th></tr>',
-    ...rows,
-    '</table>',
   ].join('');
 }
 
