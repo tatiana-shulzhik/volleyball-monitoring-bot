@@ -739,8 +739,7 @@ function readCourtPositions(html: string): {
     const shirtNumber = readNumber(cleanText(match[2]));
     if (!position || !side || shirtNumber === null) continue;
 
-    // На схеме Femminile: dx = хозяева, sx = гости.
-    (side === 'dx' ? home : away).set(shirtNumber, position);
+    (side === 'sx' ? home : away).set(shirtNumber, position);
   }
 
   return { home, away };
