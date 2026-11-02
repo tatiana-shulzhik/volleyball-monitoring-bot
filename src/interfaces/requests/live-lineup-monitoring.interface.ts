@@ -11,6 +11,12 @@ export interface ILiveLineupMonitoringMessageData {
   sourceCode?: ESourceCode;
   homeTeamName: string;
   awayTeamName: string;
+  changes?: {
+    teamName: string;
+    playerName: string;
+    shirtNumber: number | null;
+    entered: boolean;
+  }[];
   home: ICevMatchLineupPlayer[];
   away: ICevMatchLineupPlayer[];
   homeAttackStatistics?: ICevPlayerAttackStatistics[];

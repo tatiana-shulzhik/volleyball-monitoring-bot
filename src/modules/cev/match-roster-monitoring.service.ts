@@ -562,8 +562,8 @@ export class MatchRosterMonitoringService {
   }
 
   /**
-   * Шлёт начальный состав сета один раз, когда на площадке есть стартовая
-   * шестёрка. Замены по ходу сета не отслеживаются.
+   * Сообщает об изменениях стартового состава отслеживаемых игроков между
+   * сетами. Замены по ходу сета не отслеживаются.
    */
   private async processLiveMatch(
     data: IProcessLineupMatchParams & {
@@ -580,6 +580,7 @@ export class MatchRosterMonitoringService {
     const lineup = isFemminile
       ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
       : data.lineup;
+    if (currentSet < 2) return 0;
 
     const monitoredPlayers = getMonitoredPlayers(
       match,
@@ -589,6 +590,33 @@ export class MatchRosterMonitoringService {
     );
     if (!monitoredPlayers.length) return 0;
     if (!hasSetStartingLineup(lineup.home, lineup.away, currentSet)) return 0;
+    if (!hasSetStartingLineup(lineup.home, lineup.away, currentSet - 1))
+      return 0;
+
+    const changes = monitoredPlayers.flatMap(
+      ({ subscription, relation, teamData }) => {
+        const player = findLineupPlayer(
+          teamData,
+          subscription.player.fullName,
+          relation.shirtNumber,
+        );
+        const wasStarter = isStarter(player?.setMarks[currentSet - 2]);
+        const isCurrentStarter = isStarter(player?.setMarks[currentSet - 1]);
+        if (wasStarter === isCurrentStarter) return [];
+        return [
+          {
+            teamName:
+              relation.team.id === match.homeTeam.id
+                ? match.homeTeam.name
+                : match.awayTeam.name,
+            playerName: player!.playerName,
+            shirtNumber: player!.shirtNumber,
+            entered: isCurrentStarter,
+          },
+        ];
+      },
+    );
+    if (!changes.length) return 0;
 
     const lineupTtl = getPlayerMonitoringStateTtl(match, now);
     const notificationKey = getLiveNotificationKey(match, currentSet);
@@ -603,6 +631,7 @@ export class MatchRosterMonitoringService {
         sourceCode: match.league.stage.championship.source?.code,
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
+        changes,
         home: lineup.home,
         away: lineup.away,
         homeAttackStatistics: attackStatistics.home,
