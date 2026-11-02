@@ -743,6 +743,9 @@ export function formatLiveMonitoringMessage(
       data.homeAttackStatistics,
       data.homePositionsByShirtNumber,
       data.currentSet,
+      (data.changes ?? []).filter(
+        (change) => change.teamName === data.homeTeamName,
+      ),
     ),
     formatLiveTeamSection(
       data.awayTeamName,
@@ -750,6 +753,9 @@ export function formatLiveMonitoringMessage(
       data.awayAttackStatistics,
       data.awayPositionsByShirtNumber,
       data.currentSet,
+      (data.changes ?? []).filter(
+        (change) => change.teamName === data.awayTeamName,
+      ),
     ),
     data.matchProtocolUrl
       ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
@@ -763,11 +769,27 @@ function formatLiveTeamSection(
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
+  changes: NonNullable<ILiveLineupMonitoringMessageData['changes']>,
 ): string {
+  const changedLineup = changes.flatMap((change) => {
+    const player = findLineupPlayer(
+      lineup,
+      change.playerName,
+      change.shirtNumber,
+    );
+    return player ? [player] : [];
+  });
   return [
     `<p><b>🔵 ${escapeHtml(teamName)}</b></p>`,
     formatLiveLineupTable(
-      lineup,
+      changedLineup,
+      attackStatistics,
+      positionsByShirtNumber,
+      currentSet,
+      '🔁 Замена',
+    ),
+    formatLiveLineupTable(
+      lineup.filter((player) => isStarter(player.setMarks[currentSet - 1])),
       attackStatistics,
       positionsByShirtNumber,
       currentSet,
@@ -780,6 +802,7 @@ function formatLiveLineupTable(
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
+  title = '👥 Основной состав',
 ): string {
   if (!lineup.length) return '';
 
@@ -792,8 +815,6 @@ function formatLiveLineupTable(
       player,
       statistics: findLivePlayerStatistics(player, attackStatistics),
     }))
-    // Стартовый состав текущего сета + история по прошлым сетам в колонках С1…СN.
-    .filter(({ player }) => isStarter(player.setMarks[currentSet - 1]))
     .sort(
       (left, right) =>
         (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
@@ -827,7 +848,7 @@ function formatLiveLineupTable(
   if (!rows.length) return '';
 
   return [
-    '<p><b>👥 Основной состав</b></p>',
+    `<p><b>${title}</b></p>`,
     '<table bordered striped>',
     '<tr><th>№</th><th>Игрок</th>' +
       setHeaders.join('') +
