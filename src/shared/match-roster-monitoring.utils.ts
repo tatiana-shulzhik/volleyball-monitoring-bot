@@ -334,10 +334,14 @@ export function hasSetStartingLineup(
   currentSet: number,
 ): boolean {
   const setIndex = currentSet - 1;
-  const countStarters = (players: ICevMatchLineupPlayer[]) =>
-    players.filter((player) => isStarter(player.setMarks[setIndex])).length;
+  const hasAllPositions = (players: ICevMatchLineupPlayer[]) => {
+    const positions = new Set(
+      players.map((player) => player.setMarks[setIndex]).filter(isStarter),
+    );
+    return positions.size === 6;
+  };
 
-  return countStarters(home) >= 6 && countStarters(away) >= 6;
+  return hasAllPositions(home) && hasAllPositions(away);
 }
 
 export function findLineupPlayer(
