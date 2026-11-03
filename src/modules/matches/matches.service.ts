@@ -370,39 +370,6 @@ export class MatchesService {
     });
   }
 
-  async getFrequentlyRelevantStages(
-    stages: CompetitionStagesEntity[],
-  ): Promise<CompetitionStagesEntity[]> {
-    const now = new Date();
-    const currentStages = stages.filter(
-      ({ startsAt, endsAt }) =>
-        startsAt !== null &&
-        endsAt !== null &&
-        startsAt <= now &&
-        endsAt >= now,
-    );
-    const completedIds = currentStages.length
-      ? await this.matchesRepository.findCompletedStageIds(
-          currentStages.map(({ id }) => id),
-        )
-      : [];
-    const completed = new Set(completedIds);
-    const relevant = stages.filter(
-      ({ id, startsAt, endsAt }) =>
-        startsAt !== null &&
-        endsAt !== null &&
-        endsAt >= now &&
-        (startsAt > now || !completed.has(id)),
-    );
-
-    this.logger.log(
-      `Frequent matches sync: ${relevant.length} of ` +
-        `${stages.length} stages require refresh`,
-    );
-
-    return relevant;
-  }
-
   private resolveCevMatchDates(
     matches: ICevMatch[],
     teamsByExternalId: Map<string, TeamEntity>,

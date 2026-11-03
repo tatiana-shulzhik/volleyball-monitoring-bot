@@ -145,7 +145,11 @@ export class CevCatalogService {
     let stages = await this.championshipsService.getCevStages();
 
     if (frequentOnly) {
-      stages = await this.matchesService.getFrequentlyRelevantStages(stages);
+      const currentYear = new Date().getFullYear();
+      stages = stages.filter((stage) => {
+        const endYear = parseSeasonEndYear(stage.season?.name);
+        return endYear === undefined || endYear >= currentYear;
+      });
     }
 
     const fetched = await this.gateway.fetchMatches(stages);
