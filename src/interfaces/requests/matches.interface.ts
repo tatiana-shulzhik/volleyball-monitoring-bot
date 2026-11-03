@@ -6,6 +6,7 @@ import { EntityChanges } from '../responses/entity-changes.interface';
 
 export interface ICevMatch {
   externalId: string;
+  sourceMatchId?: string;
   leagueExternalId: number;
   homeTeamExternalId: string;
   awayTeamExternalId: string;
