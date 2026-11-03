@@ -151,25 +151,6 @@ export class MatchesRepository {
     return query.getMany();
   }
 
-  async findCompletedStageIds(stageIds: number[]): Promise<number[]> {
-    const rows: Array<{ championship_id: number }> = await this.repository
-      .createQueryBuilder('match')
-      .innerJoin('match.league', 'league')
-      .select('league.stage_id', 'championship_id')
-      .where('league.stage_id IN (:...stageIds)', {
-        stageIds,
-      })
-      .groupBy('league.stage_id')
-      .having('COUNT(match.id) > 0')
-      .andHaving(
-        'COUNT(match.id) FILTER (WHERE match.status = :scheduled) = 0',
-        { scheduled: EMatchStatus.Scheduled },
-      )
-      .getRawMany();
-
-    return rows.map(({ championship_id }) => Number(championship_id));
-  }
-
   findFinishedByStageIds(stageIds: number[]): Promise<MatchEntity[]> {
     return this.repository.find({
       where: {
