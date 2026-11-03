@@ -433,6 +433,7 @@ export class MatchRosterMonitoringService {
     const { match, lineup, context, now } = data;
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (currentSet !== null && currentSet >= 2) return 0;
+    if (!hasSetStartingLineup(lineup.home, lineup.away, 1)) return 0;
 
     const matchStarted =
       (currentSet !== null && currentSet >= 1) ||

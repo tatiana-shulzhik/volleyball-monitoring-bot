@@ -417,7 +417,7 @@ export function readLegaPregaraMatchIds(html: string): Array<{
   }> = [];
 
   for (const match of html.matchAll(
-    /<span\b[^>]*data-id=["'](\d+)["'][^>]*class=["'][^"']*\bgara2roster\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi,
+    /<span\b(?=[^>]*\bdata-id=["'](\d+)["'])(?=[^>]*\bclass=["'][^"']*\bgara2roster\b[^"']*["'])[^>]*>([\s\S]*?)<\/span>/gi,
   )) {
     const label = cleanLegaText(match[2]);
     const teams = label.split(/\s+[-–—]\s+/).map((part) => part.trim());
