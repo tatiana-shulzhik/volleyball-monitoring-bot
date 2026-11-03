@@ -61,10 +61,11 @@ export class LegaVolleyCatalogService {
       return;
     }
 
-    const [fetched, teams] = await Promise.all([
-      this.gateway.fetchMatches(schedules),
+    const [teams, knownIds] = await Promise.all([
       this.teamsService.getBySource(ESourceCode.LegaVolley),
+      this.matchesService.getLegaMatchesWithSourceId(),
     ]);
+    const fetched = await this.gateway.fetchMatches(schedules, knownIds);
     const matches = await this.matchesService.upsertCatalogMatches(
       fetched.matches,
       new Map(leagues.map((league) => [league.externalId, league])),
@@ -104,8 +105,11 @@ export class LegaVolleyCatalogService {
       championshipsByExternalId,
       ESourceCode.LegaVolley,
     );
+    const knownIds = await this.matchesService.getLegaMatchesWithSourceId();
     const leagueCatalog = await this.gateway.fetchLeagueCatalog(
       this.getTeamStages(catalog.stages, includeHistoricalTeams),
+      knownIds,
+      includeHistoricalTeams,
     );
     const leaguesByExternalId = await this.leaguesService.upsertCatalogLeagues(
       leagueCatalog.leagues,
@@ -135,6 +139,11 @@ export class LegaVolleyCatalogService {
         `${catalog.stages.length} stages, ${teamsByExternalId.size} teams, ` +
         `${players} players, ${matches} matches`,
     );
+    if (!catalog.isComplete || !leagueCatalog.isComplete) {
+      throw new Error(
+        'LegaVolley catalog synchronization was incomplete; retry is required',
+      );
+    }
   }
 
   private async synchronizeMatchStatisticsSince(

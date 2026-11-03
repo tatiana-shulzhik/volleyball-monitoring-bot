@@ -55,6 +55,28 @@ export class MatchesService {
     private readonly femminileGateway: LegaVolleyFemminileGateway,
   ) {}
 
+  async getLegaMatchesWithSourceId(): Promise<Set<string>> {
+    const matches = await this.matchesRepository.getWhere({
+      league: {
+        stage: { championship: { source: { code: ESourceCode.LegaVolley } } },
+      },
+    });
+    return new Set(
+      matches.flatMap((match) =>
+        match.externalId && /^\d+$/.test(match.externalId)
+          ? [
+              createLegaMatchLookupKey(
+                match.league.externalId,
+                match.homeTeam.externalId,
+                match.awayTeam.externalId,
+                match.scheduledAt,
+              ),
+            ]
+          : [],
+      ),
+    );
+  }
+
   async getMatchRoster(matchId: number): Promise<{
     match: MatchEntity;
     homeRoster: PlayerTeamLeagueEntity[];
@@ -247,10 +269,33 @@ export class MatchesService {
           : [],
       ),
     );
+    const pairKey = (leagueId: number, homeId: number, awayId: number) =>
+      `${leagueId}:${homeId}:${awayId}`;
+    const existingByPair = new Map<string, MatchEntity[]>();
+    for (const match of existing) {
+      const key = pairKey(
+        match.league.id,
+        match.homeTeam.id,
+        match.awayTeam.id,
+      );
+      existingByPair.set(key, [...(existingByPair.get(key) ?? []), match]);
+    }
+    const incomingPairCounts = new Map<string, number>();
+    for (const { league, homeTeam, awayTeam } of resolved) {
+      const key = pairKey(league.id, homeTeam.id, awayTeam.id);
+      incomingPairCounts.set(key, (incomingPairCounts.get(key) ?? 0) + 1);
+    }
 
     await this.matchesRepository.saveMany(
       resolved.map(({ match, league, homeTeam, awayTeam }) => {
+        const key = pairKey(league.id, homeTeam.id, awayTeam.id);
+        const pairMatches = existingByPair.get(key) ?? [];
         const stored =
+          (match.sourceMatchId
+            ? existingByExternalIdAndLeague.get(
+                `${match.sourceMatchId}:${league.id}`,
+              )
+            : undefined) ??
           existingByExternalIdAndLeague.get(
             `${match.externalId}:${league.id}`,
           ) ??
@@ -261,11 +306,15 @@ export class MatchesService {
               awayTeam.name,
               match.scheduledAt,
             ),
-          );
+          ) ??
+          (incomingPairCounts.get(key) === 1 && pairMatches.length === 1
+            ? pairMatches[0]
+            : undefined);
 
         return {
           id: stored?.id,
-          externalId: stored?.externalId ?? match.externalId,
+          externalId:
+            match.sourceMatchId ?? stored?.externalId ?? match.externalId,
           league,
           homeTeam,
           awayTeam,

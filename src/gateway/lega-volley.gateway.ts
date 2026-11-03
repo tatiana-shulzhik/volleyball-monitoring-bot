@@ -18,7 +18,10 @@ import {
   ILegaOption,
   ILegaPendingMatchKeys,
 } from '../interfaces/requests/lega-volley.interface';
-import { IFetchedMatches } from '../interfaces/requests/matches.interface';
+import {
+  ICevMatch,
+  IFetchedMatches,
+} from '../interfaces/requests/matches.interface';
 import {
   IFetchedMatchAttackStatistics,
   IFetchedMatchLineup,
@@ -149,6 +152,8 @@ export class LegaVolleyGateway {
 
   async fetchLeagueCatalog(
     stages: ICevCompetitionStage[],
+    knownIds: ReadonlySet<string> = new Set(),
+    includeHistorical = false,
   ): Promise<FetchedLeagueCatalog> {
     const keys = new Set(
       stages.map(
@@ -187,6 +192,16 @@ export class LegaVolleyGateway {
     });
     const matches = teamResults.flatMap((result) =>
       result.status === 'fulfilled' ? result.value.matches : [],
+    );
+    const sourceIdsComplete = await this.enrichMatchSourceIds(
+      matches,
+      teams,
+      catalogLeagues.map(({ league, year }) => ({
+        year,
+        leagueExternalId: league.externalId,
+      })),
+      knownIds,
+      includeHistorical,
     );
     const uniqueTeams = [
       ...new Map(
@@ -250,6 +265,7 @@ export class LegaVolleyGateway {
         ...enrichedById.get(team.externalId),
       })),
       isComplete:
+        sourceIdsComplete &&
         teamResults.every((result) => result.status === 'fulfilled') &&
         enrichedResults.every((result) => result.status === 'fulfilled'),
       players,
@@ -259,15 +275,17 @@ export class LegaVolleyGateway {
 
   async fetchMatches(
     schedules: ILegaLeagueSchedule[],
+    knownIds: ReadonlySet<string> = new Set(),
   ): Promise<IFetchedMatches> {
     const results = await mapSettledWithConcurrency({
       items: schedules,
-      mapper: async ({ year, leagueExternalId }) =>
-        readLegaMatches(
-          await this.fetchLeagueSchedule(year, leagueExternalId),
-          leagueExternalId,
-          year,
-        ),
+      mapper: async ({ year, leagueExternalId }) => {
+        const html = await this.fetchLeagueSchedule(year, leagueExternalId);
+        return {
+          matches: readLegaMatches(html, leagueExternalId, year),
+          teams: readLegaTeams(html, leagueExternalId),
+        };
+      },
       concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
     });
 
@@ -281,11 +299,23 @@ export class LegaVolleyGateway {
       }
     });
 
+    const matches = results.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value.matches : [],
+    );
+    const teams = results.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value.teams : [],
+    );
+    const sourceIdsComplete = await this.enrichMatchSourceIds(
+      matches,
+      teams,
+      schedules,
+      knownIds,
+    );
     return {
-      matches: results.flatMap((result) =>
-        result.status === 'fulfilled' ? result.value : [],
-      ),
-      isComplete: results.every((result) => result.status === 'fulfilled'),
+      matches,
+      isComplete:
+        sourceIdsComplete &&
+        results.every((result) => result.status === 'fulfilled'),
     };
   }
 
@@ -317,7 +347,7 @@ export class LegaVolleyGateway {
   async fetchMatchRosters(
     matches: MatchEntity[],
   ): Promise<PromiseSettledResult<IFetchedMatchRoster>[]> {
-    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    const matchIdsByKey = await this.fetchMissingPregaraMatchIds(matches);
     const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
@@ -359,7 +389,7 @@ export class LegaVolleyGateway {
   async fetchMatchLineups(
     matches: MatchEntity[],
   ): Promise<PromiseSettledResult<IFetchedMatchLineup>[]> {
-    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    const matchIdsByKey = await this.fetchMissingPregaraMatchIds(matches);
     const results = await mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
@@ -394,7 +424,7 @@ export class LegaVolleyGateway {
       attackStatistics: IFetchedMatchAttackStatistics;
     }>[]
   > {
-    const matchIdsByKey = await this.fetchPregaraMatchIdsByTeamKey();
+    const matchIdsByKey = await this.fetchMissingPregaraMatchIds(matches);
     return mapSettledWithConcurrency({
       items: matches,
       mapper: async (match) => {
@@ -997,6 +1027,14 @@ export class LegaVolleyGateway {
     return results.every((result) => result.status === 'fulfilled');
   }
 
+  private fetchMissingPregaraMatchIds(
+    matches: MatchEntity[],
+  ): Promise<Map<string, string>> {
+    return matches.some((match) => !/^\d+$/.test(match.externalId ?? ''))
+      ? this.fetchPregaraMatchIdsByTeamKey()
+      : Promise.resolve(new Map());
+  }
+
   private async fetchPregaraMatchIdsByTeamKey(): Promise<Map<string, string>> {
     const pages = await mapSettledWithConcurrency({
       items: [...LEGA_VOLLEY_PREGARA_SERIES],
@@ -1026,6 +1064,153 @@ export class LegaVolleyGateway {
     });
 
     return matchIdsByKey;
+  }
+
+  private async enrichMatchSourceIds(
+    matches: ICevMatch[],
+    teams: ICevTeam[],
+    schedules: ILegaLeagueSchedule[],
+    knownIds: ReadonlySet<string> = new Set(),
+    includeHistorical = false,
+  ): Promise<boolean> {
+    let allPagesLoaded = true;
+    const teamNames = new Map(
+      teams.map((team) => [team.externalId, team.name]),
+    );
+    const needsId = (match: ICevMatch) =>
+      !knownIds.has(
+        createLegaMatchLookupKey(
+          match.leagueExternalId,
+          match.homeTeamExternalId,
+          match.awayTeamExternalId,
+          match.scheduledAt,
+        ),
+      );
+    const years = [...new Set(schedules.map(({ year }) => year))].filter(
+      (year) =>
+        (includeHistorical || year >= new Date().getFullYear()) &&
+        matches.some(
+          (match) =>
+            match.externalId.startsWith(`legavolley:${year}:`) &&
+            needsId(match),
+        ),
+    );
+    for (const year of years) {
+      const roots = await mapSettledWithConcurrency({
+        items: [...LEGA_VOLLEY_PREGARA_SERIES],
+        mapper: (serie) =>
+          this.get(
+            `${LEGA_VOLLEY_BASE_URL}/pregara/?stagione=${year}&serie=${encodeURIComponent(serie)}`,
+          ),
+        concurrency: LEGA_VOLLEY_HTTP_CONCURRENCY,
+      });
+      const wanted = new Set(
+        schedules
+          .filter((item) => item.year === year)
+          .map((item) => item.leagueExternalId),
+      );
+      for (let i = 0; i < roots.length; i++) {
+        const root = roots[i];
+        if (root.status === 'rejected') {
+          allPagesLoaded = false;
+          this.logger.warn(
+            `Pre Gara catalog request failed for ${year}/${LEGA_VOLLEY_PREGARA_SERIES[i]}: ${getErrorMessage(root.reason)}`,
+          );
+          continue;
+        }
+        const seasonSelect = root.value.match(
+          /<select\b[^>]*name=["']stagione["'][^>]*>([\s\S]*?)<\/select>/i,
+        )?.[1];
+        const selectedSeason = seasonSelect?.match(
+          /<option\b(?=[^>]*\bselected\b)(?=[^>]*\bvalue=["']([^"']+)["'])[^>]*>/i,
+        )?.[1];
+        if (selectedSeason && selectedSeason !== String(year)) {
+          allPagesLoaded = false;
+          this.logger.warn(
+            `Pre Gara returned season ${selectedSeason} instead of ${year}`,
+          );
+          continue;
+        }
+        const serie = LEGA_VOLLEY_PREGARA_SERIES[i];
+        for (const championship of readLegaOptions(root.value, 'campionato')) {
+          const leagueId = Number(championship.value);
+          if (!wanted.has(leagueId)) continue;
+          const candidates = matches.filter(
+            (match) =>
+              match.leagueExternalId === leagueId &&
+              match.externalId.startsWith(`legavolley:${year}:`),
+          );
+          if (!candidates.some(needsId)) continue;
+          try {
+            const base = `${LEGA_VOLLEY_BASE_URL}/pregara/?stagione=${year}&serie=${encodeURIComponent(serie)}&campionato=${leagueId}`;
+            const leagueHtml = await this.get(base);
+            const phases = readLegaOptions(leagueHtml, 'fase');
+            const references = new Map<string, Set<string>>();
+            let complete = phases.length > 0;
+            for (const phase of phases) {
+              const phaseUrl = `${base}&fase=${encodeURIComponent(phase.value)}`;
+              const phaseHtml = await this.get(phaseUrl);
+              const days = readLegaOptions(phaseHtml, 'giornata');
+              if (!days.length) complete = false;
+              const pages = await mapSettledWithConcurrency({
+                items: days,
+                mapper: (day) =>
+                  this.get(
+                    `${phaseUrl}&giornata=${encodeURIComponent(day.value)}`,
+                  ),
+                concurrency: 2,
+              });
+              for (const page of pages) {
+                if (page.status === 'rejected') {
+                  complete = false;
+                  this.logger.warn(
+                    `Pre Gara round request failed for ${year}/${leagueId}: ${getErrorMessage(page.reason)}`,
+                  );
+                  continue;
+                }
+                for (const ref of readLegaPregaraMatchIds(page.value)) {
+                  const key = createLegaPregaraMatchKey(
+                    ref.homeTeamName,
+                    ref.awayTeamName,
+                  );
+                  const ids = references.get(key) ?? new Set<string>();
+                  ids.add(ref.sourceMatchId);
+                  references.set(key, ids);
+                }
+              }
+            }
+            if (!complete) {
+              allPagesLoaded = false;
+              continue;
+            }
+            const counts = new Map<string, number>();
+            for (const match of candidates) {
+              const key = createLegaPregaraMatchKey(
+                teamNames.get(match.homeTeamExternalId) ?? '',
+                teamNames.get(match.awayTeamExternalId) ?? '',
+              );
+              counts.set(key, (counts.get(key) ?? 0) + 1);
+            }
+            for (const match of candidates) {
+              if (!needsId(match)) continue;
+              const key = createLegaPregaraMatchKey(
+                teamNames.get(match.homeTeamExternalId) ?? '',
+                teamNames.get(match.awayTeamExternalId) ?? '',
+              );
+              const ids = references.get(key);
+              if (counts.get(key) === 1 && ids?.size === 1)
+                match.sourceMatchId = [...ids][0];
+            }
+          } catch (error) {
+            allPagesLoaded = false;
+            this.logger.warn(
+              `Pre Gara catalog request failed for ${year}/${leagueId}: ${getErrorMessage(error)}`,
+            );
+          }
+        }
+      }
+    }
+    return allPagesLoaded;
   }
 
   private resolvePregaraMatchId(
