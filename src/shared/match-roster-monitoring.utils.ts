@@ -774,7 +774,7 @@ export function formatLiveMonitoringMessage(
 
 function formatLiveTeamSection(
   teamName: string,
-  lineup: ICevMatchLineupPlayer[],
+  lineup: IStartingLineupPlayer[],
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
@@ -817,7 +817,7 @@ function formatLiveTeamSection(
 }
 
 function formatLiveLineupTable(
-  lineup: ICevMatchLineupPlayer[],
+  lineup: IStartingLineupPlayer[],
   attackStatistics: ICevPlayerAttackStatistics[] | undefined,
   positionsByShirtNumber: Map<number, string>,
   currentSet: number,
@@ -857,6 +857,8 @@ function formatLiveLineupTable(
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
         `<td>${escapeHtml(player.playerName)}</td>` +
         setMarks.join('') +
+        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
+        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
         `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
@@ -871,8 +873,10 @@ function formatLiveLineupTable(
     '<table bordered striped>',
     '<tr><th>№</th><th>Игрок</th>' +
       setHeaders.join('') +
-      '<th>Рейтинг<br>(о/с)</th>' +
-      '<th>Атака<br>(у/п)</th>' +
+      '<th>🏆Рейтинг<br>(о/с)</th>' +
+      '<th>🏆Атака<br>(у/п)</th>' +
+      '<th>🏐Рейтинг<br>(о/с)</th>' +
+      '<th>🏐Атака<br>(у/п)</th>' +
       '<th>Поз</th></tr>',
     ...rows,
     '</table>',
