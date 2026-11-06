@@ -737,8 +737,13 @@ function formatStartingLineupTable(
 export function formatLiveMonitoringMessage(
   data: ILiveLineupMonitoringMessageData,
 ): string {
+  const changes = data.changes ?? [];
+  const hasEntered = changes.some((change) => change.entered);
+  const hasLeft = changes.some((change) => !change.entered);
+  const title =
+    hasEntered && hasLeft ? 'Замена и вышел' : hasEntered ? 'Вышел' : 'Замена';
   return [
-    `<p><b>🏐 Стартовый состав · ${data.currentSet} сет</b></p>`,
+    `<p><b>🏐 ${title} · ${data.currentSet} сет</b></p>`,
     formatCompetitionHeader(data),
     `<p><b>${escapeHtml(data.homeTeamName)} — ${escapeHtml(data.awayTeamName)}</b></p>`,
     formatLiveTeamSection(
@@ -775,22 +780,32 @@ function formatLiveTeamSection(
   currentSet: number,
   changes: NonNullable<ILiveLineupMonitoringMessageData['changes']>,
 ): string {
-  const changedLineup = changes.flatMap((change) => {
-    const player = findLineupPlayer(
-      lineup,
-      change.playerName,
-      change.shirtNumber,
-    );
-    return player ? [player] : [];
-  });
+  const changedLineup = (entered: boolean) =>
+    changes
+      .filter((change) => change.entered === entered)
+      .flatMap((change) => {
+        const player = findLineupPlayer(
+          lineup,
+          change.playerName,
+          change.shirtNumber,
+        );
+        return player ? [player] : [];
+      });
   return [
     `<p><b>🔵 ${escapeHtml(teamName)}</b></p>`,
     formatLiveLineupTable(
-      changedLineup,
+      changedLineup(false),
       attackStatistics,
       positionsByShirtNumber,
       currentSet,
       '🔁 Замена',
+    ),
+    formatLiveLineupTable(
+      changedLineup(true),
+      attackStatistics,
+      positionsByShirtNumber,
+      currentSet,
+      '🔁 Вышел',
     ),
     formatLiveLineupTable(
       lineup.filter((player) => isStarter(player.setMarks[currentSet - 1])),
