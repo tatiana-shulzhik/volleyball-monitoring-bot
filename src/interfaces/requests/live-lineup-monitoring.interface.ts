@@ -1,8 +1,6 @@
+import { IStartingLineupPlayer } from './starting-lineup-monitoring.interface';
 import { ESourceCode } from '../../shared/enums';
-import {
-  ICevMatchLineupPlayer,
-  ICevPlayerAttackStatistics,
-} from './player-statistics.interface';
+import { ICevPlayerAttackStatistics } from './player-statistics.interface';
 
 export interface ILiveLineupMonitoringMessageData {
   championshipName: string;
@@ -17,8 +15,8 @@ export interface ILiveLineupMonitoringMessageData {
     shirtNumber: number | null;
     entered: boolean;
   }[];
-  home: ICevMatchLineupPlayer[];
-  away: ICevMatchLineupPlayer[];
+  home: IStartingLineupPlayer[];
+  away: IStartingLineupPlayer[];
   homeAttackStatistics?: ICevPlayerAttackStatistics[];
   awayAttackStatistics?: ICevPlayerAttackStatistics[];
   homePositionsByShirtNumber: Map<number, string>;

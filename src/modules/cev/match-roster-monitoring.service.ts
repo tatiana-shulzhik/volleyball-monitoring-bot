@@ -619,6 +619,16 @@ export class MatchRosterMonitoringService {
     );
     if (!changes.length) return 0;
 
+    const [homeStatistics, awayStatistics] = await Promise.all([
+      this.playersService.findTeamStatistics({
+        teamId: match.homeTeam.id,
+        leagueId: match.league.id,
+      }),
+      this.playersService.findTeamStatistics({
+        teamId: match.awayTeam.id,
+        leagueId: match.league.id,
+      }),
+    ]);
     const lineupTtl = getPlayerMonitoringStateTtl(match, now);
     const notificationKey = getLiveNotificationKey(match, currentSet);
     const acquired = await this.cache.acquire(notificationKey, lineupTtl);
@@ -633,8 +643,8 @@ export class MatchRosterMonitoringService {
         homeTeamName: match.homeTeam.name,
         awayTeamName: match.awayTeam.name,
         changes,
-        home: lineup.home,
-        away: lineup.away,
+        home: addLineupStatistics(lineup.home, homeStatistics?.players),
+        away: addLineupStatistics(lineup.away, awayStatistics?.players),
         homeAttackStatistics: attackStatistics.home,
         awayAttackStatistics: attackStatistics.away,
         homePositionsByShirtNumber: getPositionsByShirtNumber(
