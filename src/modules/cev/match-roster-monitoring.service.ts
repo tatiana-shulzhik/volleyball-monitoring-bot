@@ -430,7 +430,19 @@ export class MatchRosterMonitoringService {
   private async processStartingLineupMatch(
     data: IProcessLineupMatchParams,
   ): Promise<number> {
-    const { match, lineup, context, now } = data;
+    const { match, context, now } = data;
+    let { lineup } = data;
+    if (
+      match.league.stage.championship.source?.code ===
+      ESourceCode.LegaVolleyFemminile
+    ) {
+      lineup = await this.resolveLiveLineupHistory(
+        match,
+        lineup,
+        1,
+        now,
+      );
+    }
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (currentSet !== null && currentSet >= 2) return 0;
     if (!hasSetStartingLineup(lineup.home, lineup.away, 1)) return 0;
@@ -579,7 +591,12 @@ export class MatchRosterMonitoringService {
       match.league.stage.championship.source?.code ===
       ESourceCode.LegaVolleyFemminile;
     const lineup = isFemminile
-      ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
+      ? await this.resolveLiveLineupHistory(
+          match,
+          data.lineup,
+          currentSet,
+          now,
+        )
       : data.lineup;
     if (currentSet < 2) return 0;
 
@@ -751,19 +768,32 @@ export class MatchRosterMonitoringService {
     currentSet: number,
     now: Date,
   ): Promise<IProcessLineupMatchParams['lineup']> {
-    const historyKey = `match-monitoring:${match.id}:lineup-set-marks`;
+    const historyKey = `match-monitoring:${match.id}:starting-set-marks`;
     const previous = await this.cache.get<{
       home: ICevMatchLineupPlayer[];
       away: ICevMatchLineupPlayer[];
     }>(historyKey);
+    const alreadyCaptured =
+      previous &&
+      hasSetStartingLineup(previous.home, previous.away, currentSet);
+    if (
+      !alreadyCaptured &&
+      !hasSetStartingLineup(lineup.home, lineup.away, currentSet)
+    ) {
+      return {
+        ...lineup,
+        home: previous?.home ?? [],
+        away: previous?.away ?? [],
+      };
+    }
     const home = mergeLineupSetMarksHistory(
       previous?.home,
-      lineup.home,
+      alreadyCaptured ? previous.home : lineup.home,
       currentSet,
     );
     const away = mergeLineupSetMarksHistory(
       previous?.away,
-      lineup.away,
+      alreadyCaptured ? previous.away : lineup.away,
       currentSet,
     );
 
