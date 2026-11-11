@@ -301,6 +301,7 @@ export class TelegramService
           Number(context.match[2] ?? 0) as 0 | 1,
           context.match[3] as ESourceCode | undefined,
           matchRoster.matchUrl,
+          matchRoster.matchLineupUrl,
         ),
       );
     });

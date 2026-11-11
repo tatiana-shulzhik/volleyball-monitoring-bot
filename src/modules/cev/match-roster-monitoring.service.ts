@@ -436,12 +436,7 @@ export class MatchRosterMonitoringService {
       match.league.stage.championship.source?.code ===
       ESourceCode.LegaVolleyFemminile
     ) {
-      lineup = await this.resolveLiveLineupHistory(
-        match,
-        lineup,
-        1,
-        now,
-      );
+      lineup = await this.resolveLiveLineupHistory(match, lineup, 1, now);
     }
     const currentSet = getCurrentSet(lineup.home, lineup.away);
     if (currentSet !== null && currentSet >= 2) return 0;
@@ -591,12 +586,7 @@ export class MatchRosterMonitoringService {
       match.league.stage.championship.source?.code ===
       ESourceCode.LegaVolleyFemminile;
     const lineup = isFemminile
-      ? await this.resolveLiveLineupHistory(
-          match,
-          data.lineup,
-          currentSet,
-          now,
-        )
+      ? await this.resolveLiveLineupHistory(match, data.lineup, currentSet, now)
       : data.lineup;
     if (currentSet < 2) return 0;
 

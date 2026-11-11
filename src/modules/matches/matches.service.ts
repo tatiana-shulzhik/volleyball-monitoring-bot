@@ -1,3 +1,4 @@
+import { createMatchLineupUrl } from '../../shared/consts/constants';
 import { Injectable, Logger } from '@nestjs/common';
 import { In } from 'typeorm';
 import { LeaguesRepository } from '../../databases/repositories/leagues.repository';
@@ -128,6 +129,10 @@ export class MatchesService {
         awayStatistics,
         source: 'site',
         matchUrl: getMatchUrl(match, siteRoster.sourceMatchId),
+        matchLineupUrl: createMatchLineupUrl(
+          match.league.stage.championship.source?.code,
+          siteRoster.sourceMatchId ?? match.externalId,
+        ),
       };
     }
 
@@ -146,6 +151,10 @@ export class MatchesService {
       awayStatistics,
       source: 'database',
       matchUrl: getMatchUrl(match),
+      matchLineupUrl: createMatchLineupUrl(
+        match.league.stage.championship.source?.code,
+        match.externalId,
+      ),
     };
   }
 
