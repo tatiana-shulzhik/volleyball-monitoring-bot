@@ -22,6 +22,7 @@ import { TelegramAccessRepository } from '../../databases/repositories/telegram-
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import {
   AGGREGATED_SEASONS_COUNT,
+  createMatchLineupUrl,
   MOSCOW_TIME_ZONE,
   PREVIOUS_YEARS_COUNT,
   ROSTER_NOTIFICATION_TTL_SECONDS,
@@ -153,6 +154,7 @@ export class TelegramService
     details?: {
       fullHtml: string;
       matchId: number;
+      matchPageUrl?: string;
       fullButtonLabel?: string;
       watchedButtonLabel?: string;
     },
@@ -184,10 +186,12 @@ export class TelegramService
         reply_markup: details
           ? Markup.inlineKeyboard([
               [
-                Markup.button.callback(
-                  details.fullButtonLabel ?? 'Расклад на матч',
-                  TELEGRAM_CALLBACKS.roster.all(details.matchId),
-                ),
+                details.matchPageUrl
+                  ? Markup.button.url('🔗 Страница матча', details.matchPageUrl)
+                  : Markup.button.callback(
+                      details.fullButtonLabel ?? 'Расклад на матч',
+                      TELEGRAM_CALLBACKS.roster.all(details.matchId),
+                    ),
               ],
             ]).reply_markup
           : undefined,
@@ -301,6 +305,7 @@ export class TelegramService
           Number(context.match[2] ?? 0) as 0 | 1,
           context.match[3] as ESourceCode | undefined,
           matchRoster.matchUrl,
+          matchRoster.matchLineupUrl,
         ),
       );
     });
@@ -533,6 +538,24 @@ export class TelegramService
     matchId: number,
     view: 'watchedHtml' | 'fullHtml',
   ): Promise<void> {
+    if (view === 'fullHtml') {
+      const [match] = await this.matchesRepository.getWhere({ id: matchId });
+      const matchPageUrl =
+        match &&
+        createMatchLineupUrl(
+          match.league.stage.championship.source?.code,
+          match.externalId,
+        );
+      if (matchPageUrl) {
+        await context.editMessageReplyMarkup(
+          Markup.inlineKeyboard([
+            [Markup.button.url('🔗 Страница матча', matchPageUrl)],
+          ]).reply_markup,
+        );
+        await context.answerCbQuery('Кнопка обновлена. Нажмите её ещё раз.');
+        return;
+      }
+    }
     const details = await this.cache.get<IRosterNotificationViews>(
       getRosterDetailsKey(matchId),
     );

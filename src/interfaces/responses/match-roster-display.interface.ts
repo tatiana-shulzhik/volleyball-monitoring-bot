@@ -12,4 +12,5 @@ export interface IMatchRosterForDisplay {
   awayStatistics: ITeamStatistics | null;
   source: MatchRosterDisplaySource;
   matchUrl: string | null;
+  matchLineupUrl?: string;
 }

@@ -226,6 +226,18 @@ export function createLegaVolleyFemminileMatchStatsUrl(
   return `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/matchstats/`;
 }
 
+export function createMatchLineupUrl(
+  sourceCode: ESourceCode | undefined,
+  matchExternalId: string | null | undefined,
+): string | undefined {
+  if (sourceCode !== ESourceCode.LegaVolleyFemminile || !matchExternalId)
+    return undefined;
+  const sourceMatchId = matchExternalId.match(/(\d+)$/)?.[1];
+  return sourceMatchId
+    ? `${LEGA_VOLLEY_FEMMINILE_BASE_URL}/match-center/${sourceMatchId}/startingsix/`
+    : undefined;
+}
+
 export function createMatchProtocolUrl(
   sourceCode: ESourceCode | undefined,
   matchExternalId: string | null | undefined,

@@ -769,6 +769,9 @@ export function formatLiveMonitoringMessage(
     data.matchProtocolUrl
       ? `<br><p><a href="${escapeHtml(data.matchProtocolUrl)}">📄 Протокол матча</a></p>`
       : '',
+    data.matchLineupUrl
+      ? `<p><a href="${escapeHtml(data.matchLineupUrl)}">🔗 Страница матча</a></p>`
+      : '',
   ].join('');
 }
 
