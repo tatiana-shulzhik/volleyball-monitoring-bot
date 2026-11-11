@@ -117,7 +117,7 @@ export function createLiveMatchRosterKeyboard(
     ...(matchLineupUrl
       ? [[Markup.button.url('🔗 Страница матча', matchLineupUrl)]]
       : []),
-    ...(matchUrl
+    ...(matchUrl && !matchLineupUrl
       ? [[Markup.button.url('🔗 Открыть матч на сайте', matchUrl)]]
       : []),
     [

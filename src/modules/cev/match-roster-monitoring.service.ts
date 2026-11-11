@@ -17,6 +17,7 @@ import {
 } from '../../interfaces/responses/match-player-monitoring.interface';
 import {
   createMatchProtocolUrl,
+  createMatchLineupUrl,
   LIVE_MONITORING_MAX_MATCH_AGE_HOURS,
   MATCH_MONITORING_WINDOW_HOURS,
   MATCH_STARTING_LINEUP_AFTER_START_MINUTES,
@@ -412,6 +413,10 @@ export class MatchRosterMonitoringService {
       {
         fullHtml: formatFullMatchRosterMonitoringMessage(message),
         matchId: match.id,
+        matchPageUrl: createMatchLineupUrl(
+          match.league.stage.championship.source?.code,
+          match.externalId,
+        ),
       },
     );
     if (!sent) {
@@ -667,6 +672,10 @@ export class MatchRosterMonitoringService {
         currentSet,
         scheduledAt: match.scheduledAt,
         matchProtocolUrl: createMatchProtocolUrl(
+          match.league.stage.championship.source?.code,
+          match.externalId,
+        ),
+        matchLineupUrl: createMatchLineupUrl(
           match.league.stage.championship.source?.code,
           match.externalId,
         ),

@@ -24,4 +24,5 @@ export interface ILiveLineupMonitoringMessageData {
   currentSet: number;
   scheduledAt: Date | null;
   matchProtocolUrl?: string;
+  matchLineupUrl?: string;
 }
