@@ -78,7 +78,7 @@ export class MatchRosterMonitoringService {
 
   async checkUpcomingMatchRosters(): Promise<number> {
     const now = new Date();
-    // Заявка проверяется каждые 10 минут в течение 36 часов до начала матча.
+    // Заявка проверяется каждые 5 минут в течение 36 часов до начала матча.
     const windowEnd = new Date(
       now.getTime() + MATCH_MONITORING_WINDOW_HOURS * 3_600_000,
     );

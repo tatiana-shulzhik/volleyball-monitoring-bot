@@ -81,7 +81,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     }, false);
   }
 
-  @Cron(CronExpression.EVERY_10_MINUTES, {
+  @Cron(CronExpression.EVERY_5_MINUTES, {
     name: 'upcoming-match-roster-monitoring',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
@@ -90,7 +90,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     await this.matchRosterMonitoringService.checkUpcomingMatchRosters();
   }
 
-  @Cron(CronExpression.EVERY_30_SECONDS, {
+  @Cron(ECronExpression.Every15Seconds, {
     name: 'match-starting-lineup-check-until-second-set',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
