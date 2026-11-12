@@ -12,6 +12,7 @@ import {
 } from '../../interfaces/requests/player-statistics.interface';
 import {
   IMonitoringContext,
+  IMonitoredPlayer,
   IPlayerMonitoringState,
   IStartingLineupMonitoringChange,
 } from '../../interfaces/responses/match-player-monitoring.interface';
@@ -38,6 +39,7 @@ import {
   formatFullMatchRosterMonitoringMessage,
   formatMatchRosterMonitoringMessage,
   formatStartingLineupMonitoringMessage,
+  formatStartingLineupAvailabilityMessage,
   getCurrentSet,
   getAbsentStartingLineupPlayers,
   getLiveNotificationKey,
@@ -59,6 +61,12 @@ import { TelegramService } from '../telegram/telegram.service';
 import { MatchesService } from '../matches/matches.service';
 import { PlayerTeamLeaguesService } from '../players/player-team-leagues.service';
 import { PlayersService } from '../players/players.service';
+
+interface StartingLineupAvailability {
+  lineup: IProcessLineupMatchParams['lineup'];
+  missingChecks: number;
+  unavailable: boolean;
+}
 
 /** Проверяет заявку, стартовый состав матча и начальные составы сетов. */
 @Injectable()
@@ -436,6 +444,8 @@ export class MatchRosterMonitoringService {
     data: IProcessLineupMatchParams,
   ): Promise<number> {
     const { match, context, now } = data;
+    const availabilityResult = await this.checkStartingLineupAvailability(data);
+    if (availabilityResult !== null) return availabilityResult;
     let { lineup } = data;
     if (
       match.league.stage.championship.source?.code ===
@@ -510,6 +520,101 @@ export class MatchRosterMonitoringService {
       return 0;
     }
 
+    const sent = await this.sendStartingLineup(
+      match,
+      lineup,
+      context,
+      monitoredPlayers,
+    );
+    if (!sent) return 0;
+
+    await this.cache.set<StartingLineupAvailability>(
+      `match-monitoring:${match.id}:starting-lineup-availability`,
+      { lineup, missingChecks: 0, unavailable: false },
+      ttlSeconds,
+    );
+
+    changedPlayers.forEach(({ status, monitoring }) => {
+      monitoring.startingStatus = status;
+    });
+    await this.saveStates(match, changedPlayers, now);
+    if (matchStarted) {
+      await this.cache.set(inMatchSentKey, true, ttlSeconds);
+    }
+
+    return 1;
+  }
+
+  private async checkStartingLineupAvailability(
+    data: IProcessLineupMatchParams,
+  ): Promise<number | null> {
+    const { match, lineup, context, now } = data;
+    const key = `match-monitoring:${match.id}:starting-lineup-availability`;
+    const previous = await this.cache.get<StartingLineupAvailability>(key);
+    if (!previous) return null;
+    const ttl = getPlayerMonitoringStateTtl(match, now);
+    const complete = hasSetStartingLineup(lineup.home, lineup.away, 1);
+
+    if (!complete) {
+      if (previous.unavailable) return 0;
+      if (previous.missingChecks < 1) {
+        await this.cache.set(key, { ...previous, missingChecks: 1 }, ttl);
+        return 0;
+      }
+      const sent = await this.telegramService.sendRosterMonitoringNotification(
+        formatStartingLineupAvailabilityMessage(
+          match.homeTeam.name,
+          match.awayTeam.name,
+        ),
+      );
+      if (sent)
+        await this.cache.set(key, { ...previous, unavailable: true }, ttl);
+      return sent ? 1 : 0;
+    }
+
+    if (!previous.unavailable) {
+      if (previous.missingChecks) {
+        await this.cache.set(key, { ...previous, missingChecks: 0 }, ttl);
+      }
+      return null;
+    }
+
+    const monitoredPlayers = getMonitoredPlayers(
+      match,
+      context,
+      lineup.home,
+      lineup.away,
+    );
+    const prefix = formatStartingLineupAvailabilityMessage(
+      match.homeTeam.name,
+      match.awayTeam.name,
+      previous.lineup,
+      lineup,
+    );
+    const sent = await this.sendStartingLineup(
+      match,
+      lineup,
+      context,
+      monitoredPlayers,
+      prefix,
+    );
+    if (sent) {
+      await this.cache.set<StartingLineupAvailability>(
+        key,
+        { lineup, missingChecks: 0, unavailable: false },
+        ttl,
+      );
+    }
+    return sent ? 1 : 0;
+  }
+
+  private async sendStartingLineup(
+    match: MatchEntity,
+    lineup: IProcessLineupMatchParams['lineup'],
+    context: IMonitoringContext,
+    monitoredPlayers: IMonitoredPlayer<ICevMatchLineupPlayer[]>[],
+    prefix = '',
+  ): Promise<boolean> {
     const homePositionsByShirtNumber = getPositionsByShirtNumber(
       match.homeTeam.id,
       match.league.id,
@@ -530,54 +635,41 @@ export class MatchRosterMonitoringService {
         leagueId: match.league.id,
       }),
     ]);
-    const sent = await this.telegramService.sendRosterMonitoringNotification(
-      formatStartingLineupMonitoringMessage({
-        championshipName: match.league.stage.championship.name,
-        stageName: match.league.stage.name,
-        leagueName: match.league.name,
-        sourceCode: match.league.stage.championship.source?.code,
-        homeTeamName: match.homeTeam.name,
-        awayTeamName: match.awayTeam.name,
-        home: addLineupStatistics(lineup.home, homeStatistics?.players),
-        away: addLineupStatistics(lineup.away, awayStatistics?.players),
-        absentHome: getAbsentStartingLineupPlayers(
-          monitoredPlayers,
-          match.homeTeam.id,
+    return this.telegramService.sendRosterMonitoringNotification(
+      prefix +
+        formatStartingLineupMonitoringMessage({
+          championshipName: match.league.stage.championship.name,
+          stageName: match.league.stage.name,
+          leagueName: match.league.name,
+          sourceCode: match.league.stage.championship.source?.code,
+          homeTeamName: match.homeTeam.name,
+          awayTeamName: match.awayTeam.name,
+          home: addLineupStatistics(lineup.home, homeStatistics?.players),
+          away: addLineupStatistics(lineup.away, awayStatistics?.players),
+          absentHome: getAbsentStartingLineupPlayers(
+            monitoredPlayers,
+            match.homeTeam.id,
+            homePositionsByShirtNumber,
+            homeStatistics?.players,
+          ),
+          absentAway: getAbsentStartingLineupPlayers(
+            monitoredPlayers,
+            match.awayTeam.id,
+            awayPositionsByShirtNumber,
+            awayStatistics?.players,
+          ),
           homePositionsByShirtNumber,
-          homeStatistics?.players,
-        ),
-        absentAway: getAbsentStartingLineupPlayers(
-          monitoredPlayers,
-          match.awayTeam.id,
           awayPositionsByShirtNumber,
-          awayStatistics?.players,
-        ),
-        homePositionsByShirtNumber,
-        awayPositionsByShirtNumber,
-        scheduledAt: match.scheduledAt,
-        matchProtocolUrl: createMatchProtocolUrl(
-          match.league.stage.championship.source?.code,
-          match.externalId,
-        ),
-      }),
+          scheduledAt: match.scheduledAt,
+          matchProtocolUrl: createMatchProtocolUrl(
+            match.league.stage.championship.source?.code,
+            match.externalId,
+          ),
+        }),
     );
-    if (!sent) return 0;
-
-    changedPlayers.forEach(({ status, monitoring }) => {
-      monitoring.startingStatus = status;
-    });
-    await this.saveStates(match, changedPlayers, now);
-    if (matchStarted) {
-      await this.cache.set(inMatchSentKey, true, ttlSeconds);
-    }
-
-    return 1;
   }
 
-  /**
-   * Сообщает об изменениях стартового состава отслеживаемых игроков между
-   * сетами. Замены по ходу сета не отслеживаются.
-   */
+  /** Сообщает об изменениях стартового состава между сетами. */
   private async processLiveMatch(
     data: IProcessLineupMatchParams & {
       attackStatistics: IFetchedMatchAttackStatistics;
