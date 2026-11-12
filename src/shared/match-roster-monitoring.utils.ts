@@ -344,6 +344,59 @@ export function hasSetStartingLineup(
   return hasAllPositions(home) && hasAllPositions(away);
 }
 
+/** Compare players, not their rotation positions within the set. */
+export function getStartingLineupChanges(
+  previous: ICevMatchLineupPlayer[],
+  current: ICevMatchLineupPlayer[],
+): { removed: ICevMatchLineupPlayer[]; added: ICevMatchLineupPlayer[] } {
+  const starters = (players: ICevMatchLineupPlayer[]) =>
+    players.filter((player) => isStarter(player.setMarks[0]));
+  const key = (player: ICevMatchLineupPlayer) =>
+    `${player.shirtNumber ?? ''}:${normalizePlayerName(player.playerName)}`;
+  const before = starters(previous);
+  const after = starters(current);
+  const beforeKeys = new Set(before.map(key));
+  const afterKeys = new Set(after.map(key));
+  return {
+    removed: before.filter((player) => !afterKeys.has(key(player))),
+    added: after.filter((player) => !beforeKeys.has(key(player))),
+  };
+}
+
+export function formatStartingLineupAvailabilityMessage(
+  homeTeam: string,
+  awayTeam: string,
+  oldLineup?: { home: ICevMatchLineupPlayer[]; away: ICevMatchLineupPlayer[] },
+  newLineup?: { home: ICevMatchLineupPlayer[]; away: ICevMatchLineupPlayer[] },
+): string {
+  const header = `<p><b>${escapeHtml(homeTeam)} — ${escapeHtml(awayTeam)}</b></p>`;
+  if (!oldLineup || !newLineup) {
+    return `<p><b>⚠️ Состав на сайте больше недоступен</b></p>${header}<p>Предыдущий сигнал может быть неактуален.</p>`;
+  }
+  const sections = (
+    [
+      ['home', homeTeam],
+      ['away', awayTeam],
+    ] as const
+  ).flatMap(([side, name]) => {
+    const changes = getStartingLineupChanges(oldLineup[side], newLineup[side]);
+    if (!changes.removed.length && !changes.added.length) return [];
+    const format = (players: ICevMatchLineupPlayer[]) =>
+      players
+        .map(
+          (player) =>
+            `${player.shirtNumber === null ? '' : `№${player.shirtNumber} `}${escapeHtml(player.playerName)}`,
+        )
+        .join(', ') || '—';
+    return [
+      `<p><b>${escapeHtml(name)}</b><br>Были: ${format(changes.removed)}<br>Стали: ${format(changes.added)}</p>`,
+    ];
+  });
+  return sections.length
+    ? `<p><b>⚠️ Состав изменился</b></p>${header}${sections.join('')}<p>Предыдущий сигнал может быть неактуален.</p>`
+    : `<p><b>✅ Состав на сайте снова доступен</b></p>${header}<p>Состав не изменился.</p>`;
+}
+
 export function findLineupPlayer(
   players: ICevMatchLineupPlayer[],
   playerName: string,
