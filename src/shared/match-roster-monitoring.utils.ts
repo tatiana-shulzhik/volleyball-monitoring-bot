@@ -894,9 +894,8 @@ function formatLiveLineupTable(
         left.player.playerName.localeCompare(right.player.playerName),
     )
     .map(({ player, statistics }) => {
-      const setMarks = Array.from(
-        { length: currentSet },
-        (_, index) => formatSetLineupMark(player.setMarks[index]),
+      const setMarks = Array.from({ length: currentSet }, (_, index) =>
+        formatSetLineupMark(player.setMarks[index]),
       );
       const position =
         player.shirtNumber === null
@@ -905,8 +904,8 @@ function formatLiveLineupTable(
 
       return (
         '<tr>' +
-        `<td><b>#${player.shirtNumber ?? '—'} ${escapeHtml(player.playerName)}</b><br>` +
-        `${formatPlayerPosition(position)} · ${setMarks.join('/')}</td>` +
+        `<td>${escapeHtml(player.playerName)}<br>` +
+        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(position)} · ${setMarks.join('/')}</td>` +
         `<td align="center">${formatRosterPlayerRating(player)}</td>` +
         `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
@@ -920,7 +919,7 @@ function formatLiveLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>Игрок / сеты</th>' +
+    '<tr><th>Игрок\u00a0/\u00a0сеты</th>' +
       '<th>🏆Рейтинг<br>(о/с)</th>' +
       '<th>🏆Атака<br>(у/п)</th>' +
       '<th>🏐Рейтинг<br>(о/с)</th>' +
