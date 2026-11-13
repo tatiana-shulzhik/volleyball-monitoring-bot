@@ -881,10 +881,6 @@ function formatLiveLineupTable(
 ): string {
   if (!lineup.length) return '';
 
-  const setHeaders = Array.from(
-    { length: currentSet },
-    (_, index) => `<th>С${index + 1}</th>`,
-  );
   const rows = lineup
     .map((player) => ({
       player,
@@ -900,8 +896,7 @@ function formatLiveLineupTable(
     .map(({ player, statistics }) => {
       const setMarks = Array.from(
         { length: currentSet },
-        (_, index) =>
-          `<td align="center">${formatSetLineupMark(player.setMarks[index])}</td>`,
+        (_, index) => formatSetLineupMark(player.setMarks[index]),
       );
       const position =
         player.shirtNumber === null
@@ -910,14 +905,12 @@ function formatLiveLineupTable(
 
       return (
         '<tr>' +
-        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td>${escapeHtml(player.playerName)}</td>` +
-        setMarks.join('') +
+        `<td><b>#${player.shirtNumber ?? '—'} ${escapeHtml(player.playerName)}</b><br>` +
+        `${formatPlayerPosition(position)} · ${setMarks.join('/')}</td>` +
         `<td align="center">${formatRosterPlayerRating(player)}</td>` +
         `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
         `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
-        `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
     });
@@ -927,13 +920,11 @@ function formatLiveLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th>' +
-      setHeaders.join('') +
+    '<tr><th>Игрок / сеты</th>' +
       '<th>🏆Рейтинг<br>(о/с)</th>' +
       '<th>🏆Атака<br>(у/п)</th>' +
       '<th>🏐Рейтинг<br>(о/с)</th>' +
-      '<th>🏐Атака<br>(у/п)</th>' +
-      '<th>Поз</th></tr>',
+      '<th>🏐Атака<br>(у/п)</th></tr>',
     ...rows,
     '</table>',
   ].join('');
