@@ -572,7 +572,7 @@ function formatMatchRosterTable(
     .map((player) => {
       const cells = [
         `<td align="center">${player.shirtNumber ?? '—'}</td>`,
-        `<td>${escapeHtml(player.playerName)}</td>`,
+        `<td><b>${escapeHtml(player.playerName)}</b></td>`,
       ];
       if (showStatus) {
         cells.push(
@@ -580,8 +580,7 @@ function formatMatchRosterTable(
         );
       }
       cells.push(
-        `<td align="center">${formatRosterPlayerRating(player)}</td>`,
-        `<td align="center">${formatRosterPlayerAttacks(player)}</td>`,
+        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>`,
         `<td align="center">${formatPlayerPosition(player.position)}</td>`,
       );
 
@@ -593,8 +592,7 @@ function formatMatchRosterTable(
     '<th>№</th>',
     '<th>Игрок</th>',
     ...(showStatus ? ['<th>Статус</th>'] : []),
-    '<th>Рейтинг<br>(о/с)</th>',
-    '<th>Атака<br>(у/п)</th>',
+    '<th>🏆 Турнир</th>',
     '<th>Поз</th>',
   ];
 
@@ -730,9 +728,8 @@ function formatAbsentStartingLineupTable(
       (player) =>
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td>${escapeHtml(player.playerName)}</td>` +
-        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
-        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
+        `<td><b>${escapeHtml(player.playerName)}</b></td>` +
+        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
@@ -740,7 +737,7 @@ function formatAbsentStartingLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>🏆 Турнир</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -769,10 +766,9 @@ function formatStartingLineupTable(
       return (
         '<tr>' +
         `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td><b>${escapeHtml(player.playerName)}</b></td>` +
         `<td align="center">${status}</td>` +
-        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
-        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
         `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
@@ -781,7 +777,7 @@ function formatStartingLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>🏆 Турнир</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -904,12 +900,10 @@ function formatLiveLineupTable(
 
       return (
         '<tr>' +
-        `<td>${escapeHtml(player.playerName)}<br>` +
+        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
         `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(position)} · ${setMarks.join('/')}</td>` +
-        `<td align="center">${formatRosterPlayerRating(player)}</td>` +
-        `<td align="center">${formatRosterPlayerAttacks(player)}</td>` +
-        `<td align="center">${formatLivePlayerRating(statistics)}</td>` +
-        `<td align="center">${formatLivePlayerAttacks(statistics)}</td>` +
+        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>⭐ ${formatLivePlayerRating(statistics)}<br>⚡ ${formatLivePlayerAttacks(statistics)}</td>` +
         '</tr>'
       );
     });
@@ -920,10 +914,8 @@ function formatLiveLineupTable(
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
     '<tr><th>Игрок\u00a0/\u00a0сеты</th>' +
-      '<th>🏆Рейтинг<br>(о/с)</th>' +
-      '<th>🏆Атака<br>(у/п)</th>' +
-      '<th>🏐Рейтинг<br>(о/с)</th>' +
-      '<th>🏐Атака<br>(у/п)</th></tr>',
+      '<th>🏆 Турнир</th>' +
+      '<th>🏐 Матч</th></tr>',
     ...rows,
     '</table>',
   ].join('');
