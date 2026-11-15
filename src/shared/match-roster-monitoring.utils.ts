@@ -570,31 +570,20 @@ function formatMatchRosterTable(
         left.playerName.localeCompare(right.playerName),
     )
     .map((player) => {
-      const cells = [
-        `<td align="center">${player.shirtNumber ?? '—'}</td>`,
-        `<td><b>${escapeHtml(player.playerName)}</b></td>`,
-      ];
-      if (showStatus) {
-        cells.push(
-          `<td align="center">${player.isInRoster === false ? '🔴' : '🟢'}</td>`,
-        );
-      }
-      cells.push(
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>`,
-        `<td align="center">${formatPlayerPosition(player.position)}</td>`,
+      const status = showStatus
+        ? ` · ${player.isInRoster === false ? '🔴' : '🟢'}`
+        : '';
+      return (
+        '<tr>' +
+        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
+        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(player.position)}${status}</td>` +
+        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        '</tr>'
       );
-
-      return `<tr>${cells.join('')}</tr>`;
     });
 
   const headerEmoji = accent === 'absent' ? '🔴' : '🟢';
-  const headers = [
-    '<th>№</th>',
-    '<th>Игрок</th>',
-    ...(showStatus ? ['<th>Статус</th>'] : []),
-    '<th>🏆 Турнир</th>',
-    '<th>Поз</th>',
-  ];
+  const headers = ['<th>Игрок</th>', '<th>🏆 Турнир</th>'];
 
   return [
     `<p><b>${headerEmoji} ${escapeHtml(teamName)}</b></p>`,
@@ -727,17 +716,16 @@ function formatAbsentStartingLineupTable(
     .map(
       (player) =>
         '<tr>' +
-        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td><b>${escapeHtml(player.playerName)}</b></td>` +
+        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
+        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(player.position)}</td>` +
         `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
-        `<td align="center">${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
 
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>🏆 Турнир</th><th>Поз</th></tr>',
+    '<tr><th>Игрок / сеты</th><th>🏆 Турнир</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -765,11 +753,9 @@ function formatStartingLineupTable(
 
       return (
         '<tr>' +
-        `<td align="center">${player.shirtNumber ?? '—'}</td>` +
-        `<td><b>${escapeHtml(player.playerName)}</b></td>` +
-        `<td align="center">${status}</td>` +
+        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
+        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(position)} · ${status}</td>` +
         `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
-        `<td align="center">${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
     });
@@ -777,7 +763,7 @@ function formatStartingLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>№</th><th>Игрок</th><th>Статус</th><th>🏆 Турнир</th><th>Поз</th></tr>',
+    '<tr><th>Игрок / сеты</th><th>🏆 Турнир</th></tr>',
     ...rows,
     '</table>',
   ].join('');
