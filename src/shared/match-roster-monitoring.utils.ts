@@ -627,6 +627,13 @@ function formatRosterPlayerAttacks(player: {
   ).toFixed(0)}%)`;
 }
 
+function formatStartingLineupStatistic(value: string): string {
+  const match = /^(.*?) \((.*?)\)$/.exec(value);
+  if (!match) return value;
+  const [, first, second] = match;
+  return `${first}<br>${second}`;
+}
+
 export function formatStartingLineupMessage(
   data: IPlayerMonitoringMessageData & {
     status: EStartingLineupMonitoringStatus;
@@ -716,16 +723,18 @@ function formatAbsentStartingLineupTable(
     .map(
       (player) =>
         '<tr>' +
-        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
-        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(player.position)}</td>` +
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerRating(player))}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerAttacks(player))}</td>` +
+        `<td>${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
 
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>Игрок / сеты</th><th>🏆 Турнир</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -753,9 +762,12 @@ function formatStartingLineupTable(
 
       return (
         '<tr>' +
-        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
-        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(position)} · ${status}</td>` +
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td>${status}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerRating(player))}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerAttacks(player))}</td>` +
+        `<td>${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
     });
@@ -763,7 +775,7 @@ function formatStartingLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>Игрок / сеты</th><th>🏆 Турнир</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Зона</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
