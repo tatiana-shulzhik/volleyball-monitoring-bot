@@ -892,7 +892,8 @@ function formatLiveLineupTable(
     }))
     .sort(
       (left, right) =>
-        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
+        (right.player.statistics?.points ?? -1) -
+          (left.player.statistics?.points ?? -1) ||
         (left.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.player.playerName.localeCompare(right.player.playerName),
