@@ -571,19 +571,29 @@ function formatMatchRosterTable(
     )
     .map((player) => {
       const status = showStatus
-        ? ` · ${player.isInRoster === false ? '🔴' : '🟢'}`
+        ? `<td>${player.isInRoster === false ? '🔴' : '🟢'}</td>`
         : '';
       return (
         '<tr>' +
-        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
-        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(player.position)}${status}</td>` +
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        status +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerRating(player))}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerAttacks(player))}</td>` +
+        `<td>${formatPlayerPosition(player.position)}</td>` +
         '</tr>'
       );
     });
 
   const headerEmoji = accent === 'absent' ? '🔴' : '🟢';
-  const headers = ['<th>Игрок</th>', '<th>🏆 Турнир</th>'];
+  const headers = [
+    '<th>№</th>',
+    '<th>Игрок</th>',
+    ...(showStatus ? ['<th>Ст.</th>'] : []),
+    '<th>Рейтинг<br>(о/с)</th>',
+    '<th>Атака<br>(у/п)</th>',
+    '<th>Поз</th>',
+  ];
 
   return [
     `<p><b>${headerEmoji} ${escapeHtml(teamName)}</b></p>`,
