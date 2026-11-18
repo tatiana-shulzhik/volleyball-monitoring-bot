@@ -571,19 +571,29 @@ function formatMatchRosterTable(
     )
     .map((player) => {
       const status = showStatus
-        ? ` · ${player.isInRoster === false ? '🔴' : '🟢'}`
+        ? `<td>${player.isInRoster === false ? '🔴' : '🟢'}</td>`
         : '';
       return (
         '<tr>' +
-        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
-        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(player.position)}${status}</td>` +
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        status +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerRating(player))}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerAttacks(player))}</td>` +
+        `<td>${formatPlayerPosition(player.position)}</td>` +
         '</tr>'
       );
     });
 
   const headerEmoji = accent === 'absent' ? '🔴' : '🟢';
-  const headers = ['<th>Игрок</th>', '<th>🏆 Турнир</th>'];
+  const headers = [
+    '<th>№</th>',
+    '<th>Игрок</th>',
+    ...(showStatus ? ['<th>Ст.</th>'] : []),
+    '<th>Рейтинг<br>(о/с)</th>',
+    '<th>Атака<br>(у/п)</th>',
+    '<th>Поз</th>',
+  ];
 
   return [
     `<p><b>${headerEmoji} ${escapeHtml(teamName)}</b></p>`,
@@ -625,6 +635,13 @@ function formatRosterPlayerAttacks(player: {
     (statistics.successfulAttacks / statistics.attackAttempts) *
     100
   ).toFixed(0)}%)`;
+}
+
+function formatStartingLineupStatistic(value: string): string {
+  const match = /^(.*?) \((.*?)\)$/.exec(value);
+  if (!match) return value;
+  const [, first, second] = match;
+  return `${first}<br>${second}`;
 }
 
 export function formatStartingLineupMessage(
@@ -716,16 +733,18 @@ function formatAbsentStartingLineupTable(
     .map(
       (player) =>
         '<tr>' +
-        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
-        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(player.position)}</td>` +
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerRating(player))}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerAttacks(player))}</td>` +
+        `<td>${formatPlayerPosition(player.position)}</td>` +
         '</tr>',
     );
 
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>Игрок / сеты</th><th>🏆 Турнир</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -753,9 +772,12 @@ function formatStartingLineupTable(
 
       return (
         '<tr>' +
-        `<td><b>${escapeHtml(player.playerName)}</b><br>` +
-        `<b>#${player.shirtNumber ?? '—'}</b> · ${formatPlayerPosition(position)} · ${status}</td>` +
-        `<td>⭐ ${formatRosterPlayerRating(player)}<br>⚡ ${formatRosterPlayerAttacks(player)}</td>` +
+        `<td>${player.shirtNumber ?? '—'}</td>` +
+        `<td>${escapeHtml(player.playerName)}</td>` +
+        `<td>${status}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerRating(player))}</td>` +
+        `<td>${formatStartingLineupStatistic(formatRosterPlayerAttacks(player))}</td>` +
+        `<td>${formatPlayerPosition(position)}</td>` +
         '</tr>'
       );
     });
@@ -763,7 +785,7 @@ function formatStartingLineupTable(
   return [
     `<p><b>${title}</b></p>`,
     '<table bordered striped>',
-    '<tr><th>Игрок / сеты</th><th>🏆 Турнир</th></tr>',
+    '<tr><th>№</th><th>Игрок</th><th>Зона</th><th>Рейтинг<br>(о/с)</th><th>Атака<br>(у/п)</th><th>Поз</th></tr>',
     ...rows,
     '</table>',
   ].join('');
@@ -870,7 +892,8 @@ function formatLiveLineupTable(
     }))
     .sort(
       (left, right) =>
-        (right.statistics?.points ?? -1) - (left.statistics?.points ?? -1) ||
+        (right.player.statistics?.points ?? -1) -
+          (left.player.statistics?.points ?? -1) ||
         (left.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) -
           (right.player.shirtNumber ?? Number.MAX_SAFE_INTEGER) ||
         left.player.playerName.localeCompare(right.player.playerName),

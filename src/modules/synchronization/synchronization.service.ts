@@ -99,7 +99,7 @@ export class SynchronizationService implements OnApplicationBootstrap {
     await this.matchRosterMonitoringService.checkStartingLineups();
   }
 
-  @Cron(CronExpression.EVERY_30_SECONDS, {
+  @Cron(ECronExpression.Every15Seconds, {
     name: 'match-live-lineup-monitoring',
     timeZone: MOSCOW_TIME_ZONE,
     waitForCompletion: true,
