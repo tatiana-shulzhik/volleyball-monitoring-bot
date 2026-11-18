@@ -868,10 +868,10 @@ export class MatchRosterMonitoringService {
     const alreadyCaptured =
       previous &&
       hasSetStartingLineup(previous.home, previous.away, currentSet);
-    if (
-      !alreadyCaptured &&
-      !hasSetStartingLineup(lineup.home, lineup.away, currentSet)
-    ) {
+    if (alreadyCaptured) {
+      return { ...lineup, home: previous.home, away: previous.away };
+    }
+    if (!hasSetStartingLineup(lineup.home, lineup.away, currentSet)) {
       return {
         ...lineup,
         home: previous?.home ?? [],
@@ -880,12 +880,12 @@ export class MatchRosterMonitoringService {
     }
     const home = mergeLineupSetMarksHistory(
       previous?.home,
-      alreadyCaptured ? previous.home : lineup.home,
+      lineup.home,
       currentSet,
     );
     const away = mergeLineupSetMarksHistory(
       previous?.away,
-      alreadyCaptured ? previous.away : lineup.away,
+      lineup.away,
       currentSet,
     );
 
