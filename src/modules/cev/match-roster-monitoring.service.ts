@@ -146,7 +146,7 @@ export class MatchRosterMonitoringService {
 
   /**
    * Проверяет стартовый состав CEV / Lega Volley / Femminile:
-   * за 10 минут до матча и после старта, пока не начался 2-й сет.
+   * за 10 минут до матча и в течение заданного времени после начала.
    */
   async checkStartingLineups(): Promise<number> {
     const now = new Date();
@@ -446,15 +446,8 @@ export class MatchRosterMonitoringService {
     const { match, context, now } = data;
     const availabilityResult = await this.checkStartingLineupAvailability(data);
     if (availabilityResult !== null) return availabilityResult;
-    let { lineup } = data;
-    if (
-      match.league.stage.championship.source?.code ===
-      ESourceCode.LegaVolleyFemminile
-    ) {
-      lineup = await this.resolveLiveLineupHistory(match, lineup, 1, now);
-    }
+    const { lineup } = data;
     const currentSet = getCurrentSet(lineup.home, lineup.away);
-    if (currentSet !== null && currentSet >= 2) return 0;
     if (!hasSetStartingLineup(lineup.home, lineup.away, 1)) return 0;
 
     const matchStarted =
@@ -777,6 +770,14 @@ export class MatchRosterMonitoringService {
       await this.cache.delete(notificationKey);
       return 0;
     }
+
+    // Сохраняем состав отправленного уведомления отдельно от истории,
+    // необходимой для сравнения сетов без уведомлений.
+    await this.cache.set(
+      `match-monitoring:${match.id}:notified-lineup:${currentSet}`,
+      { home: lineup.home, away: lineup.away },
+      lineupTtl,
+    );
 
     return 1;
   }

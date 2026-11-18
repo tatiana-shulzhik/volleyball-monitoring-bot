@@ -94,8 +94,8 @@ export const MATCH_MONITORING_WINDOW_HOURS = 36;
 /** За сколько минут до начала матча запускать проверку стартового состава. */
 export const MATCH_STARTING_LINEUP_CHECK_WINDOW_MINUTES = 10;
 
-/** Сколько минут после планового старта ещё проверять стартовый состав (пока не 2-й сет). */
-export const MATCH_STARTING_LINEUP_AFTER_START_MINUTES = 90;
+/** Сколько минут после планового начала проверять стартовый состав. */
+export const MATCH_STARTING_LINEUP_AFTER_START_MINUTES = 30;
 
 /** Максимальное время live-проверок матча после его планового начала. */
 export const LIVE_MONITORING_MAX_MATCH_AGE_HOURS = 5;
