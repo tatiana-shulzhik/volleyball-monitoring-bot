@@ -668,7 +668,7 @@ export function formatPlayerQuickStats(
   const attacks = formatPlayerAttacks(player);
   if (rating === '—' && attacks === '—') return '';
 
-  return `⭐${rating}⚡${attacks}`;
+  return `${rating}; ${attacks}`;
 }
 
 function formatPlayerRating(
