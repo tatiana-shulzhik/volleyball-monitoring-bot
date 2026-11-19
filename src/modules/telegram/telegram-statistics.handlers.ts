@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import {
@@ -982,14 +982,21 @@ export class TelegramStatisticsHandlers {
         const stats = formatPlayerQuickStats(
           statisticsByName.get(normalizePlayerName(player.fullName)),
         );
-        const label =
-          `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ` +
-          `${player.shirtNumber ?? '—'} ${player.fullName}` +
-          (stats ? ` (${stats})` : '');
+        const normalizedName = player.fullName.toLocaleLowerCase();
+        const displayName =
+          normalizedName.charAt(0).toLocaleUpperCase() + normalizedName.slice(1);
+        const nameCharacters = Array.from(displayName);
+        const prefix = `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ${player.shirtNumber ?? '-'} `;
+        const suffix = stats ? ` (${stats})` : '';
+        const name =
+          stats && nameCharacters.length > 12
+            ? `${nameCharacters.slice(0, 12).join('').trimEnd()}...`
+            : displayName;
+        const label = prefix + name + suffix;
 
         return [
           Markup.button.callback(
-            label.slice(0, 64),
+            label,
             TELEGRAM_CALLBACKS.monitoring.player(
               player.id,
               options.teamId,
@@ -1033,7 +1040,7 @@ export class TelegramStatisticsHandlers {
     const title = `🏐 ${teamName ?? 'Команда'}`;
     await context.editMessageText(
       players.length
-        ? `${title}\n\nВыберите игрока для добавления или удаления из мониторинга:`
+        ? `${title}\n\n👤 (⭐ рейтинг = очки / партии; ⚡ атаки = успешные / все (процент))\n✅ — игрок в мониторинге.\n\nВыберите игрока для добавления или удаления из мониторинга:`
         : `${title}\n\n${TELEGRAM_MESSAGES.teams.statisticsEmpty}`,
       keyboard,
     );
