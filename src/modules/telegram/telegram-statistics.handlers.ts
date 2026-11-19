@@ -984,7 +984,8 @@ export class TelegramStatisticsHandlers {
         );
         const normalizedName = player.fullName.toLocaleLowerCase();
         const displayName =
-          normalizedName.charAt(0).toLocaleUpperCase() + normalizedName.slice(1);
+          normalizedName.charAt(0).toLocaleUpperCase() +
+          normalizedName.slice(1);
         const nameCharacters = Array.from(displayName);
         const prefix = `${monitoredPlayerIds.has(player.id) ? '✅' : '➕'} ${player.shirtNumber ?? '-'} `;
         const suffix = stats ? ` (${stats})` : '';
